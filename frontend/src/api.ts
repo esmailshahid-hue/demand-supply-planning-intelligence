@@ -13,5 +13,11 @@ export async function api<T>(path: string, signal: AbortSignal, body?: unknown):
   return result as T;
 }
 export const number = (n: number | null | undefined, digits = 1) => n == null ? 'Unavailable' : n.toLocaleString('en-GB', { maximumFractionDigits: digits });
-export const percent = (n: number | null | undefined) => n == null ? 'Unavailable' : `${number(n)}%`;
+export const percent = (n: number | null | undefined, digits = 1) => n == null ? 'Unavailable' : `${number(n, digits)}%`;
+export const signedPercent = (n: number | null | undefined) => {
+  if (n == null) return 'Unavailable';
+  if (n > 0 && n < 0.1) return '<0.1%';
+  if (n < 0 && n > -0.1) return '>−0.1%';
+  return percent(n);
+};
 export const shortDate = (day: string) => new Date(`${day}T12:00:00+03:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Riyadh' });
