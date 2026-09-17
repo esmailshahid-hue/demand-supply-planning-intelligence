@@ -62,7 +62,7 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is not installed in the implementation environment, so the container build and Linux runtime are **not yet verified**. The equivalent local production startup and HTTP smoke test passed. No infrastructure was provisioned. See [hosting assessment](docs/DEPLOYMENT.md) before selecting a host.
+Docker is not installed in the local implementation environment. GitHub Actions successfully built and started the image on Ubuntu for commit `f939b3e`, then passed the production HTTP smoke test. The current Pass 1 app also has committed native Vercel configuration; no public deployment or infrastructure was created. See the [deployment readiness assessment](docs/DEPLOYMENT.md) for exact settings and the future upload limitation.
 
 ## Project guide
 
