@@ -63,7 +63,7 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is not installed in the local implementation environment. GitHub Actions successfully built and started the image on Ubuntu for commit `f939b3e`, then passed the production HTTP smoke test. The same native Vercel configuration is preserved. Pass 2 Linux/container and hosted checks have not run locally; the earlier CI success proves only the recorded Pass 1 commit. See the [deployment readiness assessment](docs/DEPLOYMENT.md) for exact settings and the future upload limitation.
+Docker is not installed in the local implementation environment. GitHub Actions run `35201527675` successfully verified the original Pass 2 commit `6c587cc` on Ubuntu: 56 backend tests, solver smoke, frontend build, browser tests, Docker build/start, forecast smoke, fixture/full planning smoke and solver smoke inside the container. That evidence applies to the original commit; CI for the current correction remains pending until it is committed and pushed. No public host or Vercel-hosted planning runtime has been verified. See the [deployment readiness assessment](docs/DEPLOYMENT.md) for exact settings and the future upload limitation.
 
 ## Project guide
 

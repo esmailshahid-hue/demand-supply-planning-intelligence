@@ -1,5 +1,41 @@
 # Build status
 
+## Narrow Pass 2 correction — 17 September 2026
+
+This correction remains **blocked at the fixture joint-optimizer exit gate** and is not ready for review or commit. The default 10-SKU fixture still reaches the 30-second planning budget in `visible_must_stock` with an open MIP gap and correctly returns `feasible_fallback`; it does not complete through `stable_action_ties`. No incomplete incumbent is labeled optimal, no hard constraint or horizon was relaxed, and Pass 3 has not started.
+
+Implemented and locally covered in the current worktree:
+
+- Protection-period paths now require an offer to be valid and orderable at each origin, including order/dispatch weekdays, supplier lead time, DC receipt, lane dispatch and store receipt calendars. Expired and not-yet-orderable offers are excluded, current slower valid sources remain part of the conservative longest path, and absence of any valid path returns `no_valid_replenishment_path`.
+- Joint optimizer `RuntimeError` handling is limited to the optimizer call. It discards partial solver output, records a sanitized `joint_model:error` stage, independently replays the benchmark, then uses benchmark/no-action/invalid-plan in that order according to replay feasibility.
+- Completed joint plans supplement `DATED_SUPPLY_SHORTFALL` with evidence-backed dated supplier SKU/shared-capacity, commitment, payment, grouped-minimum or lead-time causes where the final actions and remaining headroom prove the limit.
+- `scripts/planning_smoke.py` now requires `feasible` for the fixture, permits the documented fallback for full, and prints stages plus independent replay status. It intentionally fails while the fixture gate above remains unresolved.
+- Pass 3 must not duplicate the full daily ledger for each scenario comparison because the measured full response is already close to the 4.5 MB Function response limit.
+
+Measured optimizer blocker: repeated profiles show forecasting/context/benchmark construction completes in under one second, while HiGHS spends the remaining approximately 27 seconds on the first fixture service objective. Formulation experiments reduced variables and found feasible incumbents, but exact optimality proof and the remaining ordered objectives still exceeded the unchanged budget. Unsafe service relaxations and incomplete certificates were discarded; `backend/app/planning/optimizer.py` remains at the original Pass 2 implementation.
+
+GitHub Actions run `35201527675` succeeded on Ubuntu for original Pass 2 commit `6c587cc`. It completed **56 backend tests**, solver smoke, frontend production build, browser tests, Docker build/start, forecast smoke, fixture/full planning smoke and solver smoke inside the container. This does not verify the current correction, whose CI remains pending until a corrected commit is pushed. It also does not verify a public host or Vercel-hosted planning runtime.
+
+Local correction checks executed so far:
+
+| Command / check | Actual result |
+|---|---|
+| Targeted offer-validity tests | **5 passed in 2.75 s**. |
+| Solver-error and separate timeout fallback tests | **2 passed in 1.87 s**, with two upstream TestClient deprecation warnings. |
+| Binding commitment explanation test | **1 passed in 0.61 s**. |
+| `.venv/bin/python -m pytest -q` | Final run: **62 passed in 8.71 s**; two unchanged upstream TestClient deprecation warnings. |
+| Contract export, TypeScript generation and generated-file diff | Passed; generated contracts remained unchanged. |
+| `npm --prefix frontend run build` | Passed: **259.25 kB JS / 79.38 kB gzip**, **11.15 kB CSS / 3.34 kB gzip**, Vite build **399 ms**. |
+| Full Playwright suite | Initial run accidentally reused a stale Pass 1 server on port 8000 and timed out waiting for planning responses. After stopping that server and starting the current application, **8 passed in 2.0 minutes**. |
+| Production forecast smoke | Passed. Fixture **0.152 / 0.031 s**, full **0.846 / 0.094 s** first/repeat HTTP; all were live evaluated results. |
+| Planning smoke, fixture first/repeat | Expected exit-gate failure after recording both results: **28.097 / 28.085 s HTTP**, **28,080.3 / 28,078.5 ms engine**, **782,437 / 782,439 bytes**, **24 purchases / 311 movements**, independent replay true. Both returned `feasible_fallback` with `visible_must_stock:time_limit`, then benchmark fallback. |
+| Planning smoke, full first/repeat | Accepted full-sample behavior: **28.353 / 28.321 s HTTP**, **28,330.7 / 28,301.3 ms engine**, **3,747,785 bytes** both runs, **31 purchases / 607 movements**, independent replay true. Both returned `feasible_fallback` with the disclosed timeout and benchmark stage. The script exits nonzero only because both fixture runs violate the new `feasible` requirement. |
+| `.venv/bin/python -m pip check` | No broken requirements found. |
+| `.venv/bin/python -m compileall -q backend scripts` | Passed. |
+| `git diff --check` | Passed on the final worktree. |
+
+The exact starting point for further correction work is `backend/app/planning/optimizer.py`: obtain an exact fixture solution through all staged objectives within the existing overall budget without changing model semantics. Only after that gate passes should the complete backend, contract, frontend, browser, production forecast and first/repeat planning smoke matrix be rerun. Pass 3 must not begin before this correction is complete.
+
 Updated: **17 September 2026**. Current scope: **Passes 1 and 2**. Earlier Pass 1 evidence is preserved below as historical evidence.
 
 **Pass 1 exit gate: met locally and in Ubuntu CI.** The seeded sample travels through the live Python API into the built React UI; historical forecast evaluation passes invariant tests; production-style single-service startup and HTTP smoke tests pass. GitHub Actions verified the Linux container path for commit `f939b3e`; no public host or Vercel deployment has been verified. No infrastructure was provisioned. This is not the full MVP release gate.
@@ -60,13 +96,13 @@ A separate fresh Python process generated the full sample, ran `plan(data)` and 
 
 Final checks also confirmed generated contracts are reproducible, the root Vercel entrypoint still re-exports the same FastAPI app, `maxDuration` remains 60, and `git diff --check` passed. No backend forecast source or forecast display formula changed.
 
-**Pass 2 exit gate: met locally; ready for review and a subsequent user-controlled commit.** The hand fixture reconciles, the full sample is independently feasible while explicitly reporting shortages, and complete runtime is measured. No scope or runtime target was weakened. New hosted/Ubuntu/container checks remain outstanding and are not claimed as completed gates. The complete six-pass MVP release gate remains unmet.
+**Original Pass 2 exit gate:** this was recorded as met locally for commit `6c587cc`; the narrow correction gate documented above is currently unmet. Ubuntu/container checks for that original commit subsequently passed in GitHub Actions run `35201527675`. Correction CI and all public-host/Vercel planning-runtime checks remain outstanding. The complete six-pass MVP release gate remains unmet.
 
 ### Limitations and handoff
 
 The measured sample results are independently feasible fallbacks with substantial visible and provisional-tail shortages. The joint solver did not finish its highest-priority stage within the allotted budget on this machine; neither sample is advertised as lexicographically optimal or better than the constrained benchmark. A small hand model finishes all stages optimally. Benchmark receiving-space reservations and single-line supplier-minimum handling are conservative. Runtime may change with hardware; the shared budget is cooperative, not an OS-enforced deadline.
 
-Docker is not installed locally (`command -v docker` returned no executable). Therefore **Pass 2 Docker build/startup, new Ubuntu CI and Vercel-hosted measurements were not run**. Earlier successful Ubuntu CI for `f939b3e` is Pass 1 evidence only. Hosted cold latency, memory, wheel packaging and response limits still need verification. The future workbook payload/storage gap remains unchanged; no upload transport was introduced.
+Docker is not installed locally (`command -v docker` returned no executable). GitHub Actions run `35201527675` supplied the Ubuntu Docker build/start and production smoke evidence for original Pass 2 commit `6c587cc`; it does not cover the current correction. Hosted cold latency, memory, wheel packaging and response limits still need verification. The future workbook payload/storage gap remains unchanged; no upload transport was introduced.
 
 **Exact starting point for Pass 3:** reuse `planning/engine.py`, `planning/contracts.py`, `simulation/replay.py`, `PlanReview.tsx` and the API-backed planning tests. Implement the specified demand uplift, supplier delay/capacity loss, commitment and payment shocks with frozen-action versus replanned comparisons. Keep both policies under identical scenario assumptions, preserve provenance/independent validation, and then complete the sample-data review experience. Do not replace the forecast/model or start workbook review/export work early. Scenario controls and immutable baseline/reset behavior are not implemented in Pass 2.
 

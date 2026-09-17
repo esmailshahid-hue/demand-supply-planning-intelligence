@@ -88,9 +88,9 @@ The first real preview deployment still needs these host-specific checks:
 Until those checks run, this repository is deployment-ready but no public or Vercel-hosted application has been verified.
 
 
-## Pass 2 runtime assessment — local evidence only
+## Pass 2 runtime assessment and CI evidence
 
-Pass 2 preserves `app.py`, the native FastAPI preset, relative same-domain API paths, the existing frontend build and the **60-second** Vercel Function setting. No services were provisioned or deployed. The Dockerfile adds only the planning smoke script; the existing Ubuntu workflow now includes it. Neither the updated Docker image nor this Pass 2 workflow was executed on Linux in this session because Docker is unavailable locally. The successful `f939b3e` CI run remains historical Pass 1 evidence.
+Pass 2 preserves `app.py`, the native FastAPI preset, relative same-domain API paths, the existing frontend build and the **60-second** Vercel Function setting. No services were provisioned or deployed. GitHub Actions run `35201527675` succeeded on Ubuntu for original Pass 2 commit `6c587cc`: 56 backend tests, solver smoke, frontend build, browser tests, Docker build/start, forecast smoke, fixture/full planning smoke and solver smoke inside the container all completed. This is CI evidence for that exact commit. The current narrow correction still requires its own CI run after commit/push.
 
 The new `/api/plan/sample` path calculates all 60 products/four stores over 56 days, including 240 evaluated forecasts, a benchmark, the joint model and independent replay. SciPy/HiGHS is now imported during planning requests, whereas Demand Review still follows the existing forecast-only calculation path. The total planning target remains 30 seconds across all stages with replay time reserved; timed-out stages stop and return only independently validated incumbents/fallbacks. No optimality or serverless performance guarantee is implied.
 
@@ -105,7 +105,7 @@ These requests followed forecast smoke in the same fresh service, so sample cach
 
 A separate fresh Python process measured full-sample generation, planning and serialization at **28.720 s**, with macOS peak RSS **672,497,664 bytes (641.3 MiB)**. This includes the lazy solver import but is not a Vercel invocation or a Linux bundle measurement.
 
-The target-host first/repeat planning runtime, peak memory, packaging and HTTP behavior still require actual Vercel verification. Local tests cannot establish those properties. Keep the existing per-instance concurrency limitation and future 17.5 MB workbook transport gap in the hosting decision. No storage, job queue, scenario API or upload workaround was added in Pass 2.
+The target-host first/repeat planning runtime, peak memory, packaging and HTTP behavior still require actual Vercel verification. A successful Vercel build does not establish hosted planning execution. Local and Ubuntu container tests cannot establish those target-host properties. Keep the existing per-instance concurrency limitation and future 17.5 MB workbook transport gap in the hosting decision. No storage, job queue, scenario API or upload workaround was added in Pass 2.
 
 Reproduce the local check after a production startup:
 

@@ -5,9 +5,10 @@ from time import perf_counter
 from uuid import uuid4
 from backend.app.data.validation import validate_dataset
 from backend.app.planning.contracts import PlanResult, PolicyResult, Failure, SolverStage
-from backend.app.planning.inputs import Inputs, network_forecasts, planning_input_failures
+from backend.app.planning.inputs import Inputs, network_forecasts, planning_input_failures, _valid_path_arrival
 from backend.app.planning.benchmark import benchmark
 from backend.app.simulation.replay import replay, EPS
+from backend.app.simulation.replay import week
 
 ASSUMPTIONS = [
     'Receive, serve local expected demand, dispatch, then close stock. Unserved demand is lost, never backlogged.',
@@ -48,18 +49,36 @@ def plan(data, runtime_seconds=30):
         ctx.explain('BENCHMARK_TIME_LIMIT','Benchmark exhausted the shared runtime budget; no partial recommendation is accepted.')
     br=replay(data,demand,buffers,bp,bm,include_stock=False)
     stages=[]
+    solver_failure=None
     # Leave time for independent replay, serialization and safe fallback after solver termination.
     solve_deadline=deadline-2
     if perf_counter()<solve_deadline:
         from backend.app.planning.optimizer import optimize
-        p,m,stages=optimize(ctx,solve_deadline)
-        candidate=replay(data,demand,buffers,p,m,include_stock=False)
+        try:
+            p,m,stages=optimize(ctx,solve_deadline)
+            candidate=replay(data,demand,buffers,p,m,include_stock=False)
+        except RuntimeError:
+            p,m,candidate=[],[],no
+            stages=[SolverStage(name='joint_model',status='error',elapsed_ms=0)]
+            solver_failure=Failure(code='SOLVER_EXECUTION_ERROR',message='The joint optimizer could not complete because its solver runtime failed. No partial optimizer actions were accepted.')
     else:
         p,m=[],[];candidate=no
         stages=[SolverStage(name='joint_model',status='time_limit',elapsed_ms=0)]
     complete=bool(stages) and all(s.status=='optimal' for s in stages) and stages[-1].name=='stable_action_ties'
     # No incumbent can displace the independently feasible benchmark just on a solver flag.
-    if not candidate.feasible or (not complete and _score(br,ctx)<_score(candidate,ctx)):
+    if solver_failure is not None and br.feasible:
+        p,m,candidate=bp,bm,br
+        complete=False
+        stages.append(SolverStage(name='independent_fallback',status='benchmark',elapsed_ms=0))
+    elif solver_failure is not None and no.feasible:
+        p,m,candidate=[],[],no
+        complete=False
+        stages.append(SolverStage(name='independent_fallback',status='no_new_actions',elapsed_ms=0))
+    elif solver_failure is not None:
+        p,m,candidate=[],[],no
+        complete=False
+        stages.append(SolverStage(name='independent_fallback',status='invalid',elapsed_ms=0))
+    elif not candidate.feasible or (not complete and _score(br,ctx)<_score(candidate,ctx)):
         p,m,candidate=bp,bm,br
         complete=False
         stages.append(SolverStage(name='independent_fallback',status='benchmark' if br.feasible else 'invalid',elapsed_ms=0))
@@ -69,6 +88,10 @@ def plan(data, runtime_seconds=30):
         stages.append(SolverStage(name='independent_fallback',status='no_new_actions',elapsed_ms=0))
     verified=replay(data,demand,buffers,p,m)
     exceptions=list(ctx.exceptions.values()) if p==bp and m==bm else []
+    if solver_failure is not None:
+        exceptions.append(solver_failure)
+    if complete:
+        exceptions.extend(_shortage_causes(ctx,verified,p,m))
     for service in verified.service:
         if service.unmet+service.tail_unmet>EPS:
             exceptions.append(Failure(code='DATED_SUPPLY_SHORTFALL',message=f'{service.unmet:.1f} visible and {service.tail_unmet:.1f} provisional-tail units remain uncovered after dated receipts, allocations and funding limits.',sku=service.sku,location_id=service.location_id))
@@ -101,3 +124,70 @@ def _score(result,ctx):
             values.append(round(total,5))
     values.extend([result.summary.weekly_buffer_deficit,result.summary.commitments+result.summary.movement_expense])
     return tuple(values)
+
+
+def _shortage_causes(ctx, result, purchases, movements):
+    """Explain only limits that every dated purchase option actually hits."""
+    causes=[];cash={row.week_start:row for row in result.cash}
+    purchased={}
+    shared_used={}
+    for action in purchases:
+        key=action.supplier_id,action.sku,action.dispatch_date
+        purchased[key]=purchased.get(key,0)+action.units
+        supplier=ctx.suppliers[action.supplier_id]
+        amount=action.units*(ctx.products[action.sku].volume_per_unit if supplier.shared_capacity_unit=='volume' else 1)
+        shared_used[action.supplier_id,action.dispatch_date]=shared_used.get((action.supplier_id,action.dispatch_date),0)+amount
+    for service in result.service:
+        if service.unmet+service.tail_unmet<=EPS:
+            continue
+        offers=[o for o in ctx.data.supplier_offers if o.sku==service.sku]
+        lanes=[lane for lane in ctx.data.transfer_lanes if lane.source==ctx.dc and lane.destination==service.location_id and service.sku in lane.allowed_skus]
+        candidates=[]
+        for offer in offers:
+            minimum=max(offer.case_size,((offer.moq_units+offer.case_size-1)//offer.case_size)*offer.case_size)
+            for i in range(56):
+                timing=ctx.timing(offer,i)
+                if timing is None:
+                    continue
+                dispatch,arrival=timing
+                store_arrivals=[_valid_path_arrival(ctx.data,offer,lane,ctx.day(i)) for lane in lanes]
+                store_arrivals=[day for day in store_arrivals if day is not None and day<=ctx.day(55)]
+                if arrival>=56 or not store_arrivals:
+                    continue
+                candidates.append((offer,i,dispatch,arrival,minimum))
+        if not candidates:
+            causes.append(Failure(code='SUPPLIER_LEAD_TIME',message='No valid supplier and lane path can reach this store within the modeled horizon for the uncovered series.',sku=service.sku,location_id=service.location_id))
+            continue
+        if all(ctx.capacity.get((o.supplier_id,o.sku,d),0)-purchased.get((o.supplier_id,o.sku,ctx.day(d)),0)<qty
+                for o,i,d,a,qty in candidates):
+            causes.append(Failure(code='DATED_SUPPLIER_SKU_CAPACITY',message='Every dated supplier option that can arrive within the horizon has less remaining SKU capacity than one executable case/MOQ.',sku=service.sku,location_id=service.location_id))
+        if all(ctx.suppliers[o.supplier_id].shared_daily_capacity-shared_used.get((o.supplier_id,ctx.day(d)),0)
+                < qty*(ctx.products[o.sku].volume_per_unit if ctx.suppliers[o.supplier_id].shared_capacity_unit=='volume' else 1)
+                for o,i,d,a,qty in candidates):
+            causes.append(Failure(code='SHARED_SUPPLIER_CAPACITY',message='Every dated supplier option has less shared daily supplier headroom than one executable case/MOQ.',sku=service.sku,location_id=service.location_id))
+        commitment_blocked=True;payment_blocked=True;mov_blocked=True
+        for offer,i,dispatch,arrival,minimum in candidates:
+            order_week=week(ctx.day(i));row=cash.get(order_week)
+            line_value=offer.price_per_base_unit*minimum
+            supplier=ctx.suppliers[offer.supplier_id]
+            required_commitment=max(line_value,supplier.minimum_order_value)
+            if row and row.commitment_headroom is not None and row.commitment_headroom+EPS>=required_commitment:
+                commitment_blocked=False
+            deposit=line_value*offer.deposit_fraction
+            balance_week=week(ctx.day(arrival)+timedelta(days=offer.balance_days_after_receipt))
+            balance=cash.get(balance_week)
+            if (row and balance and row.payment_headroom is not None and balance.payment_headroom is not None
+                    and row.payment_headroom+EPS>=deposit and balance.payment_headroom+EPS>=line_value-deposit):
+                payment_blocked=False
+            if supplier.minimum_order_value<=line_value+EPS:
+                mov_blocked=False
+        if commitment_blocked:
+            causes.append(Failure(code='PURCHASE_COMMITMENT_AUTHORITY',message='Remaining weekly purchase authority is below the smallest executable case/MOQ or grouped supplier minimum for every dated option.',sku=service.sku,location_id=service.location_id))
+        if payment_blocked:
+            causes.append(Failure(code='PURCHASE_PAYMENT_CAPACITY',message='Remaining deposit or balance payment capacity is below the smallest executable dated purchase option.',sku=service.sku,location_id=service.location_id))
+        if mov_blocked and not commitment_blocked:
+            causes.append(Failure(code='GROUPED_SUPPLIER_MINIMUM',message='The grouped supplier minimum value exceeds an otherwise fundable minimum line.',sku=service.sku,location_id=service.location_id))
+    unique={}
+    for cause in causes:
+        unique[cause.code,cause.sku,cause.location_id]=cause
+    return list(unique.values())

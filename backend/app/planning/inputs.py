@@ -100,27 +100,21 @@ def network_forecasts(data, deadline):
         # replenishment path to this store (including calendar wait) determines evidence.
         days = data.settings.protection_days
         direct = [l for l in data.transfer_lanes if l.destination==a.location_id and any(x.kind=='dc' and x.location_id==l.source for x in data.locations) and a.sku in l.allowed_skus]
+        valid_paths = []
         for o in data.supplier_offers:
             if o.sku!=a.sku:
                 continue
             for lane in direct:
-                dc=next(l for l in data.locations if l.kind=='dc')
-                store=next(l for l in data.locations if l.location_id==a.location_id)
-                feasible_days={i for i in range(7) if i in lane.dispatch_weekdays and i in dc.open_weekdays and (i+lane.transit_days)%7 in store.open_weekdays}
-                if not feasible_days:
-                    failures.append(Failure(code='unreachable_lane_calendar',message='The DC dispatch and store receiving calendars never support this declared lane.',sku=a.sku,location_id=a.location_id))
-                    continue
-                # Enumerate daily order/dispatch/receipt waits without shortening lead times.
                 for i in range(7):
-                    d=data.settings.as_of+timedelta(days=i)
-                    origin=d
-                    while d.weekday() not in o.order_weekdays: d+=timedelta(days=1)
-                    while d.weekday() not in o.dispatch_weekdays: d+=timedelta(days=1)
-                    d+=timedelta(days=o.lead_time_days)
-                    while d.weekday() not in dc.open_weekdays: d+=timedelta(days=1)
-                    while d.weekday() not in feasible_days: d+=timedelta(days=1)
-                    arrival=d+timedelta(days=lane.transit_days)
-                    days=max(days,(arrival-origin).days+data.settings.review_period_days)
+                    origin=data.settings.as_of+timedelta(days=i)
+                    arrival=_valid_path_arrival(data,o,lane,origin)
+                    if arrival is not None:
+                        valid_paths.append((origin,arrival))
+        if not valid_paths:
+            failures.append(Failure(code='no_valid_replenishment_path',message='No supplier offer and DC-to-store lane can be ordered and dispatched within its validity and receiving calendars.',sku=a.sku,location_id=a.location_id))
+            continue
+        for origin,arrival in valid_paths:
+            days=max(days,(arrival-origin).days+data.settings.review_period_days)
         if days>28:
             failures.append(Failure(code='protection_envelope', message='Review plus calendar-adjusted replenishment exceeds supported 28-day evidence; extend the model explicitly.',sku=a.sku,location_id=a.location_id))
             continue
@@ -137,6 +131,38 @@ def network_forecasts(data, deadline):
         trace.append(ForecastTrace(sku=a.sku,location_id=a.location_id,run_id=result.run_id,input_hash=result.input_hash,
             method=result.selected_method,status=result.status,buffer=result.buffer))
     return demand,buffers,trace,failures
+
+
+def _valid_path_arrival(data, offer, lane, origin):
+    """Return the first store receipt for an offer that is orderable at origin."""
+    if not offer.valid_from<=origin<=offer.valid_to:
+        return None
+    dc=next(l for l in data.locations if l.location_id==lane.source and l.kind=='dc')
+    store=next(l for l in data.locations if l.location_id==lane.destination)
+    order=origin
+    while order<=offer.valid_to and order.weekday() not in offer.order_weekdays:
+        order+=timedelta(days=1)
+    if order>offer.valid_to:
+        return None
+    dispatch=order
+    while dispatch<=offer.valid_to and dispatch.weekday() not in offer.dispatch_weekdays:
+        dispatch+=timedelta(days=1)
+    if dispatch>offer.valid_to:
+        return None
+    received=dispatch+timedelta(days=offer.lead_time_days)
+    while received.weekday() not in dc.open_weekdays:
+        received+=timedelta(days=1)
+    lane_dispatch=received
+    # Weekday calendars repeat every seven days. Four weeks is a bounded
+    # impossibility check, not a lead-time shortcut.
+    for _ in range(28):
+        arrival=lane_dispatch+timedelta(days=lane.transit_days)
+        if (lane_dispatch.weekday() in lane.dispatch_weekdays
+                and lane_dispatch.weekday() in dc.open_weekdays
+                and arrival.weekday() in store.open_weekdays):
+            return arrival
+        lane_dispatch+=timedelta(days=1)
+    return None
 
 
 def planning_input_failures(data):

@@ -38,6 +38,8 @@ Inventory investment carries acquisition value at weighted-average cost on inter
 
 Plan Review renders Python totals, purchase actions, shared allocations, cash weeks, class/store targets, individual SKU/store shortages and reason-coded exceptions. Expandable evidence provides source/destination daily stock, payment dates, forecast versions, solver stages and assumptions. Only the proposed plan carries the full daily ledger; comparisons retain policy actions, service, cash and totals. The full normalized input dataset is never echoed.
 
+Pass 3 scenario responses must continue sharing or referencing the proposed daily ledger rather than duplicating all SKU/location/day rows for every comparison. The measured full response already uses most of the 4.5 MB Function response allowance.
+
 Loading clears the prior result; changing the planning dataset or recalculating updates the whole result from one API response. Aborted requests cannot overwrite newer UI state. Server calculation continues after a browser abort; the shared process semaphore returns 429 with retry guidance while it finishes. This is per-process admission control, not distributed scheduling. No plan is persisted or released to suppliers.
 
 Scenarios, reviewed edits/locks, workbook workflows, exports and hosted release audit remain later passes. Existing confirmed transactions are fixed input actions; there is no Pass 4 user lock workflow yet.

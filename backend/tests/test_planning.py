@@ -233,6 +233,23 @@ def test_optimizer_shared_stock_and_case_budget_remain_hard():
     assert r.summary.unmet>=530
 
 
+def test_completed_constrained_joint_plan_explains_binding_commitment():
+    from backend.app.planning.engine import _shortage_causes
+    data=hand_data()
+    for row in data.inventory:row.on_hand=0
+    for budget in data.budgets:
+        budget.new_commitment_cap=99
+        budget.payment_ceiling=100000
+    demand={('X','A'):[10.]*56,('X','B'):[10.]*56}
+    ctx=Inputs(data,demand,{})
+    p,m,stages=optimize(ctx,perf_counter()+8)
+    assert stages[-1].name=='stable_action_ties' and all(s.status=='optimal' for s in stages)
+    result=replay(data,demand,{},p,m)
+    assert result.feasible and result.summary.unmet>0
+    causes=_shortage_causes(ctx,result,p,m)
+    assert 'PURCHASE_COMMITMENT_AUTHORITY' in {c.code for c in causes}
+
+
 def test_network_uses_unchanged_forecast_and_trace(dataset):
     from backend.app.planning.inputs import network_forecasts
     from backend.app.forecasting.engine import forecast
@@ -266,6 +283,23 @@ def test_api_validation_busy_and_validated_timeout_fallback(dataset,monkeypatch)
     try:
         assert client.post('/api/plan/sample',json={}).status_code==429
     finally:calculation_slot.release()
+
+
+def test_solver_runtime_error_returns_sanitized_replayed_fallback(monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+    def fail_solver(*args):
+        raise RuntimeError('private solver path and internal stack detail')
+    monkeypatch.setattr('backend.app.planning.optimizer.optimize',fail_solver)
+    response=TestClient(app).post('/api/plan/sample',json={'size':'fixture'})
+    assert response.status_code==200
+    result=response.json();encoded=response.text
+    assert result['status']=='feasible_fallback'
+    assert result['proposed']['replay']['feasible']
+    assert not result['proposed']['replay']['failures']
+    assert any(s['name']=='joint_model' and s['status']=='error' for s in result['stages'])
+    assert any(e['code']=='SOLVER_EXECUTION_ERROR' for e in result['exceptions'])
+    assert 'private solver path' not in encoded and 'Traceback' not in encoded
 
 
 def test_existing_group_fee_is_not_charged_twice():
@@ -308,4 +342,54 @@ def test_disjoint_calendars_report_invalid_inputs_without_looping(dataset):
     for lane in data.transfer_lanes:
         if lane.source=='DC':lane.dispatch_weekdays=[1]
     _,_,_,failures=network_forecasts(data,perf_counter()+10)
-    assert 'unreachable_lane_calendar' in {f.code for f in failures}
+    assert 'no_valid_replenishment_path' in {f.code for f in failures}
+
+
+def test_expired_offer_does_not_change_protection_evidence(dataset):
+    from backend.app.planning.inputs import network_forecasts
+    base=dataset.model_copy(deep=True)
+    _,_,trace,failures=network_forecasts(base,perf_counter()+10)
+    assert not failures
+    before=next(t.buffer.protection_days for t in trace if (t.sku,t.location_id)==('SKU001','S1'))
+    current=next(o for o in base.supplier_offers if o.sku=='SKU001')
+    base.supplier_offers.append(current.model_copy(update={
+        'offer_id':'EXPIRED-LONG','valid_from':base.settings.as_of-timedelta(days=60),
+        'valid_to':base.settings.as_of-timedelta(days=1),'lead_time_days':30}))
+    _,_,trace,failures=network_forecasts(base,perf_counter()+10)
+    assert not failures
+    assert next(t.buffer.protection_days for t in trace if (t.sku,t.location_id)==('SKU001','S1'))==before
+
+
+def test_future_offer_is_not_orderable_before_valid_from(dataset):
+    from backend.app.planning.inputs import _valid_path_arrival
+    data=dataset.model_copy(deep=True);start=data.settings.as_of
+    offer=next(o for o in data.supplier_offers if o.sku=='SKU001').model_copy(update={
+        'offer_id':'FUTURE','valid_from':start+timedelta(days=3),'valid_to':start+timedelta(days=30)})
+    lane=next(l for l in data.transfer_lanes if l.source=='DC' and l.destination=='S1' and 'SKU001' in l.allowed_skus)
+    assert _valid_path_arrival(data,offer,lane,start) is None
+    assert _valid_path_arrival(data,offer,lane,start+timedelta(days=3)) is not None
+
+
+def test_current_slower_offer_remains_in_conservative_protection(dataset):
+    from backend.app.planning.inputs import network_forecasts
+    data=dataset.model_copy(deep=True)
+    _,_,trace,failures=network_forecasts(data,perf_counter()+10)
+    assert not failures
+    before=next(t.buffer.protection_days for t in trace if (t.sku,t.location_id)==('SKU001','S1'))
+    current=next(o for o in data.supplier_offers if o.sku=='SKU001')
+    data.supplier_offers.append(current.model_copy(update={'offer_id':'CURRENT-SLOW','lead_time_days':current.lead_time_days+3}))
+    _,_,trace,failures=network_forecasts(data,perf_counter()+10)
+    assert not failures
+    after=next(t.buffer.protection_days for t in trace if (t.sku,t.location_id)==('SKU001','S1'))
+    assert after>before
+
+
+def test_series_without_valid_replenishment_path_is_explicit(dataset):
+    from backend.app.planning.inputs import network_forecasts
+    data=dataset.model_copy(deep=True)
+    for offer in data.supplier_offers:
+        if offer.sku=='SKU001':
+            offer.valid_from=data.settings.as_of-timedelta(days=30)
+            offer.valid_to=data.settings.as_of-timedelta(days=1)
+    _,_,_,failures=network_forecasts(data,perf_counter()+10)
+    assert any(f.code=='no_valid_replenishment_path' and f.sku=='SKU001' and f.location_id=='S1' for f in failures)
