@@ -1,4 +1,25 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+async function expectHeadlineMatchesDisplayedMaes(page: Page) {
+  const metric = page.locator('.metric').filter({ hasText: 'Versus seasonal naive' });
+  const headline = (await metric.locator('strong').innerText()).trim();
+  const detail = (await metric.locator('small').innerText()).trim();
+  if (detail === 'Baseline Unavailable → selected Unavailable units') {
+    expect(headline).toBe('Unavailable');
+    return { headline, baselineText: 'Unavailable', selectedText: 'Unavailable' };
+  }
+  const match = detail.match(/^Baseline ([\d,.]+) → selected ([\d,.]+) units$/);
+  if (!match) throw new Error(`Unexpected MAE detail: ${detail}`);
+  const baselineText = match[1];
+  const selectedText = match[2];
+  expect(baselineText).toMatch(/^\d[\d,]*\.\d$/);
+  expect(selectedText).toMatch(/^\d[\d,]*\.\d$/);
+  const baseline = Number(baselineText.replaceAll(',', ''));
+  const selected = Number(selectedText.replaceAll(',', ''));
+  const expectedHeadline = `${Math.round(100 * (baseline - selected) / baseline)}%`;
+  expect(headline).toBe(expectedHeadline);
+  return { headline, baselineText, selectedText };
+}
 
 test('production UI renders the actual API result, recalculates and navigates honestly', async ({ page }) => {
   const errors: string[] = [];
@@ -9,15 +30,12 @@ test('production UI renders the actual API result, recalculates and navigates ho
   const result = await (await initial).json();
   const content = page.getByTestId('forecast-result');
   const selectedMetrics = result.selection.find((r: {method:string}) => r.method === result.selected_method).metrics.find((m:{horizon:number}) => m.horizon === 28);
-  const baselineMetrics = result.selection.find((r: {method:string}) => r.method === 'seasonal_naive').metrics.find((m:{horizon:number}) => m.horizon === 28);
-  const displayedBaselineMae = Number(baselineMetrics.mean_absolute_quantity_error.toFixed(1));
-  const displayedSelectedMae = Number(selectedMetrics.mean_absolute_quantity_error.toFixed(1));
-  const reconciledImprovement = Math.round(100 * (displayedBaselineMae - displayedSelectedMae) / displayedBaselineMae);
-  expect(reconciledImprovement).toBe(Math.round(result.improvement_pct));
+  const baselineRecord = result.selection.find((r: {method:string}) => r.method === 'seasonal_naive');
+  expect(baselineRecord.method).toBe('seasonal_naive');
   await expect(content).toHaveAttribute('data-run-id', result.run_id);
   await expect(page.locator('.metric').first()).toContainText(result.visible_units.toLocaleString('en-GB', { maximumFractionDigits: 1 }));
-  await expect(page.locator('.metric').nth(1).locator('strong')).toHaveText(`${reconciledImprovement}%`);
-  await expect(page.locator('.metric').nth(1)).toContainText(`Baseline ${baselineMetrics.mean_absolute_quantity_error.toLocaleString('en-GB', { maximumFractionDigits: 1 })} → selected ${selectedMetrics.mean_absolute_quantity_error.toLocaleString('en-GB', { maximumFractionDigits: 1 })} units`);
+  const referenceSummary = await expectHeadlineMatchesDisplayedMaes(page);
+  expect(referenceSummary).toEqual({ headline: '28%', baselineText: '10.4', selectedText: '7.5' });
   await expect(page.locator('.metric').nth(2)).toContainText('Pooled signed bias');
   await expect(page.locator('.metric').nth(2).locator('strong')).toHaveText('<0.1%');
   await expect(page.locator('.selected-row')).toContainText('<0.1%');
@@ -29,12 +47,14 @@ test('production UI renders the actual API result, recalculates and navigates ho
   expect(productResult.sku).toBe('SKU002');
   await expect(content).toHaveAttribute('data-run-id', productResult.run_id);
   await expect(page.locator('.panel .eyebrow').first()).toContainText(productResult.product_name);
+  await expectHeadlineMatchesDisplayedMaes(page);
 
   const storeResponse = page.waitForResponse(r => r.url().endsWith('/api/forecast/sample') && r.ok());
   await page.getByRole('combobox', { name: 'Store', exact: true }).selectOption('S2');
   const storeResult = await (await storeResponse).json();
   expect(storeResult.location_id).toBe('S2');
   await expect(content).toHaveAttribute('data-run-id', storeResult.run_id);
+  await expectHeadlineMatchesDisplayedMaes(page);
   const recalculation = page.waitForResponse(r => r.url().endsWith('/api/forecast/sample') && r.ok());
   await page.getByRole('button', { name: 'Recalculate live' }).click();
   const next = await (await recalculation).json();
@@ -42,6 +62,7 @@ test('production UI renders the actual API result, recalculates and navigates ho
   expect(next.sku).toBe('SKU002');
   expect(next.location_id).toBe('S2');
   await expect(content).toHaveAttribute('data-run-id', next.run_id);
+  await expectHeadlineMatchesDisplayedMaes(page);
   await page.getByRole('button', { name: 'Held-out final check' }).click();
   await expect(page.getByText('These results do not choose the winner.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: /Plan Review/ }).click();
@@ -60,6 +81,19 @@ test('production UI renders the actual API result, recalculates and navigates ho
   await expect(page.getByRole('button', { name: /Upload workbook/ })).toBeDisabled();
   await expect(page.getByText('Calculations run on the Python server.', { exact: false })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('SKU006 headline uses its displayed one-decimal MAEs', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('forecast-result')).toBeVisible();
+  const response = page.waitForResponse(r => r.url().endsWith('/api/forecast/sample') && r.ok());
+  await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption('SKU006');
+  const result = await (await response).json();
+  expect(result.sku).toBe('SKU006');
+  expect(Math.round(result.improvement_pct)).toBe(30);
+  await expect(page.getByTestId('forecast-result')).toHaveAttribute('data-run-id', result.run_id);
+  const summary = await expectHeadlineMatchesDisplayedMaes(page);
+  expect(summary).toEqual({ headline: '29%', baselineText: '19.0', selectedText: '13.4' });
 });
 
 test('navigation has no undefined hollow status circles', async ({ page }) => {

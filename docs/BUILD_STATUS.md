@@ -1,8 +1,30 @@
 # Build status
 
-Updated: **16 September 2026**. Completed scope: **Pass 1 only**.
+Updated: **17 September 2026**. Completed scope: **Pass 1 only**.
 
-**Pass 1 exit gate: met locally.** The seeded sample travels through the live Python API into the built React UI; historical forecast evaluation passes invariant tests; a production-style single-service startup and HTTP deployment smoke test pass. Docker/Linux and public-host deployment are not verified and are explicitly outstanding. No infrastructure was provisioned. This is not the full MVP release gate.
+**Pass 1 exit gate: met locally and in Ubuntu CI.** The seeded sample travels through the live Python API into the built React UI; historical forecast evaluation passes invariant tests; production-style single-service startup and HTTP smoke tests pass. GitHub Actions verified the Linux container path for commit `f939b3e`; no public host or Vercel deployment has been verified. No infrastructure was provisioned. This is not the full MVP release gate.
+
+## Final Pass 1 presentation correction
+
+Completed on **17 September 2026**, before deployment-readiness work. This correction changes presentation formatting and browser regressions only. The forecast engine, model-selection logic, API `improvement_pct`, data contracts and all Pass 2 scope remain unchanged.
+
+- The improvement headline now rounds the baseline and selected 28-day quantity MAEs to their displayed one-decimal values first, then calculates the whole-number percentage from those values. SKU001/S1 remains **10.4 → 7.5 = 28%**. SKU006/S1 now displays **19.0 → 13.4 = 29%**, while its API `improvement_pct` remains the unrounded **29.57393483709272** used by the engine.
+- The seasonal-naive baseline is found explicitly by `method === "seasonal_naive"`; UI rendering no longer assumes candidate-array position zero.
+- Browser regressions independently parse the displayed MAEs and recompute the headline. They cover SKU001/S1, SKU006/S1, a product change, a store change and explicit live recalculation. An unavailable product/store evaluation is accepted only when the headline and both MAEs all display `Unavailable`.
+- Previous navigation styling, Pooled signed bias formatting, scenario icon, circle removal and API-backed controls remain covered.
+
+Checks executed for this final correction:
+
+| Command / check | Actual result |
+|---|---|
+| `.venv/bin/python -m pytest -q` | **35 passed in 4.03 s**; two unchanged upstream Starlette/AnyIO deprecation warnings. |
+| `npm --prefix frontend run build` | TypeScript and production Vite build passed: **244.04 kB JS / 76.07 kB gzip**, **11.15 kB CSS / 3.34 kB gzip**, Vite build **395 ms**. |
+| `CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm --prefix frontend run test:e2e` | First run: SKU006 passed, but a product-change assertion rejected a valid all-`Unavailable` result; the assertion was corrected. Final run: **6 passed in 2.9 s**. |
+| `.venv/bin/python -m scripts.smoke` | Passed health, built frontend, fixture and full-sample live API calculations. Fixture HTTP 0.022 s cold / 0.022 s warm; full sample 0.093 s cold / 0.089 s warm. |
+| Isolated `agent-browser` verification | Page and controls rendered with no error overlay or browser errors. SKU006/S1 visibly showed **29%** and **Baseline 19.0 → selected 13.4 units**. |
+| `git diff --check` | Passed after the final code and documentation changes. |
+
+GitHub Actions for commit `f939b3e410e7b255f69a919a6ca5270f106ae3df` succeeded on Ubuntu. That run completed backend tests, solver smoke, frontend build, browser tests, Docker image build, Docker startup and production HTTP smoke testing. This is Linux/container CI evidence for that commit, not public-host or Vercel deployment verification.
 
 ## Narrow Pass 1 correction
 
@@ -63,8 +85,8 @@ Environment: macOS arm64, Python **3.14.4**, Node **25.6.1**, npm **11.9.0**. Ru
 | `.venv/bin/python -m pip check` | **No broken requirements found.** |
 | `.venv/bin/python -m compileall -q backend scripts` | Passed. |
 | `git diff --check` | Passed for tracked edits. New files were separately inspected; no credentials or operational uploads were added. |
-| Docker build/run | **Not executed:** Docker is not installed. |
-| GitHub Actions / hosted test | **Not executed:** workflow prepared, no remote run or public deployment performed. |
+| Docker build/run | Docker remains unavailable locally. GitHub Actions for commit `f939b3e` successfully built and started the image on Ubuntu, then ran the production HTTP smoke test against it. |
+| GitHub Actions / hosted test | **Succeeded on Ubuntu for commit `f939b3e`**: backend tests, solver smoke, frontend build, browser tests, Docker build/startup and HTTP smoke passed. This was CI validation, not a public deployment. |
 
 Latest production HTTP measurements after process restart (single selected SKU-store, not a network planning solve):
 
@@ -90,7 +112,7 @@ Details and formulas: [FORECASTING.md](FORECASTING.md). Hosting assessment and s
 - The 30-second forecast budget is cooperative, checked between origins, not an OS hard timeout. Single-process concurrency limits do not become distributed limits if replicas are added.
 - Hashes use ordered normalized serialization; reordered equivalent input tables can produce a different hash. There is no historical revision/vintage contract or persistent plan state yet.
 - Connected Vercel access was checked read-only: Hobby team available. The **17.5 MB** full normalized sample exceeds Vercel Functions' documented **4.5 MB** payload limit. Default remains a single-container skeleton; choose an authorized container-capable host or explicitly resolve that transport mismatch. No paid host selected.
-- Docker/Linux, hosted memory/runtime/retention and a genuine cold target-host solver start are outstanding. The first local SciPy import exceeded 30 seconds; no full-plan performance claim is made. None of these prevents local Pass 2 formulation work.
+- Ubuntu CI verified the Docker/Linux build, startup and smoke path for commit `f939b3e`; Docker remains unavailable locally. Hosted memory/runtime/retention and a genuine cold target-host solver start are outstanding. The first local SciPy import exceeded 30 seconds; no full-plan performance claim is made. None of these prevents later work.
 
 ## Exact starting point for Pass 2
 

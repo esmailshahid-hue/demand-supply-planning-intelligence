@@ -1,6 +1,6 @@
 # Pass 1 deployment assessment
 
-Checked on 16 September 2026. No service was purchased, no paid infrastructure was provisioned, and no public deployment was created.
+Checked on 17 September 2026. No service was purchased, no paid infrastructure was provisioned, and no public deployment was created.
 
 ## Available environment and selected shape
 
@@ -18,12 +18,18 @@ There is a concrete contract mismatch: Vercel Functions' documented request/resp
 
 Local installed SciPy and NumPy occupy approximately 99 MB and 34 MB respectively. Linux wheel sizes and total function bundle size were not measured.
 
+## Ubuntu CI evidence
+
+The GitHub Actions run for commit `f939b3e410e7b255f69a919a6ca5270f106ae3df` succeeded on Ubuntu. It completed the repository's backend test suite, SciPy/HiGHS solver smoke, frontend production build, browser tests, Docker image build, Docker container startup and production HTTP smoke test. The HTTP smoke exercised the built frontend plus fixture and full-sample API calculations through the running container.
+
+This confirms the Linux/container skeleton for that commit in CI. It does **not** verify a public host, a Vercel deployment, Vercel's Python/SciPy bundle behavior, production retention, public networking or the unresolved 4.5 MB Vercel Functions payload limit.
+
 ## Actual smoke evidence and remaining checks
 
 The compiled frontend and live fixture/full-sample API passed HTTP and browser checks using `scripts/start.sh`. The production app serves both on the same port. Browser verification covered recalculation against captured API responses, launch and zero-demand behavior, four-screen navigation, error/retry behavior and mobile keyboard navigation.
 
 `python -m scripts.solver_smoke` solved an independent one-variable integer problem with the expected `x = 2` and HiGHS status 0. The very first import of SciPy's optimizer on this local environment took **31.154 seconds**; a repeat process took **0.449 seconds**. Solve calls took 0.000–0.006 seconds. The first import must not be hidden in a 30-second end-to-end performance claim. SciPy is not imported in the Pass 1 HTTP request path. Pass 2 should initialize the solver at startup, distinguish readiness from liveness and measure cold/warm planning on the actual target host.
 
-Docker build/run and the Linux runtime **could not be executed because Docker is absent**. `.github/workflows/verify.yml` includes Linux tests, browser tests and container smoke commands, but the workflow has not been run remotely. The local production HTTP smoke is the verified Pass 1 deployment smoke; it is not a claim of container or hosted verification.
+Docker build/run still cannot be repeated in the local macOS environment because Docker is absent. The successful GitHub Actions run for commit `f939b3e` provides Ubuntu Docker build, startup and HTTP smoke evidence. The latest presentation-only correction was rechecked locally with backend tests, frontend build, browser tests and HTTP smoke; it did not alter the container or calculation API. Neither result is a claim of hosted deployment verification.
 
-Before public deployment: choose an authorized container-capable target (or resolve the Vercel payload mismatch), execute the image build/run and solver smoke on Linux, measure memory/cold startup/full-plan runtime, and verify actual host retention and logging. There are currently no uploads or raw-row logs. No retention or deletion claim is made for an unselected host.
+Before public deployment: choose an authorized target, resolve the Vercel payload mismatch if Vercel is selected, reproduce the container/runtime checks on that actual host, measure memory/cold startup/full-plan runtime, and verify actual host retention and logging. There are currently no uploads or raw-row logs. No retention or deletion claim is made for an unselected host.

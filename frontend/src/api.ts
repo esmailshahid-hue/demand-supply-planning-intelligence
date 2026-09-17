@@ -13,6 +13,18 @@ export async function api<T>(path: string, signal: AbortSignal, body?: unknown):
   return result as T;
 }
 export const number = (n: number | null | undefined, digits = 1) => n == null ? 'Unavailable' : n.toLocaleString('en-GB', { maximumFractionDigits: digits });
+const roundedForDisplay = (n: number, digits: number) => {
+  const factor = 10 ** digits;
+  return Math.round((n + Number.EPSILON) * factor) / factor;
+};
+export const fixedNumber = (n: number | null | undefined, digits = 1) => n == null ? 'Unavailable' : roundedForDisplay(n, digits).toLocaleString('en-GB', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+export const displayedMaeImprovement = (baselineMae: number | null | undefined, selectedMae: number | null | undefined) => {
+  if (baselineMae == null || selectedMae == null) return null;
+  const displayedBaseline = roundedForDisplay(baselineMae, 1);
+  const displayedSelected = roundedForDisplay(selectedMae, 1);
+  if (displayedBaseline === 0) return null;
+  return Math.round(100 * (displayedBaseline - displayedSelected) / displayedBaseline);
+};
 export const percent = (n: number | null | undefined, digits = 1) => n == null ? 'Unavailable' : `${number(n, digits)}%`;
 export const signedPercent = (n: number | null | undefined) => {
   if (n == null) return 'Unavailable';
