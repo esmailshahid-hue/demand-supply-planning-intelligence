@@ -72,9 +72,9 @@ test('production UI renders the actual API result, recalculates and navigates ho
   await expect(page.getByTestId('plan-result')).toBeVisible();
   await expect(content).toHaveCount(0);
   await page.getByRole('button', { name: /Scenarios/ }).click();
-  await expect(page.getByText('Scenario comparisons need a validated plan.')).toBeVisible();
-  await expect(page.locator('.unavailable-icon svg')).toBeVisible();
-  await expect(page.locator('.unavailable-icon')).not.toContainText('⌘');
+  await expect(page.getByRole('heading', {name:'Changes to test'})).toBeVisible({timeout:15000});
+  await expect(page.locator('.scenario-icon svg')).toBeVisible();
+  await expect(page.locator('.scenario-icon')).not.toContainText('⌘');
   await page.getByRole('button', { name: /Data and Assumptions/ }).click();
   const dataNav = page.getByRole('button', { name: 'Data and Assumptions' });
   await expect(dataNav).toHaveAttribute('aria-current', 'page');
@@ -147,7 +147,7 @@ test('mobile navigation and keyboard access work without page overflow', async (
   await expect(page.locator('#main-content')).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole('button', { name: /Scenarios/ }).click();
-  await expect(page.getByText('Scenario comparisons need a validated plan.')).toBeVisible();
+  await expect(page.getByRole('heading', {name:'Changes to test'})).toBeVisible({timeout:15000});
 });
 
 test('failed API calculation shows an error and retry, never fabricated metrics', async ({ page }) => {

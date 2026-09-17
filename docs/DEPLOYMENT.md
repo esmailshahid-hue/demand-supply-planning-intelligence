@@ -1,3 +1,15 @@
+# Pass 3 sample scenario transport — 17 September 2026
+
+User-confirmed Ubuntu GitHub Actions run **35228781514** passed for **47dc0217df22d8f31eed2a534e7d279e597861bd**, closing Pass 2: 82 backend tests, eight browser tests, contracts/build, Docker build/start, forecast/container solver smoke and deterministic reconciled planning at 2.865 / 2.851 s fixture and 7.604 / 7.496 s full. Historical blocked statements below are superseded for Pass 2. This is not verification of the new Pass 3 code or a public host.
+
+Pass 3 retains the single FastAPI deployment, relative API paths, existing Docker startup, Vercel configuration and 60-second Function ceiling. Scenario comparisons transport action snapshots/definitions, never full history or daily baseline ledgers. Each request reconstructs the selected sample and validates its versions/actions without depending on durable process memory. Summary responses omit all daily stock; scoped detail independently replays the complete network and returns only the selected SKU's evidence. No database, signing secret, paid service or persistent session is required. Snapshot checksums establish consistency, not authenticated plan provenance; no action execution or accepted export exists.
+
+Measured local production full-sample combined-scenario first/repeat: **6.601 / 6.621 seconds**, **974,263-byte** summaries. Detail: **2.967 seconds**, **97,983-byte** response and **292,827-byte** request. A future-path receipt delay, with separate protection-period forecast preparation, took **9.134 seconds**, response **1,025,787 bytes**. The baseline 10-second gate and 4,500,000-byte guard remain unchanged; scenario smoke separately checks a 30-second HTTP ceiling. See SCENARIOS.md and BUILD_STATUS.md for exact semantics and evidence.
+
+Docker is unavailable on this local macOS workspace. The workflow now includes scenario smoke, but no Pass 3 CI, Docker or Vercel success is claimed. Existing per-instance admission limits, cooperative deadlines and the future workbook upload gap still apply. No deployment, push, merge or provisioning occurred.
+
+---
+
 # Current Pass 2 readiness decision — 17 September 2026
 
 This update supersedes the historical strict fixture gate below. The live joint challenger now receives a two-second sub-budget inside the unchanged 30-second overall request budget; the Vercel setting remains 60 seconds. The user retired exact sample MILP completion in favor of independently replayed, deterministic constrained actions with honest `feasible_fallback` status. Completed joint plans still require every required stage to reach optimal status without a positive gap and pass replay.

@@ -1,5 +1,101 @@
 # Build status
 
+## Pass 3 — sample review and immutable scenarios — 17 September 2026
+
+**Pass 3 exit gate: met locally.** Started from clean `47dc0217df22d8f31eed2a534e7d279e597861bd`, preserving the accepted Pass 2 engine. No push, merge, deployment or later-pass implementation occurred.
+
+### Pass 2 closure evidence
+
+The user supplied successful GitHub Actions run **35228781514** for **47dc021**: 82 backend tests, eight browser tests, contract generation/build, Docker build/start, forecast/container solver smoke, fixture first/repeat **2.865 / 2.851 s**, full **7.604 / 7.496 s**, independent replay, deterministic actions and financial reconciliation. Pass 2 is closed under the approved validated constrained fallback policy. Historical blocked statements below are superseded for that commit. This run was not independently downloaded in this session and does not verify the new Pass 3 changes.
+
+### Implemented flow and contracts
+
+- Plan Review retains its real API results, visible/tail metrics, constrained benchmark/no-action comparisons and explicit benchmark equality. Purchase/movement inspection now links complete selected-SKU stock/cash/receipt evidence and the actual store forecast. A selected inventory series also opens its forecast. Evidence respects pooled stock and grouped fees, without inventing purchase-to-transfer dependencies.
+- Scenarios loads a live fixture/full baseline or captures and independently replays the already displayed Plan Review actions without reoptimizing the baseline. Editable Promotion, Supplier disruption and Tighter funds presets populate ordinary controls; scope/date/amount changes can be combined. A pre-run change summary and dirty-state notice prevent old comparisons appearing current.
+- Immutable baseline actions and sample version/checksum are carried in small requests. Every scenario starts from a copied baseline. Original, frozen and replanned results are distinct, and frozen/replanned share exactly one transformed dataset/demand/buffer preparation. Overlaps, unknown identifiers, invalid money and unsupported timing envelopes are rejected. No-op/reset preserves the original outcome.
+- Demand uplift is applied once to future expected quantities, outside historical evaluation. Receipt delays distinguish selected existing orders from future purchasing paths; calendars and new receipt-relative balances apply, while fixed existing payables remain unchanged and counted once. Availability reductions affect dated remaining capacity for new purchases. Commitment limits and payment ceilings are independent.
+- Infeasible frozen policies retain their attempted decisions, cash and failures but expose **no stock/service/aggregate outcome metrics or corresponding deltas**. The replay's diagnostic negative stock cannot masquerade as service. Replanned policies require independent feasibility before being called executable. All sample replans tested returned honest `feasible_fallback` results.
+- Compact comparison responses contain summaries, actions, cash, shortages and versions, without daily stock. Scoped detail reconstructs the full network and returns only the selected SKU's 56-day stock, payments, related receipts/movements and underlying evaluated forecast with separate adjustments. Every response identifies baseline/scenario/policy versions; detail does not rerun optimization.
+- Browser state is per-session. Editing/reset/dataset changes abort pending rendering and clear obsolete results/detail. Admission-control 429 responses honor Retry-After; stale responses cannot overwrite newer state. No history or daily ledgers are posted back, and no durable process memory is required.
+
+Full transformation rules, status semantics, versioning and stateless endpoints are in [SCENARIOS.md](SCENARIOS.md). Baseline snapshot checksums provide consistency, not cryptographic authentication or execution authority. They are internal transport, not portable exports. No accounts, upload/template workflow, review locks, acceptance, exports, AI or extra scenario family was added.
+
+### Checks actually executed
+
+| Check | Result |
+|---|---|
+| Complete backend suite | **102 passed in 39.46 s**, two existing TestClient deprecation warnings; all 82 prior regressions retained plus 20 scenario cases/parameter cases. |
+| Scenario invariants | Hand-checkable receipt/calendar/balance timing, fixed-payable uniqueness, capacity invalidation, independent commitment/payment limits, existing-obligation infeasibility, frozen invalid-metric suppression, scope/date uplift once, combinations/overlaps, no-op, reset/immutability, repeat determinism, session isolation, version checks, scoped evidence and byte limits passed. |
+| Contract export + frontend type generation | Exported/generated twice and compared with `cmp`; byte-identical. Expected new scenario contracts generated in the working tree; original plan/forecast contracts unchanged. |
+| Frontend production build | TypeScript/Vite passed; final JS **282.95 kB / 85.00 kB gzip**, CSS **11.60 kB / 3.45 kB gzip**, Vite **455 ms**. |
+| Complete browser suite | Final **10 passed in 1.0 min**. Actual API action/forecast inspection, three presets, combined shock, frozen failures, reset and in-flight control/dataset replacement passed alongside existing forecast/planning cases. Previous full run also passed 10 in 57.0 s. |
+| Solver smoke | SciPy 1.18.1, import **0.302 s**; expected integer solution/status, cold **0.001 s**, warm <0.001 s. |
+| Production forecast/planning/scenario smoke | Passed; detailed measurements below. Baseline threshold remains **10 seconds** and **4,500,000 bytes**. Scenario smoke independently checks a **30-second** HTTP ceiling and the same byte guard, including future-path delays. |
+| Python/frontend dependencies | `pip check`: no broken requirements. `npm ls --depth=0`: installed tree resolved. `npm audit --omit=dev`: **0 vulnerabilities**. No dependency upgrades. |
+| Compileall / workflow YAML / diff | Compileall, Ruby YAML parse with preserved baseline/new scenario gate checks and `git diff --check` passed. No `continue-on-error`, warning suppression or threshold increase. |
+| Docker / CI / hosted | Docker and local VM alternatives unavailable; no new Docker, corrected-commit CI or public/Vercel verification executed. Dockerfile/workflow include the scenario smoke for the next authorized CI run. |
+
+During implementation, the first TypeScript build caught optional action-array iteration and was corrected. A later import cleanup omitted `Funding`; five dependent fixture setups failed, the import was restored, and the complete final backend suite passed. No failures were skipped or assertions removed. React component/effect/accessibility review used the available React best-practices skill; existing evaluation/presentation regressions remain covered.
+
+### Final production measurements
+
+Local macOS arm64, Python 3.14.4, one production Uvicorn worker on port 8011. These final checks followed browser verification; sample input caches were warm. “First/repeat” means successive live calculations for that dataset in the smoke process, not Vercel cold starts. Forecast smoke passed at fixture **0.022 / 0.021 s** and full **0.096 / 0.091 s** HTTP.
+
+| Baseline planning run | HTTP s | Engine ms | Bytes | Purchases / movements |
+|---|---:|---:|---:|---:|
+| Fixture first | 2.600 | 2,587.1 | 782,591 | 24 / 311 |
+| Fixture repeat | 2.618 | 2,614.1 | 782,589 | 24 / 311 |
+| Full first | 6.024 | 6,006.2 | 3,747,962 | 31 / 607 |
+| Full repeat | 5.983 | 5,964.6 | 3,747,962 | 31 / 607 |
+
+All four baseline runs returned `feasible_fallback`, with `visible_must_stock:time_limit` → `independent_fallback:benchmark`, independent replay true and no failures. Repeated actions, totals and explanations matched. Fixture purchase values/commitments reconciled at **SAR 91,606**, payment ledger/total at **SAR 97,746**, minimum commitment/payment/transfer headroom **0 / 14 / 120 SAR**. Full values reconciled at **SAR 92,550 / 99,050**, minimum headroom **40 / 5 / 120 SAR**. The unchanged baseline 10-second and 4,500,000-byte gates passed.
+
+Scenario smoke combined SKU001 +30% demand on days 1–14, the selected existing SUP08 receipt +3 days, SUP01 remaining availability zero for days 1–56, and first-week new commitment authority zero. It also separately tested a SUP01 future purchasing-path delay of one day.
+
+| Scenario request | HTTP s | Engine ms | Request bytes | Response bytes |
+|---|---:|---:|---:|---:|
+| Fixture live baseline | 2.603 | 2,591.2 | 19 | 217,349 |
+| Fixture combined first | 2.684 | 2,678.4 | 84,378 | 360,234 |
+| Fixture combined repeat | 2.680 | 2,674.7 | 84,378 | 360,233 |
+| Fixture scoped detail | 0.495 | 489.2 | 165,312 | 97,986 |
+| Fixture future-path delay | 3.106 | 3,100.1 | 84,053 | 355,346 |
+| Full live baseline | 6.100 | 6,093.7 | 16 | 678,961 |
+| Full combined first | 6.601 | 6,578.5 | 159,171 | 974,263 |
+| Full combined repeat | 6.621 | 6,599.8 | 159,171 | 974,262 |
+| Full scoped detail | 2.967 | 2,948.0 | 292,827 | 97,983 |
+| Full future-path delay | 9.134 | 9,111.5 | 158,846 | 1,025,787 |
+
+Both combined runs retained identical original baseline outcomes. Frozen fixture/full actions were infeasible with **9 / 20 explicit failures**, so their outcome metrics and deltas were unavailable. Replanned fixture first/repeat had **22 purchases / 301 movements**, commitments **SAR 89,316** and payments **SAR 95,416**. Replanned full first/repeat had **22 / 516**, commitments **SAR 91,136** and payments **SAR 97,316**. All four replans were independently feasible `feasible_fallback` results with exact purchase/commitment and payment/cash reconciliation and nonnegative funding headroom. Repeated actions, totals, cash, shortages and explanations matched exactly.
+
+Scoped detail retained 280 selected-SKU/location/day rows, matching policy cash and forecast version. Both future-path-delay cases also returned independently feasible replans and honestly infeasible frozen decisions. All scenario requests/responses stayed below 4,500,000 bytes and the separate 30-second scenario smoke ceiling. Baseline planning was not relaxed.
+
+### Files changed
+
+- `backend/app/scenarios/contracts.py`, `backend/app/scenarios/engine.py`: immutable definitions, snapshots, transformations, comparable policies, deltas and scoped detail.
+- `backend/app/main.py`, `backend/app/planning/engine.py`: bounded scenario endpoints and internal prepared-forecast reuse; baseline semantics retained.
+- `frontend/src/Scenarios.tsx`, `ScenarioEvidence.tsx`, `scenarioApi.ts`: live scenario controls, comparisons, evidence and abort-aware retry handling.
+- `frontend/src/App.tsx`, `PlanReview.tsx`, `Demand.tsx`, `styles.css`: linked review flow, shared unchanged forecast renderer, existing visual styles and evidence navigation.
+- `frontend/src/contracts.generated.ts`: generated scenario API types.
+- `backend/tests/test_scenarios.py`, `frontend/e2e/scenarios.spec.ts`, `frontend/e2e/forecast.spec.ts`: invariant and real-browser coverage; obsolete placeholder assertion replaced by the implemented screen while preserving navigation/icon checks.
+- `scripts/scenario_smoke.py`, `Dockerfile`, `.github/workflows/verify.yml`: production scenario gates alongside unchanged baseline verification.
+- `docs/BUILD_STATUS.md`, `PLANNING.md`, `SCENARIOS.md`, `DEPLOYMENT.md`: semantics, measured evidence and handoff.
+
+### Short demo using calculated results
+
+1. Open Demand Review on the fixture and inspect SKU001/S1's selected recency-weighted weekday forecast, candidate evaluation and censored history.
+2. Open Plan Review: the baseline has **24 purchases / 311 movements**. Expand a purchase or movement and choose its evidence button to inspect dated stock, payments and pooled receipts. Open that actual forecast in Demand Review.
+3. Open Scenarios using the same baseline. Apply Promotion and Supplier disruption. Add the first funding week and set new commitment authority to zero, keeping its payment ceiling unchanged. Review the listed scopes/dates, then run live.
+4. Inspect the frozen policy's explicit failures and unavailable outcome deltas. The fixture combined replan has **22 purchases / 301 movements**, **SAR 89,316** commitments and **SAR 95,416** payments. Inspect its scoped stock/cash evidence; this is a validated fallback, not a proven optimum or a quantified improvement over invalid frozen arithmetic.
+5. Reset to baseline; original actions/outcomes return unchanged. Tighter funds can also be applied separately and edited through the ordinary weekly controls, as verified in the browser suite.
+
+### Remaining limitations and exact Pass 4 handoff
+
+No local Docker runtime is installed. Pass 3's corrected-commit Ubuntu workflow, container timings and all public/Vercel execution remain unverified. Native solver deadlines and admission control are cooperative/per-process. The full baseline response remains close to the payload limit; retain compact comparisons and scoped evidence. Invalid frozen actions intentionally have no stock/service metrics, and current fixed Payables cannot model receipt-dependent existing contracts. Sample snapshots are consistency-checked internal transport, not authenticated or accepted plans.
+
+Pass 4 starts with the existing normalized dataset contracts and validation, `planning/engine.py`, independent `simulation/replay.py`, and the review/scenario components. Add the specified workbook/template parser and choose the documented upload transport before attempting the 17.5 MB normalized full input through Vercel. Then implement explicit accept/reject/quantity-edit dependencies, stale-result invalidation, full replay before final acceptance, reviewed action workbook and portable versioned snapshot. Keep internal scenario transport distinct from accepted exports, preserve external-ID reconciliation and do not duplicate ledgers. None of those Pass 4 features is implemented here.
+
+---
+
 ## Pass 2 runtime diagnostics and correction — 17 September 2026
 
 Started from clean `55d1f392b540d0a9f37145a48b66faa10d3ff155`. **The unchanged 10-second gate passes locally; Linux/Docker verification remains outstanding.** No push, merge, deployment or Pass 3 work occurred. This section supersedes the earlier local-only readiness statement for the runtime question.

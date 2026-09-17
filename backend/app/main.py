@@ -134,6 +134,46 @@ def custom_plan(request: PlanRequest):
     return calculate_plan(request.dataset)
 
 
+# Stateless sample scenario APIs use the same admission control as planning.
+from backend.app.scenarios.contracts import BaselineResult, ScenarioRequest, ScenarioResult, DetailRequest, ScenarioDetail, CaptureRequest
+from backend.app.scenarios.engine import baseline_result, compare, detail, capture
+
+
+def scenario_call(fn, request):
+    if not calculation_slot.acquire(blocking=False):
+        return JSONResponse(status_code=429, headers={'Retry-After':'2'}, content={'message':'A calculation is running. Please retry shortly.'})
+    try:
+        size=request.size if isinstance(request, (PlanSampleRequest,CaptureRequest)) else request.baseline.size
+        data,_=sample(size)
+        return fn(size,data) if isinstance(request, PlanSampleRequest) else fn(data,request)
+    except ValueError as error:
+        return JSONResponse(status_code=422,content={'code':'invalid_scenario','message':str(error)})
+    except TimeoutError:
+        return JSONResponse(status_code=503,content={'code':'scenario_runtime','message':'Scenario exceeded its calculation budget. No partial plan is executable.'})
+    finally:
+        calculation_slot.release()
+
+
+@app.post('/api/scenarios/baseline',response_model=BaselineResult,responses=ERRORS)
+def scenario_baseline(request: PlanSampleRequest):
+    return scenario_call(baseline_result,request)
+
+
+@app.post('/api/scenarios/capture',response_model=BaselineResult,responses=ERRORS)
+def scenario_capture(request: CaptureRequest):
+    return scenario_call(capture,request)
+
+
+@app.post('/api/scenarios/compare',response_model=ScenarioResult,responses=ERRORS)
+def scenario_compare(request: ScenarioRequest):
+    return scenario_call(compare,request)
+
+
+@app.post('/api/scenarios/detail',response_model=ScenarioDetail,responses=ERRORS)
+def scenario_detail(request: DetailRequest):
+    return scenario_call(detail,request)
+
+
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 # backend/app -> repository root is parents[2].
 if DIST.is_dir():

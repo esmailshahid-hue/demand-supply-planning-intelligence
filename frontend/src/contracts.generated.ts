@@ -106,6 +106,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/scenarios/baseline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scenario Baseline */
+        post: operations["scenario_baseline_api_scenarios_baseline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scenarios/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scenario Capture */
+        post: operations["scenario_capture_api_scenarios_capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scenarios/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scenario Compare */
+        post: operations["scenario_compare_api_scenarios_compare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scenarios/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scenario Detail */
+        post: operations["scenario_detail_api_scenarios_detail_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -121,6 +189,46 @@ export interface components {
              * @default []
              */
             issues: components["schemas"]["Issue"][];
+        };
+        /** ActionChange */
+        ActionChange: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "purchase" | "movement";
+            /**
+             * Change
+             * @enum {string}
+             */
+            change: "added" | "removed" | "changed";
+            /** Business Key */
+            business_key: string;
+            /** Before */
+            before?: components["schemas"]["Purchase"] | components["schemas"]["Movement"] | null;
+            /** After */
+            after?: components["schemas"]["Purchase"] | components["schemas"]["Movement"] | null;
+        };
+        /** Actions */
+        Actions: {
+            /** Purchases */
+            purchases?: components["schemas"]["Purchase"][];
+            /** Movements */
+            movements?: components["schemas"]["Movement"][];
+        };
+        /** Adjustment */
+        Adjustment: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Original */
+            original: number;
+            /** Adjusted */
+            adjusted: number;
+            /** Reason */
+            reason: string;
         };
         /** Assortment */
         Assortment: {
@@ -148,6 +256,67 @@ export interface components {
             launch_known_at?: string | null;
             /** Launch Reason */
             launch_reason?: string | null;
+        };
+        /** Availability */
+        Availability: {
+            /** Supplier Id */
+            supplier_id: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Remaining Fraction */
+            remaining_fraction: number;
+        };
+        /** BaselineResult */
+        BaselineResult: {
+            baseline: components["schemas"]["BaselineSnapshot"];
+            original: components["schemas"]["Outcome"];
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Suppliers */
+            suppliers: string[];
+            /** Categories */
+            categories: string[];
+            /** Existing Orders */
+            existing_orders: {
+                [key: string]: string;
+            }[];
+            /** Weeks */
+            weeks: components["schemas"]["Funding"][];
+            /** Elapsed Ms */
+            elapsed_ms: number;
+        };
+        /** BaselineSnapshot */
+        BaselineSnapshot: {
+            /** Purchases */
+            purchases?: components["schemas"]["Purchase"][];
+            /** Movements */
+            movements?: components["schemas"]["Movement"][];
+            /**
+             * Size
+             * @enum {string}
+             */
+            size: "fixture" | "full";
+            /** Dataset Hash */
+            dataset_hash: string;
+            /**
+             * Version
+             * @default sample-scenarios-1
+             * @constant
+             */
+            version: "sample-scenarios-1";
+            /** Snapshot Id */
+            snapshot_id: string;
         };
         /** Budget */
         Budget: {
@@ -194,6 +363,20 @@ export interface components {
             metrics: components["schemas"]["Metrics"][];
             /** Windows */
             windows: components["schemas"]["WindowRecord"][];
+        };
+        /** CaptureRequest */
+        CaptureRequest: {
+            /** Purchases */
+            purchases?: components["schemas"]["Purchase"][];
+            /** Movements */
+            movements?: components["schemas"]["Movement"][];
+            /**
+             * Size
+             * @enum {string}
+             */
+            size: "fixture" | "full";
+            /** Dataset Hash */
+            dataset_hash: string;
         };
         /** CashWeek */
         CashWeek: {
@@ -268,6 +451,41 @@ export interface components {
             settings: components["schemas"]["Settings"];
             /** Declared Empty */
             declared_empty: ("open_orders" | "open_transfers" | "payables")[];
+        };
+        /** Delay */
+        Delay: {
+            /** Supplier Id */
+            supplier_id: string;
+            /** Days */
+            days: number;
+            /** Existing Order Ids */
+            existing_order_ids?: string[];
+            /**
+             * Future Paths
+             * @default false
+             */
+            future_paths: boolean;
+        };
+        /** DetailRequest */
+        DetailRequest: {
+            baseline: components["schemas"]["BaselineSnapshot"];
+            scenario?: components["schemas"]["ScenarioDefinition"];
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "original" | "frozen" | "replanned";
+            actions?: components["schemas"]["Actions"] | null;
+            /** Expected Action Hash */
+            expected_action_hash?: string | null;
+            /** Expected Scenario Hash */
+            expected_scenario_hash?: string | null;
+            /** Sku */
+            sku: string;
+            /** Location Id */
+            location_id: string;
+            /** Action Id */
+            action_id?: string | null;
         };
         /** Event */
         Event: {
@@ -437,6 +655,18 @@ export interface components {
             /** Status */
             status: string;
             buffer: components["schemas"]["BufferEvidence"];
+        };
+        /** Funding */
+        Funding: {
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            /** Commitment */
+            commitment?: number | null;
+            /** Payment */
+            payment?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -656,6 +886,43 @@ export interface components {
              * @enum {string}
              */
             status: "confirmed" | "dispatched" | "received";
+        };
+        /** Outcome */
+        Outcome: {
+            /** Purchases */
+            purchases?: components["schemas"]["Purchase"][];
+            /** Movements */
+            movements?: components["schemas"]["Movement"][];
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "original" | "frozen" | "replanned";
+            /** Assumptions Hash */
+            assumptions_hash: string;
+            /** Action Hash */
+            action_hash: string;
+            /** Feasible */
+            feasible: boolean;
+            /** Status */
+            status: string;
+            summary: components["schemas"]["Summary"] | null;
+            /** Cash */
+            cash: components["schemas"]["CashWeek"][];
+            /** Failures */
+            failures: components["schemas"]["Failure"][];
+            /** Shortages */
+            shortages: components["schemas"]["Service"][];
+            /**
+             * Explanations
+             * @default []
+             */
+            explanations: components["schemas"]["Failure"][];
+            /**
+             * Stages
+             * @default []
+             */
+            stages: components["schemas"]["SolverStage"][];
         };
         /** Payable */
         Payable: {
@@ -913,6 +1180,102 @@ export interface components {
              * @default S1
              */
             location_id: string;
+        };
+        /** ScenarioDefinition */
+        ScenarioDefinition: {
+            /** Uplifts */
+            uplifts?: components["schemas"]["Uplift"][];
+            /** Delays */
+            delays?: components["schemas"]["Delay"][];
+            /** Availability */
+            availability?: components["schemas"]["Availability"][];
+            /** Funding */
+            funding?: components["schemas"]["Funding"][];
+        };
+        /** ScenarioDetail */
+        ScenarioDetail: {
+            /** Baseline Id */
+            baseline_id: string;
+            /** Scenario Hash */
+            scenario_hash: string;
+            /** Assumptions Hash */
+            assumptions_hash: string;
+            /** Action Hash */
+            action_hash: string;
+            /** Policy */
+            policy: string;
+            /** Feasible */
+            feasible: boolean;
+            /** Failures */
+            failures: components["schemas"]["Failure"][];
+            forecast: components["schemas"]["ForecastResult"];
+            /** Forecast Version */
+            forecast_version: string;
+            policy_buffer: components["schemas"]["BufferEvidence"];
+            /** Adjustments */
+            adjustments: components["schemas"]["Adjustment"][];
+            /** Stock */
+            stock: components["schemas"]["StockDay"][];
+            /** Cash */
+            cash: components["schemas"]["CashWeek"][];
+            /** Payments */
+            payments: components["schemas"]["Payment"][];
+            /** Purchases */
+            purchases: components["schemas"]["Purchase"][];
+            /** Movements */
+            movements: components["schemas"]["Movement"][];
+            /** Confirmed Receipts */
+            confirmed_receipts: {
+                [key: string]: string;
+            }[];
+            /** Shortages */
+            shortages: components["schemas"]["Service"][];
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /**
+             * Note
+             * @default Stock is pooled by SKU/location. Related receipts and movements are evidence of shared availability, not one-to-one dependencies. Invalid policies suppress stock/service arithmetic; cash retains attempted obligations.
+             */
+            note: string;
+        };
+        /** ScenarioRequest */
+        ScenarioRequest: {
+            baseline: components["schemas"]["BaselineSnapshot"];
+            scenario?: components["schemas"]["ScenarioDefinition"];
+        };
+        /** ScenarioResult */
+        ScenarioResult: {
+            /** Baseline Id */
+            baseline_id: string;
+            /** Scenario Hash */
+            scenario_hash: string;
+            definition: components["schemas"]["ScenarioDefinition"];
+            /** Changes */
+            changes: string[];
+            original: components["schemas"]["Outcome"];
+            frozen: components["schemas"]["Outcome"];
+            replanned: components["schemas"]["Outcome"];
+            /** Shock Delta */
+            shock_delta: {
+                [key: string]: number | null;
+            };
+            /** Replan Delta */
+            replan_delta: {
+                [key: string]: number | null;
+            };
+            /** Forecast Versions */
+            forecast_versions: {
+                [key: string]: string;
+            };
+            /** Action Changes */
+            action_changes: components["schemas"]["ActionChange"][];
+            /** Elapsed Ms */
+            elapsed_ms: number;
+            /**
+             * Note
+             * @default Deltas are later minus earlier: frozen − original (shock), replanned − frozen (replanning). Invalid policies have unavailable outcome metrics. Cash shows attempted obligations even when infeasible.
+             */
+            note: string;
         };
         /** Service */
         Service: {
@@ -1208,6 +1571,28 @@ export interface components {
             /** Allowed Skus */
             allowed_skus: string[];
         };
+        /** Uplift */
+        Uplift: {
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "sku" | "category" | "store";
+            /** Scope Id */
+            scope_id: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Percent */
+            percent: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1482,6 +1867,210 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanResult"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    scenario_baseline_api_scenarios_baseline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanSampleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaselineResult"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    scenario_capture_api_scenarios_capture_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaselineResult"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    scenario_compare_api_scenarios_compare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioResult"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    scenario_detail_api_scenarios_detail_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioDetail"];
                 };
             };
             /** @description Unprocessable Content */

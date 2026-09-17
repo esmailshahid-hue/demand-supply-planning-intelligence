@@ -29,7 +29,7 @@ ASSUMPTIONS = [
 ]
 
 
-def plan(data, runtime_seconds=30):
+def plan(data, runtime_seconds=30, *, prepared_forecasts=None):
     start=perf_counter(); deadline=start+runtime_seconds
     kwargs=dict(run_id=str(uuid4()),input_hash=sha256(data.model_dump_json().encode()).hexdigest(),dataset_id=data.dataset_id,
         synthetic=data.synthetic,as_of=data.settings.as_of,payment_through=max([data.settings.as_of+timedelta(days=89)]+[p.due_date for p in data.payables]),assumptions=ASSUMPTIONS)
@@ -38,7 +38,7 @@ def plan(data, runtime_seconds=30):
     if any(i.severity=='error' for i in issues) or failures:
         return PlanResult(**kwargs,status='invalid_inputs',issues=issues,failures=failures,elapsed_ms=(perf_counter()-start)*1000)
     try:
-        demand,buffers,trace,failures=network_forecasts(data,deadline)
+        demand,buffers,trace,failures=network_forecasts(data,deadline) if prepared_forecasts is None else prepared_forecasts
     except TimeoutError:
         failures=[Failure(code='forecast_runtime',message='Network forecast exceeded the overall planning budget. No partial network plan is executable.')]
         trace=[]

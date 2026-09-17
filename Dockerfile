@@ -11,7 +11,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt && useradd --create-home --uid 10001 planner
 COPY backend/ ./backend/
-COPY scripts/start.sh scripts/smoke.py scripts/planning_smoke.py scripts/planning_profile.py scripts/solver_smoke.py ./scripts/
+COPY scripts/start.sh scripts/smoke.py scripts/planning_smoke.py scripts/planning_profile.py scripts/scenario_smoke.py scripts/solver_smoke.py ./scripts/
 COPY --from=frontend /build/frontend/dist ./frontend/dist
 USER planner
 EXPOSE 8000

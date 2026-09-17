@@ -1,4 +1,6 @@
-# Pass 2 planning calculations
+# Planning calculations and sample scenarios
+
+Pass 2 is closed by successful CI run `35228781514` for `47dc021`. Pass 3 adds immutable sample scenarios using this same validated engine. See [SCENARIOS.md](SCENARIOS.md) for transformation, frozen-policy, versioning, compact transport and scoped-evidence contracts. Historical runtime caveats below apply to their named corrections, not the now-closed Pass 2 gate.
 
 The Python planning API evaluates the complete input network. `POST /api/plan/sample` accepts `{"size":"fixture"}` or `{"size":"full"}`; `POST /api/plan` accepts the normalized `dataset`. The UI uses only the small sample selector request. No normalized history or withheld synthetic truth is returned to the browser. Result schemas live in `backend/app/planning/contracts.py`; TypeScript is generated from OpenAPI.
 
