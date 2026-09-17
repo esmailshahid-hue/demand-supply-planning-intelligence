@@ -107,9 +107,28 @@ test('new-product fallback, full sample and zero-demand cases are visible', asyn
   await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption('SKU007');
   await expect(page.getByText('Provisional forecast', { exact: true })).toBeVisible();
   await expect(page.locator('.metric').first()).toContainText('224');
+  const fullCatalogResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === 'GET' && url.pathname === '/api/sample' && url.searchParams.get('size') === 'full' && response.ok();
+  }, { timeout: 15_000 });
+  const fullForecastResponse = page.waitForResponse(response => {
+    if (response.request().method() !== 'POST' || new URL(response.url()).pathname !== '/api/forecast/sample' || !response.ok()) return false;
+    return response.request().postDataJSON().size === 'full';
+  }, { timeout: 15_000 });
   await page.getByRole('combobox', { name: 'Dataset', exact: true }).selectOption('full');
-  await expect(page.getByRole('button', { name: 'Recalculate live' })).toBeEnabled();
-  await page.getByRole('combobox', { name: 'Product', exact: true }).selectOption('SKU011');
+  await Promise.all([fullCatalogResponse, fullForecastResponse]);
+
+  const productSelector = page.getByRole('combobox', { name: 'Product', exact: true });
+  await expect(productSelector).toBeEnabled({ timeout: 15_000 });
+  await expect(productSelector.locator('option[value="SKU011"]')).toHaveCount(1, { timeout: 15_000 });
+  const zeroDemandResponse = page.waitForResponse(response => {
+    if (response.request().method() !== 'POST' || new URL(response.url()).pathname !== '/api/forecast/sample' || !response.ok()) return false;
+    const body = response.request().postDataJSON();
+    return body.size === 'full' && body.sku === 'SKU011';
+  }, { timeout: 15_000 });
+  await productSelector.selectOption('SKU011');
+  await zeroDemandResponse;
+  await expect(page.getByRole('button', { name: 'Recalculate live' })).toBeEnabled({ timeout: 15_000 });
   await expect(page.getByText('All eligible observed demand is zero', { exact: false })).toBeVisible();
   await expect(page.locator('.metric').first().locator('strong')).toHaveText('0');
   await expect(page.locator('.metric').nth(2).locator('strong')).toHaveText('Unavailable');

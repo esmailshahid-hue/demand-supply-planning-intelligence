@@ -4,6 +4,34 @@ Updated: **17 September 2026**. Completed scope: **Pass 1 only**.
 
 **Pass 1 exit gate: met locally and in Ubuntu CI.** The seeded sample travels through the live Python API into the built React UI; historical forecast evaluation passes invariant tests; production-style single-service startup and HTTP smoke tests pass. GitHub Actions verified the Linux container path for commit `f939b3e`; no public host or Vercel deployment has been verified. No infrastructure was provisioned. This is not the full MVP release gate.
 
+## GitHub Actions browser synchronization correction
+
+Completed on **17 September 2026** for failed workflow run `35191513824`. This changes only Playwright synchronization in `frontend/e2e/forecast.spec.ts`; application behavior, forecast calculations, display values and Pass 2 scope are unchanged.
+
+The Node.js 20 deprecation annotation was a warning and did not cause the failure. `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION` was not added. The actual failure occurred in “new-product fallback, full sample and zero-demand cases are visible”: after selecting the full dataset, the test immediately searched for an enabled button named “Recalculate live.” During full-sample loading the button is intentionally disabled and named “Calculating…”, so the locator exhausted GitHub Actions' five-second expectation timeout.
+
+The test now:
+
+1. Registers targeted 15-second waits for the successful `GET /api/sample?size=full` and full-dataset `POST /api/forecast/sample` before changing the dataset.
+2. Selects the full dataset and awaits both responses.
+3. Waits for the Product selector to become enabled and for its `SKU011` option to exist.
+4. Registers and awaits the successful full-dataset/SKU011 forecast response before asserting that “Recalculate live” is enabled.
+
+No arbitrary sleeps or global timeout increases were introduced.
+
+Verification executed after the correction:
+
+| Command / check | Actual result |
+|---|---|
+| `npm --prefix frontend run test:e2e -- --grep 'new-product fallback, full sample and zero-demand cases are visible'` | Affected test passed: **1 passed in 1.9 s**. |
+| `npm --prefix frontend run test:e2e` — consecutive run 1 | **6 passed in 2.7 s**. |
+| `npm --prefix frontend run test:e2e` — consecutive run 2 | **6 passed in 2.5 s**. |
+| `npm --prefix frontend run test:e2e` — consecutive run 3 | **6 passed in 2.5 s**. |
+| `.venv/bin/python -m pytest -q` | **35 passed in 3.95 s**; two unchanged upstream Starlette/AnyIO deprecation warnings. |
+| `npm --prefix frontend run build` | TypeScript and production Vite build passed: **244.04 kB JS / 76.07 kB gzip**, **11.15 kB CSS / 3.34 kB gzip**, Vite build **384 ms**. |
+| Isolated `agent-browser` sanity check | Live local page loaded with meaningful controls and results; no framework error overlay or browser errors were detected. |
+| `git diff --check` | Passed after the test and status changes. |
+
 ## Final Pass 1 presentation correction
 
 Completed on **17 September 2026**, before deployment-readiness work. This correction changes presentation formatting and browser regressions only. The forecast engine, model-selection logic, API `improvement_pct`, data contracts and all Pass 2 scope remain unchanged.
