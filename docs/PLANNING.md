@@ -22,6 +22,12 @@ The constrained order-up-to benchmark uses identical forecasts, buffers and decl
 
 Every solver incumbent and benchmark is independently replayed. An invalid candidate cannot be displayed as feasible. An incomplete candidate is compared against the feasible benchmark using staged service shortfalls, weekly buffer deficits and spending (this fallback comparison does not claim the final holding-cost optimum); a better benchmark may be returned as a labeled fallback. If neither is feasible, a valid no-new-action projection can be used; otherwise the result is `invalid_plan`. A fallback has no optimality claim. No hard constraint is relaxed to improve coverage.
 
+### Current fixture optimizer gate
+
+The strict correction gate requires both default fixture calls to complete every lexicographic stage through `stable_action_ties` inside the unchanged overall budget. The current formulation does not meet that gate: profiles isolate the remaining time in `visible_must_stock`, after forecast/context/benchmark work finishes in under one second. The API therefore returns the independently replayed benchmark as `feasible_fallback`, and the production planning smoke intentionally exits nonzero for the fixture. The full 60-SKU sample retains its complete dimensions and is allowed to return the same honestly labeled fallback.
+
+Bound/activation reductions, a replayed MIP start and an exact 28-day visible-window experiment reduced the open first-stage proof gap but did not complete the remaining objectives. Those optimizer experiments were discarded rather than change service semantics, accept a nonzero gap or mislabel an incumbent. A future optimizer correction needs a reviewed equivalent decomposition or compact formulation and must rerun first/repeat fixture evidence before this gate can be marked complete.
+
 ## Independent stock and cash replay
 
 `simulation/replay.py` imports no optimizer code or solver variables. It reconstructs actions from normalized inputs and recommendation records, checking identifiers, supplier/lane eligibility, packs/minimums, calendars, shared capacities, receiving peaks, funding and conservation. A corrupt action is reported, never silently fixed.
@@ -31,6 +37,16 @@ Opening usable stock is on-hand minus blocked and reserved once. Already dispatc
 Donor protection applies only when dispatching: maximum cumulative next-seven-day forecast less confirmed receipts on their actual dates, plus the store buffer. Speculative new receipts cannot justify depleting a donor. Lookahead after day 56 repeats the final forecast week. Shortages are lost sales and never backlogged. Later round trips are exposed for ledger inspection; the UI makes no claim of a uniquely necessary transfer.
 
 Supply prices are required at SAR-cent precision. Line values and deposits use decimal half-up cents; balance equals full line value minus deposit. Both installments consume their actual due weeks, including when they fall in the same week. Existing unpaid obligations consume payment capacity, not the remaining authority for new purchase commitments. Existing breaches are input failures with the affected week.
+
+## Dated shortage explanation evidence
+
+Shortage explanations are derived from `Replay.stock`, not from a horizon-wide scan of theoretically available offers. Each affected SKU/store/date uses its replayed unmet quantity. Candidate supply is considered only if its order validity, order and dispatch calendars, supplier lead time, DC receipt, lane dispatch, transit and store receiving calendar place stock at the store by that shortage date. A later receipt cannot explain demand that was already lost.
+
+Before assigning a purchasing limitation, the explanation checks usable stock on every eligible inbound lane, the source's donor reserve, remaining lane capacity and the exact dispatch/arrival dates. Such a path is evidence of an available alternative requiring reoptimization; it is not automatically labeled as the cause of the shortage. When a timely path passes all tested constraints, the result explicitly states that attribution is uncertain rather than inventing a binding constraint.
+
+Supplier minimum evidence uses the supplier/order-date group. Other planned lines on that supplier and order date contribute first; only the remaining minimum is converted to a case-rounded quantity. `GROUPED_SUPPLIER_MINIMUM` is emitted only when the smaller timely line is otherwise feasible and increasing the group to its qualifying value hits another dated hard limit. An already qualifying, affordable SAR 600 group is therefore not blamed for shortages that occur before its receipt can reach a store.
+
+Financial evidence uses the same half-up cent rules as replay. The candidate line's deposit, balance and any incremental transfer fee are grouped by funding week before comparison. Replayed headroom already includes existing obligations and planned payments once. A SAR 50 deposit and SAR 50 balance in one week require SAR 100 of headroom; they cannot pass against SAR 60 by being checked separately. Installments in separate weeks remain feasible when each week's complete cash requirement fits.
 
 Inventory investment carries acquisition value at weighted-average cost on internal movements and includes blocked/reserved stock. Revenue exposure is unmet visible units × declared net selling price, not proven lost revenue. No tax, revenue receipts, receivables or accounting cash-flow forecast is implied. Day-56 excess compares usable stock against the next seven days plus store buffers, repeating the final forecast week; DC coverage uses net store need without a second buffer.
 

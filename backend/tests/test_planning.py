@@ -250,6 +250,102 @@ def test_completed_constrained_joint_plan_explains_binding_commitment():
     assert 'PURCHASE_COMMITMENT_AUTHORITY' in {c.code for c in causes}
 
 
+def test_shortage_explanation_uses_replay_dates_and_does_not_blame_satisfied_minimum():
+    from backend.app.planning.engine import _shortage_causes
+    data=hand_data()
+    for row in data.inventory:row.on_hand=0
+    data.suppliers[0].minimum_order_value=500
+    demand=hand_demand(56);ctx=Inputs(data,demand,{})
+    purchases,movements,stages=optimize(ctx,perf_counter()+8)
+    assert stages[-1].name=='stable_action_ties' and all(stage.status=='optimal' for stage in stages)
+    result=replay(data,demand,{},purchases,movements)
+    assert result.feasible and result.summary.unmet==45
+    assert sum(row.unmet for row in result.stock)==45
+    assert purchases and sum(action.value for action in purchases)==600
+    assert min(action.arrival_date for action in movements)==data.settings.as_of+timedelta(days=3)
+    causes=_shortage_causes(ctx,result,purchases,movements)
+    assert 'GROUPED_SUPPLIER_MINIMUM' not in {cause.code for cause in causes}
+    timing=[cause for cause in causes if cause.code=='SUPPLY_TIMING_LIMITATION']
+    assert sum(next(row.unmet for row in result.stock if row.sku==cause.sku and row.location_id==cause.location_id and row.day==cause.day) for cause in timing)==45
+    assert all('2026-09-17' in cause.message for cause in timing)
+
+
+def test_supplier_minimum_is_reported_only_when_larger_grouped_order_hits_a_hard_limit():
+    from backend.app.planning.engine import _shortage_causes
+    data=hand_data();start=data.settings.as_of
+    for row in data.inventory:row.on_hand=0
+    data.suppliers[0].minimum_order_value=500
+    data.budgets[0].new_commitment_cap=200
+    demand={('X','A'):[0.,0.,0.,10.]+[0.]*52,('X','B'):[0.]*56}
+    ctx=Inputs(data,demand,{})
+    purchases,movements,stages=optimize(ctx,perf_counter()+8)
+    assert all(stage.status=='optimal' for stage in stages)
+    result=replay(data,demand,{},purchases,movements)
+    assert result.feasible and result.summary.unmet==10
+    causes=_shortage_causes(ctx,result,purchases,movements)
+    minimum=next(cause for cause in causes if cause.code=='GROUPED_SUPPLIER_MINIMUM')
+    assert minimum.day==start+timedelta(days=3)
+    assert '10-unit timely line was otherwise feasible' in minimum.message
+    assert 'required 50 units (SAR 500.00)' in minimum.message
+
+
+def test_same_week_cash_is_grouped_for_explanations_and_independent_replay():
+    from backend.app.planning.engine import _shortage_causes
+    data=hand_data();start=data.settings.as_of
+    for row in data.inventory:row.on_hand=0
+    for lane in data.transfer_lanes:lane.grouped_dispatch_fee=0
+    data.supplier_offers[0].balance_days_after_receipt=0
+    data.budgets[0].payment_ceiling=60
+    demand={('X','A'):[0.,0.,0.,10.]+[0.]*52,('X','B'):[0.]*56}
+    ctx=Inputs(data,demand,{})
+    result=replay(data,demand,{})
+    causes=_shortage_causes(ctx,result,[],[])
+    payment=next(cause for cause in causes if cause.code=='PURCHASE_PAYMENT_CAPACITY')
+    assert payment.day==start+timedelta(days=3)
+    assert 'SAR 100.00' in payment.message
+    candidate=ctx.purchase(data.supplier_offers[0],0,10)
+    movement=ctx.movement(data.transfer_lanes[0],'X',2,10)
+    rejected=replay(data,demand,{},[candidate],[movement])
+    assert 'payment_ceiling' in {failure.code for failure in rejected.failures}
+    assert rejected.cash[0].new_payments==100
+    data.supplier_offers[0].balance_days_after_receipt=7
+    accepted=replay(data,demand,{},[ctx.purchase(data.supplier_offers[0],0,10)],[movement])
+    assert accepted.feasible
+    assert [row.new_payments for row in accepted.cash[:2]]==[50,50]
+
+
+def test_cash_explanation_matches_cent_rounding_and_existing_obligations():
+    from backend.app.planning.engine import _shortage_causes
+    data=hand_data();start=data.settings.as_of
+    for row in data.inventory:row.on_hand=0
+    for lane in data.transfer_lanes:lane.grouped_dispatch_fee=0
+    offer=data.supplier_offers[0];offer.price_per_base_unit=10.01;offer.deposit_fraction=.5;offer.balance_days_after_receipt=0
+    data.payables=[Payable(external_id='existing',linked_external_id='old',due_date=start,amount=9.95)]
+    data.budgets[0].payment_ceiling=110.04
+    demand={('X','A'):[0.,0.,0.,10.]+[0.]*52,('X','B'):[0.]*56};ctx=Inputs(data,demand,{})
+    result=replay(data,demand,{})
+    causes=_shortage_causes(ctx,result,[],[])
+    assert 'PURCHASE_PAYMENT_CAPACITY' in {cause.code for cause in causes}
+    purchase=ctx.purchase(offer,0,10);movement=ctx.movement(data.transfer_lanes[0],'X',2,10)
+    checked=replay(data,demand,{},[purchase],[movement])
+    assert sorted(payment.amount for payment in checked.payments if payment.kind!='existing')==[0,50.05,50.05]
+    assert checked.cash[0].total_payments==110.05
+    assert 'payment_ceiling' in {failure.code for failure in checked.failures}
+
+
+def test_shortage_explanation_checks_existing_transfer_stock_before_purchase_causes():
+    from backend.app.planning.engine import _shortage_causes
+    data=hand_data();start=data.settings.as_of
+    data.inventory[0].on_hand=30;data.inventory[1].on_hand=0
+    demand={('X','A'):[0.,10.]+[0.]*54,('X','B'):[0.]*56};ctx=Inputs(data,demand,{})
+    result=replay(data,demand,{})
+    causes=_shortage_causes(ctx,result,[],[])
+    alternative=next(cause for cause in causes if cause.code=='TRANSFER_ALTERNATIVE_REQUIRES_REOPTIMIZATION')
+    assert alternative.day==start+timedelta(days=1)
+    assert '30.0 donor units' in alternative.message
+    assert 'not proof' in alternative.message
+
+
 def test_network_uses_unchanged_forecast_and_trace(dataset):
     from backend.app.planning.inputs import network_forecasts
     from backend.app.forecasting.engine import forecast

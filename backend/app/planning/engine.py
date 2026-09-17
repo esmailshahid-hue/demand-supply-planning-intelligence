@@ -1,14 +1,15 @@
 """Orchestration only: real forecasts -> benchmark/joint model -> independent replay."""
 from hashlib import sha256
 from datetime import timedelta
+from decimal import Decimal, ROUND_HALF_UP
+from math import ceil
 from time import perf_counter
 from uuid import uuid4
 from backend.app.data.validation import validate_dataset
 from backend.app.planning.contracts import PlanResult, PolicyResult, Failure, SolverStage
-from backend.app.planning.inputs import Inputs, network_forecasts, planning_input_failures, _valid_path_arrival
+from backend.app.planning.inputs import Inputs, network_forecasts, planning_input_failures
 from backend.app.planning.benchmark import benchmark
-from backend.app.simulation.replay import replay, EPS
-from backend.app.simulation.replay import week
+from backend.app.simulation.replay import replay, EPS, cents, week
 
 ASSUMPTIONS = [
     'Receive, serve local expected demand, dispatch, then close stock. Unserved demand is lost, never backlogged.',
@@ -127,67 +128,136 @@ def _score(result,ctx):
 
 
 def _shortage_causes(ctx, result, purchases, movements):
-    """Explain only limits that every dated purchase option actually hits."""
+    """Explain each shortage interval using supply that could arrive by then.
+
+    The replay ledger is authoritative for shortage timing and remaining stock.
+    A saturated constraint is reported as a cause only when every timely path
+    fails it; otherwise the result is explicitly an observed, uncertain tradeoff.
+    """
     causes=[];cash={row.week_start:row for row in result.cash}
-    purchased={}
-    shared_used={}
+    stock={(row.sku,row.location_id,row.day):row for row in result.stock}
+    purchased={};shared_used={};ordered_value={};lane_used={}
     for action in purchases:
         key=action.supplier_id,action.sku,action.dispatch_date
         purchased[key]=purchased.get(key,0)+action.units
+        ordered_value[action.supplier_id,action.order_date]=ordered_value.get((action.supplier_id,action.order_date),0)+cents(action.value)
         supplier=ctx.suppliers[action.supplier_id]
         amount=action.units*(ctx.products[action.sku].volume_per_unit if supplier.shared_capacity_unit=='volume' else 1)
         shared_used[action.supplier_id,action.dispatch_date]=shared_used.get((action.supplier_id,action.dispatch_date),0)+amount
+    for action in movements:
+        lane_used[action.source,action.destination,action.dispatch_date]=lane_used.get((action.source,action.destination,action.dispatch_date),0)+action.units
+
+    def intervals(rows):
+        # Daily evidence avoids attributing a later-arriving path to demand
+        # that was already lost earlier in a longer stockout interval.
+        return [[row] for row in sorted(rows,key=lambda value:value.day)]
+
+    def path_dates(offer,lane,order_index):
+        timing=ctx.timing(offer,order_index)
+        if timing is None:return None
+        supplier_dispatch,dc_index=timing
+        lane_dispatch=ctx.day(dc_index)
+        for _ in range(28):
+            arrival=lane_dispatch+timedelta(days=lane.transit_days)
+            if (lane_dispatch.weekday() in lane.dispatch_weekdays
+                    and lane_dispatch.weekday() in ctx.locations[lane.source].open_weekdays
+                    and arrival.weekday() in ctx.locations[lane.destination].open_weekdays):
+                return ctx.day(supplier_dispatch),ctx.day(dc_index),lane_dispatch,arrival
+            lane_dispatch+=timedelta(days=1)
+        return None
+
+    def money_evidence(offer,order_day,dc_arrival,lane_dispatch,lane,units):
+        value=cents(Decimal(str(offer.price_per_base_unit))*units)
+        deposit=int((Decimal(value)*Decimal(str(offer.deposit_fraction))).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+        flows={}
+        for due,amount in [(order_day,deposit),(dc_arrival+timedelta(days=offer.balance_days_after_receipt),value-deposit)]:
+            flows[week(due)]=flows.get(week(due),0)+amount
+        group=lane.source,lane.destination,lane_dispatch
+        existing_group=group in lane_used or any(t.status=='confirmed' and (t.source,t.destination,t.dispatch_date)==group for t in ctx.data.open_transfers)
+        fee=0 if existing_group else cents(lane.grouped_dispatch_fee)
+        flows[week(lane_dispatch)]=flows.get(week(lane_dispatch),0)+fee
+        payment_ok=all((row:=cash.get(funding_week)) is not None and row.payment_headroom is not None
+            and cents(row.payment_headroom)>=amount for funding_week,amount in flows.items())
+        order_cash=cash.get(week(order_day));commitment_ok=bool(order_cash and order_cash.commitment_headroom is not None
+            and cents(order_cash.commitment_headroom)>=value)
+        fee_cash=cash.get(week(lane_dispatch));transfer_ok=bool(fee_cash and fee_cash.transfer_headroom is not None
+            and cents(fee_cash.transfer_headroom)>=fee)
+        return value,flows,commitment_ok,payment_ok,transfer_ok
+
     for service in result.service:
         if service.unmet+service.tail_unmet<=EPS:
             continue
+        shortage_rows=[row for row in result.stock if row.sku==service.sku and row.location_id==service.location_id and row.unmet>EPS]
+        if not shortage_rows:continue
         offers=[o for o in ctx.data.supplier_offers if o.sku==service.sku]
-        lanes=[lane for lane in ctx.data.transfer_lanes if lane.source==ctx.dc and lane.destination==service.location_id and service.sku in lane.allowed_skus]
-        candidates=[]
-        for offer in offers:
-            minimum=max(offer.case_size,((offer.moq_units+offer.case_size-1)//offer.case_size)*offer.case_size)
-            for i in range(56):
-                timing=ctx.timing(offer,i)
-                if timing is None:
-                    continue
-                dispatch,arrival=timing
-                store_arrivals=[_valid_path_arrival(ctx.data,offer,lane,ctx.day(i)) for lane in lanes]
-                store_arrivals=[day for day in store_arrivals if day is not None and day<=ctx.day(55)]
-                if arrival>=56 or not store_arrivals:
-                    continue
-                candidates.append((offer,i,dispatch,arrival,minimum))
-        if not candidates:
-            causes.append(Failure(code='SUPPLIER_LEAD_TIME',message='No valid supplier and lane path can reach this store within the modeled horizon for the uncovered series.',sku=service.sku,location_id=service.location_id))
-            continue
-        if all(ctx.capacity.get((o.supplier_id,o.sku,d),0)-purchased.get((o.supplier_id,o.sku,ctx.day(d)),0)<qty
-                for o,i,d,a,qty in candidates):
-            causes.append(Failure(code='DATED_SUPPLIER_SKU_CAPACITY',message='Every dated supplier option that can arrive within the horizon has less remaining SKU capacity than one executable case/MOQ.',sku=service.sku,location_id=service.location_id))
-        if all(ctx.suppliers[o.supplier_id].shared_daily_capacity-shared_used.get((o.supplier_id,ctx.day(d)),0)
-                < qty*(ctx.products[o.sku].volume_per_unit if ctx.suppliers[o.supplier_id].shared_capacity_unit=='volume' else 1)
-                for o,i,d,a,qty in candidates):
-            causes.append(Failure(code='SHARED_SUPPLIER_CAPACITY',message='Every dated supplier option has less shared daily supplier headroom than one executable case/MOQ.',sku=service.sku,location_id=service.location_id))
-        commitment_blocked=True;payment_blocked=True;mov_blocked=True
-        for offer,i,dispatch,arrival,minimum in candidates:
-            order_week=week(ctx.day(i));row=cash.get(order_week)
-            line_value=offer.price_per_base_unit*minimum
-            supplier=ctx.suppliers[offer.supplier_id]
-            required_commitment=max(line_value,supplier.minimum_order_value)
-            if row and row.commitment_headroom is not None and row.commitment_headroom+EPS>=required_commitment:
-                commitment_blocked=False
-            deposit=line_value*offer.deposit_fraction
-            balance_week=week(ctx.day(arrival)+timedelta(days=offer.balance_days_after_receipt))
-            balance=cash.get(balance_week)
-            if (row and balance and row.payment_headroom is not None and balance.payment_headroom is not None
-                    and row.payment_headroom+EPS>=deposit and balance.payment_headroom+EPS>=line_value-deposit):
-                payment_blocked=False
-            if supplier.minimum_order_value<=line_value+EPS:
-                mov_blocked=False
-        if commitment_blocked:
-            causes.append(Failure(code='PURCHASE_COMMITMENT_AUTHORITY',message='Remaining weekly purchase authority is below the smallest executable case/MOQ or grouped supplier minimum for every dated option.',sku=service.sku,location_id=service.location_id))
-        if payment_blocked:
-            causes.append(Failure(code='PURCHASE_PAYMENT_CAPACITY',message='Remaining deposit or balance payment capacity is below the smallest executable dated purchase option.',sku=service.sku,location_id=service.location_id))
-        if mov_blocked and not commitment_blocked:
-            causes.append(Failure(code='GROUPED_SUPPLIER_MINIMUM',message='The grouped supplier minimum value exceeds an otherwise fundable minimum line.',sku=service.sku,location_id=service.location_id))
+        inbound_lanes=[lane for lane in ctx.data.transfer_lanes if lane.destination==service.location_id and service.sku in lane.allowed_skus]
+        lanes=[lane for lane in inbound_lanes if lane.source==ctx.dc]
+        for interval in intervals(shortage_rows):
+            first,last=interval[0].day,interval[-1].day;quantity=sum(row.unmet for row in interval)
+            span=str(first) if first==last else f'{first} to {last}'
+            transfer_options=[]
+            for lane in inbound_lanes:
+                for i in range(max(0,(first-ctx.start).days+1)):
+                    dispatch=ctx.day(i);arrival=dispatch+timedelta(days=lane.transit_days)
+                    if arrival>first or dispatch.weekday() not in lane.dispatch_weekdays or dispatch.weekday() not in ctx.locations[lane.source].open_weekdays or arrival.weekday() not in ctx.locations[lane.destination].open_weekdays:continue
+                    donor=stock.get((service.sku,lane.source,dispatch));available=max(0.,donor.closing-(ctx.reserve.get((service.sku,lane.source,i),0) if ctx.locations[lane.source].kind=='store' else 0)) if donor else 0
+                    headroom=lane.capacity_units-ctx.lane_used[lane.source,lane.destination,i]-lane_used.get((lane.source,lane.destination,dispatch),0)
+                    if min(available,headroom)>=lane.pack_units:transfer_options.append((dispatch,arrival,available,headroom,lane))
+            candidates=[];future_arrivals=[]
+            for offer in offers:
+                base=max(offer.case_size,ceil(offer.moq_units/offer.case_size)*offer.case_size)
+                for lane in lanes:
+                    for i in range(56):
+                        dates=path_dates(offer,lane,i)
+                        if dates is None:continue
+                        supplier_dispatch,dc_arrival,lane_dispatch,store_arrival=dates
+                        future_arrivals.append(store_arrival)
+                        if store_arrival>last:continue
+                        supplier=ctx.suppliers[offer.supplier_id];existing=ordered_value.get((offer.supplier_id,ctx.day(i)),0)
+                        unit_price=cents(offer.price_per_base_unit);minimum_gap=max(0,cents(supplier.minimum_order_value)-existing)
+                        required=max(base,ceil(minimum_gap/max(unit_price,1)/offer.case_size)*offer.case_size)
+                        evidence=[]
+                        for units in (base,required):
+                            value,flows,commitment_ok,payment_ok,transfer_ok=money_evidence(offer,ctx.day(i),dc_arrival,lane_dispatch,lane,units)
+                            sku_headroom=ctx.capacity.get((offer.supplier_id,offer.sku,(supplier_dispatch-ctx.start).days),0)-purchased.get((offer.supplier_id,offer.sku,supplier_dispatch),0)
+                            multiplier=ctx.products[offer.sku].volume_per_unit if supplier.shared_capacity_unit=='volume' else 1
+                            shared_headroom=supplier.shared_daily_capacity-shared_used.get((offer.supplier_id,supplier_dispatch),0)
+                            lane_headroom=lane.capacity_units-ctx.lane_used[lane.source,lane.destination,(lane_dispatch-ctx.start).days]-lane_used.get((lane.source,lane.destination,lane_dispatch),0)
+                            evidence.append(dict(units=units,value=value,flows=flows,commitment=commitment_ok,payment=payment_ok,transfer=transfer_ok,
+                                sku_capacity=sku_headroom+EPS>=units,shared_capacity=shared_headroom+EPS>=units*multiplier,lane_capacity=lane_headroom+EPS>=lane.pack_units))
+                        candidates.append((offer,ctx.day(i),store_arrival,base,required,evidence))
+            scope=dict(sku=service.sku,location_id=service.location_id,day=first)
+            if transfer_options:
+                dispatch,arrival,available,headroom,_=max(transfer_options,key=lambda item:min(item[2],item[3]))
+                causes.append(Failure(code='TRANSFER_ALTERNATIVE_REQUIRES_REOPTIMIZATION',message=f'{quantity:.1f} units were short on {span}; an observed transfer option could dispatch on {dispatch} and arrive {arrival}, with {available:.1f} donor units and {headroom:.1f} lane units available. This is an alternative, not proof that allocation caused the shortage.',**scope))
+            if not candidates:
+                earliest=min(future_arrivals,default=None)
+                detail=f'; the earliest valid purchase-to-store path arrives {earliest}' if earliest else '; no valid path exists in the modeled horizon'
+                causes.append(Failure(code='SUPPLY_TIMING_LIMITATION',message=f'{quantity:.1f} units were short on {span}{detail}. This observed timing limitation prevents a new purchase from explaining away this interval.',**scope))
+                continue
+            required_checks=[entry[5][1] for entry in candidates]
+            if all(not item['sku_capacity'] for item in required_checks):
+                causes.append(Failure(code='DATED_SUPPLIER_SKU_CAPACITY',message=f'{quantity:.1f} units were short on {span}; every purchase path arriving by {last} lacked capacity for its required executable quantity.',**scope))
+            if all(not item['shared_capacity'] for item in required_checks):
+                causes.append(Failure(code='SHARED_SUPPLIER_CAPACITY',message=f'{quantity:.1f} units were short on {span}; every timely path lacked shared supplier capacity for its required executable quantity.',**scope))
+            if all(not item['commitment'] for item in required_checks):
+                smallest=min(item['value'] for item in required_checks)/100
+                best=max((cash.get(week(entry[1])).commitment_headroom or 0) for entry in candidates if cash.get(week(entry[1])))
+                causes.append(Failure(code='PURCHASE_COMMITMENT_AUTHORITY',message=f'{quantity:.1f} units were short on {span}; every timely executable line required at least SAR {smallest:.2f} against at most SAR {best:.2f} remaining weekly commitment authority.',**scope))
+            if all(not item['payment'] for item in required_checks):
+                requirement=min(max((sum(amount for funding,amount in item['flows'].items() if funding==target) for target in item['flows']),default=0) for item in required_checks)/100
+                causes.append(Failure(code='PURCHASE_PAYMENT_CAPACITY',message=f'{quantity:.1f} units were short on {span}; every timely path exceeded at least one weekly payment limit. The smallest grouped same-week requirement was SAR {requirement:.2f}; deposits, balances, existing obligations and transfer fees were counted once by funding week.',**scope))
+            minimum_blocked=[]
+            for offer,order_day,arrival,base,required,evidence in candidates:
+                base_ok=all(evidence[0][key] for key in ('commitment','payment','transfer','sku_capacity','shared_capacity','lane_capacity'))
+                required_ok=all(evidence[1][key] for key in ('commitment','payment','transfer','sku_capacity','shared_capacity','lane_capacity'))
+                if required>base and base_ok and not required_ok:minimum_blocked.append((offer,order_day,base,required,evidence[1]['value']))
+            if minimum_blocked and not any(all(item[key] for key in ('commitment','payment','transfer','sku_capacity','shared_capacity','lane_capacity')) for item in required_checks):
+                offer,order_day,base,required,value=min(minimum_blocked,key=lambda item:item[4])
+                existing=ordered_value.get((offer.supplier_id,order_day),0)/100
+                causes.append(Failure(code='GROUPED_SUPPLIER_MINIMUM',message=f'{quantity:.1f} units were short on {span}; a {base}-unit timely line was otherwise feasible, but the supplier/order-date group had SAR {existing:.2f} already and required {required} units (SAR {value/100:.2f}) to satisfy the remaining grouped minimum. The larger qualifying line failed another dated hard limit.',supplier_id=offer.supplier_id,**scope))
+            if any(all(item[key] for key in ('commitment','payment','transfer','sku_capacity','shared_capacity','lane_capacity')) for item in required_checks):
+                causes.append(Failure(code='UNCERTAIN_SHORTAGE_ATTRIBUTION',message=f'{quantity:.1f} units were short on {span}, while at least one timely incremental supply path passed the tested stock, calendar, capacity, grouped-minimum and funding checks. The shortage reflects the completed plan trade-offs; no single binding cause is proven.',**scope))
     unique={}
-    for cause in causes:
-        unique[cause.code,cause.sku,cause.location_id]=cause
+    for cause in causes:unique[cause.code,cause.sku,cause.location_id,cause.day]=cause
     return list(unique.values())

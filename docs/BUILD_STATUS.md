@@ -1,5 +1,42 @@
 # Build status
 
+## Focused Pass 2 correction attempt — 17 September 2026
+
+This worktree is **not ready for review as the requested complete correction** because the unchanged 10-SKU fixture still does not finish the first lexicographic stage within the existing budget. The strict fixture smoke assertion remains active and correctly exits nonzero. No solver incumbent is relabeled, no objective or hard constraint is relaxed, and Pass 3 has not started.
+
+The explanation defects were corrected independently:
+
+- `_shortage_causes` now uses the independently replayed daily stock ledger and evaluates supply only when it can reach the affected store by the actual shortage date. Each cause includes SKU, store, date, shortage quantity and dated evidence. A merely saturated or available constraint is not called causal; viable alternatives produce an explicit uncertain-attribution record.
+- Existing DC/store stock and every eligible inbound transfer lane are checked before attributing a shortage solely to purchasing. Donor reserve, lane calendar, transit, store receipt and remaining lane capacity are included; an available transfer is described as an alternative requiring reoptimization, not proof of allocation error.
+- Supplier minimum evidence is calculated for the complete supplier/order-date group, including other planned lines already contributing to the group. The remaining minimum is converted to a case-rounded incremental quantity. A minimum is blamed only when the smaller timely line passes the other dated checks and the larger qualifying group requirement fails a hard limit.
+- Candidate deposits, balances and transfer fees are rounded to cents and grouped by funding week before comparison with replayed headroom. Existing obligations and planned payments are already included in that headroom exactly once. This fixes the SAR 50 + SAR 50 same-week case against SAR 60 headroom while retaining feasibility when installments fall in separate sufficiently funded weeks.
+- `scripts/planning_smoke.py` retains the fixture/full acceptance rules and now prints dimensions, action counts, response bytes, independent replay, commitment/payment reconciliation and minimum commitment/payment/transfer headroom for every run.
+
+Optimizer profiling and discarded experiments:
+
+- Baseline fixture model construction produced **15,904 variables, 9,936 integer variables and 23,899 rows**. Forecasting completed in approximately **0.36 s**; HiGHS then spent the remaining approximately **28 s** in `visible_must_stock` without an incumbent in the unchanged formulation.
+- Semantics-preserving experimental reductions removed redundant activation/deposit variables, tightened stock bounds, supplied an independently replayed benchmark start and isolated the exact 28-day visible state. The best measured first-stage run still consumed the remaining budget with an open **0.2–0.9% MIP gap** and never reached the later objectives.
+- Those experimental optimizer edits were discarded. `backend/app/planning/optimizer.py`, the 30-second budget, horizons, candidates, integrality, constraints, objective order and zero-gap requirement remain unchanged. Meeting the gate now requires a separately reviewed temporal/network decomposition or an equivalent compact formulation with a complete optimality certificate; accepting the incumbent or loosening the gap would violate the specification.
+
+Current-worktree validation:
+
+| Command / check | Actual result |
+|---|---|
+| Explanation regressions | **5 passed**: satisfied minimum/timing, genuinely blocking grouped minimum, same-week cash aggregation, separate-week feasibility, cent rounding/existing obligations and transfer-stock alternative evidence. |
+| `.venv/bin/python -m pytest -q` | **67 passed in 9.26 s**; two unchanged upstream TestClient deprecation warnings. |
+| `.venv/bin/python -m scripts.solver_smoke` | SciPy **1.18.1** import **0.382 s**; HiGHS cold **0.006 s**, warm **<0.001 s**, expected integer result. |
+| Contract export, TypeScript generation and committed-file diff | Passed; contracts remained reproducible and unchanged. |
+| `npm --prefix frontend run build` | Passed: **259.25 kB JS / 79.38 kB gzip**, **11.15 kB CSS / 3.34 kB gzip**, Vite **398 ms**. |
+| Full Playwright suite | After installing its pinned Chromium runtime, **8 passed in 2.1 min** against the current production server. The initial attempt could not launch because that browser binary was absent; no application test ran in that attempt. |
+| Production forecast smoke | Passed: fixture **0.147 / 0.022 s**, full **0.836 / 0.093 s** first/repeat HTTP. |
+| Planning smoke, fixture first/repeat | Expected strict-gate failure: **28.104 / 28.079 s HTTP**, **28,083.1 / 28,070.7 ms engine**, **782,410 / 782,409 bytes**, 40 series, 2,800 stock rows, **24 purchases / 311 movements**, replay true. Both were `feasible_fallback` after `visible_must_stock:time_limit`. Commitments and payments reconciled at **SAR 91,606 / SAR 97,746**; minimum commitment/payment/transfer headroom was **SAR 0 / 14 / 120**. |
+| Planning smoke, full first/repeat | Accepted fallback behavior: **28.381 / 28.489 s HTTP**, **28,355.5 / 28,468.4 ms engine**, **3,747,784 bytes**, 240 series, 16,800 stock rows, **31 purchases / 607 movements**, replay true. Commitments and payments reconciled at **SAR 92,550 / SAR 99,050**; minimum headroom was **SAR 40 / 5 / 120**. The script exited nonzero only for the two fixture gate failures. |
+| `.venv/bin/pip check` / `npm --prefix frontend ls --depth=0` / `npm audit --omit=dev` | No broken Python requirements; installed frontend tree resolved; **0 npm vulnerabilities**. |
+| Docker | Not executed because `command -v docker` returned no executable. A corrected-code container check therefore remains outstanding. |
+| `git diff --check` | Passed before documentation updates and will be rerun on the final worktree. |
+
+The exact next step is an optimizer-only correction in `backend/app/planning/optimizer.py` that produces exact first/repeat fixture completion through `stable_action_ties` inside the existing budget, followed by the full verification matrix and Docker/Ubuntu CI. The explanation corrections can be reviewed independently, but the requested Pass 2 correction exit gate remains unmet.
+
 ## GitHub Actions maintenance — 17 September 2026
 
 Failed GitHub Actions run `35215202230`, job `105181927681`, was inspected through GitHub's public Actions API. It ran commit `bb06db8` on `ubuntu-latest`. Checkout, Python/Node setup, dependency installation, backend tests, host solver smoke, contract generation/diff, frontend build, browser tests, Docker build and Docker startup all succeeded. The final combined smoke step failed because both fixture planning calls returned the independently replayed `feasible_fallback` after `visible_must_stock` reached its time limit. That is the unresolved application-level optimizer gate documented below; the Node 20 annotations did not cause the failure.

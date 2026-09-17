@@ -27,7 +27,15 @@ for size,count in [('fixture',40),('full',240)]:
         assert all(min(w['payment_headroom'],w['commitment_headroom'],w['transfer_headroom'])>=0 for w in r['cash'])
         assert elapsed<60,'Exceeded configured 60-second Function ceiling'
         stages=','.join(f'{x["name"]}:{x["status"]}' for x in result['stages'])
-        print(f'{size} {run}: HTTP {elapsed:.3f}s; engine {result["elapsed_ms"]:.1f}ms; {len(raw):,} bytes; {result["status"]}; stages [{stages}]; {len(p["purchases"])} purchases; {len(p["movements"])} movements; replay {r["feasible"]}',flush=True)
+        min_commit=min(w['commitment_headroom'] for w in r['cash'] if w['commitment_headroom'] is not None)
+        min_payment=min(w['payment_headroom'] for w in r['cash'] if w['payment_headroom'] is not None)
+        min_transfer=min(w['transfer_headroom'] for w in r['cash'] if w['transfer_headroom'] is not None)
+        print(f'{size} {run}: HTTP {elapsed:.3f}s; engine {result["elapsed_ms"]:.1f}ms; {len(raw):,} bytes; '
+              f'{len(result["forecasts"])} series; {len(r["stock"]):,} stock rows; {result["status"]}; stages [{stages}]; '
+              f'{len(p["purchases"])} purchases; {len(p["movements"])} movements; replay {r["feasible"]}; '
+              f'commitments SAR {s["commitments"]:.2f} = lines SAR {sum(Decimal(str(x["value"])) for x in p["purchases"]):.2f}; '
+              f'payments SAR {s["payments"]:.2f} = ledger SAR {sum(Decimal(str(x["amount"])) for x in r["payments"]):.2f}; '
+              f'min headroom commitment/payment/transfer SAR {min_commit:.2f}/{min_payment:.2f}/{min_transfer:.2f}',flush=True)
         expected=('feasible',) if size=='fixture' else ('feasible','feasible_fallback')
         if result['status'] not in expected:
             gate_failures.append((size,run,result['status'],result['stages'],result['failures']))
