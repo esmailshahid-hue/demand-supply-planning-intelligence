@@ -54,4 +54,8 @@ jobs:
       - name: Run solver smoke inside container
         run: docker exec planning-pass1 python scripts/solver_smoke.py
       - name: Run production planning smoke
+        id: planning_smoke
         run: .venv/bin/python -m scripts.planning_smoke
+      - name: Profile planning components inside container
+        if: ${{ !cancelled() && (steps.planning_smoke.outcome == 'success' || steps.planning_smoke.outcome == 'failure') }}
+        run: docker exec planning-pass1 python -m scripts.planning_profile

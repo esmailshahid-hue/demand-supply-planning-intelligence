@@ -13,10 +13,16 @@ def benchmark(ctx, deadline=float('inf')):
     commitments,payments,fees=defaultdict(int),defaultdict(int,ctx.existing),defaultdict(int)
     supplier_used,shared_used=defaultdict(int),defaultdict(float)
     purchases,movements=[],[]
+    room_cache={}
+    def invalidate_room(loc):
+        room_cache.pop(loc,None)
     def room(loc,day):
         # Conservative receiving reservation: don't borrow future consumption to fit a delivery.
+        cached=room_cache.setdefault(loc,{})
+        if day in cached:return cached[day]
         used=sum((stock[p,loc]+ctx.unavailable[p,loc]+sum(receipts[p,loc,d] for d in range(i+1,day+1)))*ctx.products[p].volume_per_unit for p in ctx.products)
-        return max(0.,ctx.locations[loc].storage_volume-used)
+        cached[day]=max(0.,ctx.locations[loc].storage_volume-used)
+        return cached[day]
     def projected(key,until):
         value=stock[key]
         series=ctx.demand.get(key,[0.]*56)
@@ -35,6 +41,7 @@ def benchmark(ctx, deadline=float('inf')):
     for i in range(56):
         if perf_counter()>=deadline:
             raise TimeoutError('Benchmark exhausted overall planning budget')
+        room_cache.clear()
         day=ctx.day(i); w=week(day)
         for key in ctx.keys:
             stock[key]+=receipts[*key,i]
@@ -75,6 +82,7 @@ def benchmark(ctx, deadline=float('inf')):
                             ctx.explain('PAYMENT_CAPACITY_LIMIT','Existing and planned outflows leave insufficient payment capacity for this dispatch fee.',sku=sku,location_id=dst,day=day)
                     continue
                 movements.append(ctx.movement(lane,sku,i,qty))
+                invalidate_room(lane.source);invalidate_room(dst)
                 stock[sku,lane.source]-=qty
                 receipts[sku,dst,arrival]+=qty
                 lane_used[lane.source,dst]+=qty
@@ -131,6 +139,7 @@ def benchmark(ctx, deadline=float('inf')):
                     ctx.explain('NO_FUNDED_ORDER','No order at or above the pack/MOQ/supplier minimum fits both commitment authority and dated deposit/balance payment capacity.',sku=sku,supplier_id=o.supplier_id,day=day)
                     continue
                 purchases.append(ctx.purchase(o,i,qty))
+                invalidate_room(ctx.dc)
                 receipts[sku,ctx.dc,arrival]+=qty
                 supplier_used[o.supplier_id,sku,dispatch]+=qty
                 shared_used[o.supplier_id,dispatch]+=qty*unit

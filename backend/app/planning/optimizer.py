@@ -14,28 +14,50 @@ from backend.app.simulation.replay import cents, week
 
 
 class Model:
-    def __init__(self):
+    def __init__(self, deadline=float('inf')):
+        self.deadline=deadline
         self.upper=[];self.integer=[];self.rows=[];self.lo=[];self.hi=[]
 
+    def check_deadline(self):
+        if perf_counter()>=self.deadline:
+            raise TimeoutError('Joint model budget exhausted')
+
     def var(self, upper=np.inf, integer=False):
+        if len(self.upper)%256==0:self.check_deadline()
         j=len(self.upper);self.upper.append(max(0,upper));self.integer.append(int(integer));return j
 
     def row(self, terms, lo=-np.inf, hi=np.inf):
+        if len(self.rows)%256==0:self.check_deadline()
         self.rows.append({j:v for j,v in terms.items() if v});self.lo.append(lo);self.hi.append(hi)
 
     def solve(self, objective, seconds):
+        deadline=min(self.deadline,perf_counter()+seconds)
+        self.check_deadline()
         rr=[];cc=[];vv=[]
         for i,row in enumerate(self.rows):
+            if i%256==0:self.check_deadline()
             for j,v in row.items():rr.append(i);cc.append(j);vv.append(v)
         mat=coo_matrix((vv,(rr,cc)),shape=(len(self.rows),len(self.upper))).tocsc()
         costs=np.zeros(len(self.upper))
         for j,v in objective.items():costs[j]=v
-        return milp(costs, integrality=np.array(self.integer), bounds=Bounds(np.zeros(len(self.upper)),self.upper),
-            constraints=LinearConstraint(mat,self.lo,self.hi),options={'time_limit':max(.001,seconds),'mip_rel_gap':0.,'presolve':True})
+        integrality=np.array(self.integer);bounds=Bounds(np.zeros(len(self.upper)),self.upper)
+        constraints=LinearConstraint(mat,self.lo,self.hi)
+        remaining=deadline-perf_counter()
+        if remaining<=0:raise TimeoutError('Joint matrix preparation exhausted budget')
+        return milp(costs, integrality=integrality, bounds=bounds,
+            constraints=constraints,options={'time_limit':remaining,'mip_rel_gap':0.,'presolve':True})
 
 
 def optimize(ctx, deadline):
-    model=Model()
+    started=perf_counter()
+    try:return _optimize(ctx,deadline)
+    except TimeoutError:
+        # Construction never releases partial actions. The engine replays its benchmark.
+        return [],[],[SolverStage(name='model_build',status='time_limit',elapsed_ms=(perf_counter()-started)*1000)]
+
+
+def _optimize(ctx, deadline):
+    model=Model(deadline)
     arriving,outgoing=defaultdict(dict),defaultdict(dict)
     purchase_vars,movement_vars=[],[]
     commitments,payments,fees=defaultdict(dict),defaultdict(dict),defaultdict(dict)
@@ -170,7 +192,10 @@ def optimize(ctx, deadline):
         if remaining<=.01:
             stages.append(SolverStage(name=name,status='time_limit',elapsed_ms=0));break
         started=perf_counter()
-        result=model.solve(objective,remaining)
+        try:result=model.solve(objective,remaining)
+        except TimeoutError:
+            stages.append(SolverStage(name=name,status='time_limit',elapsed_ms=(perf_counter()-started)*1000))
+            return [],[],stages
         stages.append(SolverStage(name=name,status={0:'optimal',1:'time_limit',2:'infeasible',3:'unbounded',4:'error'}.get(result.status,'error'),
             objective=float(result.fun) if result.fun is not None and isfinite(result.fun) else None,
             gap=float(result.mip_gap) if getattr(result,'mip_gap',None) is not None and isfinite(result.mip_gap) else None,elapsed_ms=(perf_counter()-started)*1000))

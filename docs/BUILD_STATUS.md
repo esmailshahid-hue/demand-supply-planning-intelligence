@@ -1,5 +1,77 @@
 # Build status
 
+## Pass 2 runtime diagnostics and correction — 17 September 2026
+
+Started from clean `55d1f392b540d0a9f37145a48b66faa10d3ff155`. **The unchanged 10-second gate passes locally; Linux/Docker verification remains outstanding.** No push, merge, deployment or Pass 3 work occurred. This section supersedes the earlier local-only readiness statement for the runtime question.
+
+### Failed CI evidence and limits
+
+User-confirmed GitHub Actions run **35227104588**, job **105221381314**, passed 71 backend tests, eight browser tests, contracts, production build, Docker startup, forecast smoke and container solver smoke. Fixture first/repeat passed in **3.309 / 3.231 s** with deterministic validated benchmark actions. Full first passed feasibility, financial and size assertions, then failed `Exceeded documented 10-second live sample target`. The old smoke asserted before printing; its exact HTTP/engine time and stages are **unknown**, and full repeat did not execute. This evidence was supplied by the user, not independently downloaded during this correction. It is not a corrected-worktree CI pass.
+
+This machine is macOS arm64, Python 3.14.4. `command -v docker colima podman limactl orb` found no runtime; no Linux execution environment is available. **No production Linux/Docker profile has been executed here.** Local profiling identifies real avoidable work and deadline defects, but cannot establish the exact phase responsible for that historical Linux overrun. The next corrected-commit workflow must supply that evidence before claiming the CI runtime issue fully resolved.
+
+### Measured bottleneck and correction
+
+An initial local cProfile showed repeated receiving-space summation in the benchmark (18,617 calls) alongside substantial forecast evaluation, rather than a purely solver-bound request. Low-overhead wall-clock phase measurements below were then collected through the production sample route. The profile pre-imports SciPy separately (0.370 s before / 0.356 s after), reports sample generation/validation separately, and serializes with Pydantic's response type adapter. It is not an HTTP or Vercel cold-start measurement. `scipy_solve` includes SciPy/HiGHS input handling, presolve, solve and result conversion; matrix preparation is measured separately. Construction includes action extraction/cleanup if reached. Values below are seconds, before → after:
+
+| Full-sample phase | First | Repeat |
+|---|---|---|
+| Sample input generation/validation | 0.768 → 0.757 | <0.001 → <0.001 |
+| Forecast generation | 2.377 → 2.366 | 2.348 → 2.352 |
+| Benchmark construction | **1.030 → 0.555** | **1.020 → 0.546** |
+| Independent replay (all calls) | 0.144 → 0.108 | 0.135 → 0.107 |
+| Joint construction | 0.164 → 0.152 | 0.165 → 0.177 |
+| Sparse matrix preparation | 0.080 → 0.090 | 0.080 → 0.084 |
+| SciPy/HiGHS solve | 2.274 → 2.221 | 2.262 → 2.224 |
+| Explanation generation | 0.033 → 0.034 | 0.036 → 0.033 |
+| Other validation/context/selection | 0.519 → 0.514 | 0.520 → 0.524 |
+| Production route total, excluding serialization | **7.388 → 6.796** | **6.566 → 6.047** |
+| Response serialization | 0.013 → 0.012 | 0.012 → 0.012 |
+
+Corrections are deliberately small:
+
+- Benchmark receiving-space totals are reused only within the current calculation and unchanged location/day state. Every day clears the cache; movements invalidate both source and destination; purchases invalidate the DC. Original summation order and constraints are retained. Both fixture/full actions and all benchmark exceptions compare exactly with the uncached implementation at the starting commit, now guarded by regression snapshots and independent replay. No complete plan response is cached.
+- The engine no longer replays an incomplete incumbent that policy already rejects. No-action replay, benchmark replay and **separate final proposed-plan replay remain** (three calls on sample fallbacks instead of four). Completed joint plans still receive candidate and final independent checks.
+- Joint construction now checks its deadline every 256 variables/rows, and sparse preparation checks while assembling rows. Preparation time is deducted before giving HiGHS its remaining time. Expiration discards partial construction/actions and discloses the timed-out stage. The exact model, objectives, zero gap, two-second sub-budget and 30-second overall limit are unchanged. Native SciPy/HiGHS still cooperatively overshot the sub-budget: corrected full joint totals were 2.462 / 2.486 s. This is **not** a hard process deadline.
+- Smoke prints measurements before acceptance gates, collects per-run failures, and executes all four requests when possible. It exposes transport/malformed-response errors with tracebacks, marks unavailable/mismatched comparisons, and exits nonzero after the final failure summary. The 10-second threshold, independent feasibility, financial, size, full-dimension and fallback gates remain active.
+- `scripts/planning_profile.py` provides separate phase measurements without changing API contracts. Explanation assembly was extracted unchanged for measurement. Docker includes the script; CI runs it after planning smoke on either smoke success or failure, preserving the original failure and every existing check. It does not run if smoke was skipped/cancelled. Linux profile command: `docker exec planning-pass1 python -m scripts.planning_profile`.
+
+### Production HTTP evidence for this correction
+
+Fresh single-worker process, `PORT=8011 ./scripts/start.sh`; forecast smoke first populated input caches, as in CI. No complete plan cache exists. All responses retain the full 56-day network (fixture 40 series/2,800 stock rows; full 240 series/16,800 rows).
+
+| Run | HTTP s | Engine ms | Response bytes | Purchases / movements | Determinism |
+|---|---:|---:|---:|---:|---|
+| Fixture first | 2.775 | 2,762.7 | 782,590 | 24 / 311 | Reference |
+| Fixture repeat | 2.651 | 2,645.5 | 782,590 | 24 / 311 | Matched |
+| Full first | 6.053 | 6,034.9 | 3,747,962 | 31 / 607 | Reference |
+| Full repeat | 6.068 | 6,049.3 | 3,747,963 | 31 / 607 | Matched |
+
+All four: HTTP 200, **`feasible_fallback`**, stages **`visible_must_stock:time_limit` → `independent_fallback:benchmark`**, replay feasible with zero failures, no worse lexicographic service than no new actions, and responses below 4,500,000 bytes. Repeated policies (actions, totals, ledgers and explanations) matched exactly, excluding timing/run IDs. Financial reconciliations apply independently to each first and repeat run:
+
+| Dataset | Purchase values = commitments | Payment ledger = payment total | Minimum commitment / payment / transfer headroom |
+|---|---:|---:|---|
+| Fixture first and repeat | SAR 91,606.00 | SAR 97,746.00 | SAR 0.00 / 14.00 / 120.00 |
+| Full first and repeat | SAR 92,550.00 | SAR 99,050.00 | SAR 40.00 / 5.00 / 120.00 |
+
+### Checks actually run
+
+- `.venv/bin/python -m pytest -q`: **82 passed in 17.99 s**, two existing TestClient warnings. New regressions cover later construction expiration, matrix-preparation budget deduction, no late solve, smoke continuation after slow/invalid/malformed/transport/mismatch responses, nonzero CLI failure, and exact fixture/full benchmark equivalence.
+- `.venv/bin/python -m scripts.solver_smoke`: SciPy 1.18.1 import 0.298 s; expected integer solution/status, cold 0.001 s and warm <0.001 s.
+- Contract export, `npm --prefix frontend run generate:types`, generated-contract diff: passed, no contract changes.
+- `npm --prefix frontend run build`: TypeScript/Vite passed, 259.40 kB JS / 79.41 kB gzip, 11.15 kB CSS / 3.34 kB gzip, Vite 388 ms.
+- `PORT=8011 npm --prefix frontend run test:e2e`: **8 passed in 19.6 s** against the production server.
+- Production forecast smoke: passed, fixture HTTP 0.167 / 0.023 s; full 0.820 / 0.095 s.
+- Production planning smoke: **all four passed**, results above, exit zero.
+- `.venv/bin/python -m scripts.planning_profile`: before/after phase timings above, both repeat comparisons and validated-plan gates passed. Raw local profiles are in ignored `artifacts/profile-before.txt` / `profile-after.txt`.
+- Direct original/corrected benchmark comparison: exact fixture/full action and exception equality. An initial one-off comparison command stopped after fixture because its artifact writer omitted a `Path` import; corrected rerun verified both datasets, then permanent regression tests passed.
+- Python dependency check: no broken requirements. Compileall passed.
+- Ruby YAML parse and smoke/profile ordering/condition checks passed; no `continue-on-error`. Existing browser, contract, Docker and smoke steps retained.
+- `git diff --check`: passed. Forecasting, independent replay, generated contracts, runtime dependency versions and frontend source remain unchanged.
+- Docker build/start/profile/smoke: **not executed, runtime unavailable**. CI and hosted verification for this corrected worktree remain outstanding. The threshold was not raised; there is no evidence here justifying a different latency target.
+
+Remaining blocker: execute the corrected workflow or equivalent production Linux container checks, inspect all four HTTP timings plus the now-automatic component profile, and confirm the same 10-second gate there. Do not treat the local Mac pass as Linux runtime proof or begin Pass 3 on that basis.
+
 ## Final Pass 2 product readiness — 17 September 2026
 
 **Revised product gate: passed locally.** Started from clean commit `5494b6ecceeba61f512b2c420bd4cde858782515`. This deliberate user-authorized decision supersedes the historical exact-fixture gate and blocked status below. The MVP requires independently feasible, useful purchasing/allocation/cash actions; default sample zero-gap MILP completion is no longer required. No Pass 3 implementation, push, merge or deployment occurred.

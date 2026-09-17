@@ -548,3 +548,64 @@ def test_incomplete_optimal_claim_cannot_be_selected(dataset,monkeypatch,defect)
     result=plan(dataset)
     assert result.status=='feasible_fallback'
     assert result.stages[-1].status=='benchmark'
+
+
+def test_joint_construction_deadline_discards_partial_model(monkeypatch):
+    from backend.app.planning import optimizer
+    ctx=Inputs(hand_data(),hand_demand(56),{})
+    clock=[0.];original=optimizer.Model.var;calls=[0]
+    def slow_var(self,*args,**kwargs):
+        calls[0]+=1
+        # Exhaust time after purchase/lane construction, during stock rows.
+        if len(self.rows)>1000:clock[0]=2.
+        return original(self,*args,**kwargs)
+    monkeypatch.setattr(optimizer,'perf_counter',lambda:clock[0])
+    monkeypatch.setattr(optimizer.Model,'var',slow_var)
+    monkeypatch.setattr(optimizer.Model,'solve',lambda *args:pytest.fail('Expired model reached solver'))
+    p,m,stages=optimizer.optimize(ctx,1.)
+    assert calls[0]>0 and not p and not m
+    assert stages[0].name=='model_build' and stages[0].status=='time_limit'
+
+
+@pytest.mark.parametrize('preparation_seconds',[.4,1.1])
+def test_sparse_preparation_consumes_solver_deadline(monkeypatch,preparation_seconds):
+    from backend.app.planning import optimizer
+    clock=[0.];original=optimizer.coo_matrix;limits=[]
+    monkeypatch.setattr(optimizer,'perf_counter',lambda:clock[0])
+    model=optimizer.Model(deadline=1.);q=model.var(10,True);model.row({q:1},lo=1)
+    def prepare(*args,**kwargs):
+        clock[0]=preparation_seconds
+        return original(*args,**kwargs)
+    def solve(*args,**kwargs):limits.append(kwargs['options']['time_limit'])
+    monkeypatch.setattr(optimizer,'coo_matrix',prepare)
+    monkeypatch.setattr(optimizer,'milp',solve)
+    if preparation_seconds>1:
+        with pytest.raises(TimeoutError):model.solve({q:1},1.)
+        assert not limits
+    else:
+        model.solve({q:1},1.)
+        assert limits==[pytest.approx(.6)]
+
+
+@pytest.mark.parametrize('size,expected',[
+    ('fixture','583a611c0ccd7b2f31c0b271fadd5f48dbabfc13f13540acab995f0fc9d44161'),
+    ('full','2cb5e840f809e7129124732c199060e4026b4a1290eb6bcdc844b6fc1c54d14d'),
+])
+def test_receiving_cache_preserves_reference_actions_and_explanations(size,expected):
+    # Snapshot obtained from the uncached benchmark at 55d1f392. Includes every
+    # action/date/value and exception, guarding invalidation after source stock,
+    # destination receipts, DC purchases and daily consumption change.
+    import json
+    from hashlib import sha256
+    from backend.app.data.sample import generate_sample
+    from backend.app.planning.inputs import network_forecasts
+    data=generate_sample(size)
+    demand,buffers,_,failures=network_forecasts(data,perf_counter()+30)
+    assert not failures
+    ctx=Inputs(data,demand,buffers);p,m=benchmark(ctx)
+    result={'purchases':[x.model_dump(mode='json') for x in p],
+        'movements':[x.model_dump(mode='json') for x in m],
+        'exceptions':[x.model_dump(mode='json') for x in ctx.exceptions.values()]}
+    assert sha256(json.dumps(result,sort_keys=True).encode()).hexdigest()==expected
+    verified=replay(data,demand,buffers,p,m)
+    assert verified.feasible and not verified.failures

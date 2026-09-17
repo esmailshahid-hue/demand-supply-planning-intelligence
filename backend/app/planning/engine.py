@@ -60,7 +60,7 @@ def plan(data, runtime_seconds=30):
         from backend.app.planning.optimizer import optimize
         try:
             p,m,stages=optimize(ctx,solve_deadline)
-            candidate=replay(data,demand,buffers,p,m,include_stock=False)
+            candidate=no  # Incomplete incumbents are never selected or replayed.
         except RuntimeError:
             p,m,candidate=[],[],no
             stages=[SolverStage(name='joint_model',status='error',elapsed_ms=0)]
@@ -77,6 +77,8 @@ def plan(data, runtime_seconds=30):
         all(s.status=='optimal' and (s.gap is None or s.gap==0) for s in stages))
     if not complete and all(s.status=='optimal' for s in stages):
         stages.append(SolverStage(name='joint_completion_check',status='incomplete',elapsed_ms=0))
+    if complete:
+        candidate=replay(data,demand,buffers,p,m,include_stock=False)
     # An incomplete incumbent is deliberately not selected: its actions can
     # depend on solver timing. The benchmark is calculated before the challenger.
     if not complete or not candidate.feasible:
@@ -92,6 +94,17 @@ def plan(data, runtime_seconds=30):
             fallback='invalid'
         stages.append(SolverStage(name='independent_fallback',status=fallback,elapsed_ms=0))
     verified=replay(data,demand,buffers,p,m)
+    exceptions=_explanations(ctx,verified,p,m,complete,solver_failure,bp,bm)
+    # Compact ledgers: retain the proposed daily series; comparisons retain totals and service detail.
+    status=('feasible' if complete else 'feasible_fallback') if verified.feasible else 'invalid_plan'
+    kwargs['payment_through']=max(kwargs['payment_through'],max((x.due_date for x in verified.payments),default=kwargs['payment_through']))
+    return PlanResult(**kwargs,status=status,proposed=PolicyResult(name='Joint staged plan' if complete else ('Validated constrained plan' if p==bp and m==bm else 'Validated no-new-action projection'),purchases=p,movements=m,replay=verified),
+        benchmark=PolicyResult(name='Constrained order-up-to benchmark',purchases=bp,movements=bm,replay=br),
+        no_action=PolicyResult(name='No new actions',purchases=[],movements=[],replay=no),forecasts=trace,stages=stages,
+        issues=issues,failures=verified.failures,exceptions=exceptions,elapsed_ms=(perf_counter()-start)*1000)
+
+
+def _explanations(ctx,verified,p,m,complete,solver_failure,bp,bm):
     exceptions=list(ctx.exceptions.values()) if p==bp and m==bm else []
     if solver_failure is not None:
         exceptions.append(solver_failure)
@@ -105,13 +118,7 @@ def plan(data, runtime_seconds=30):
         opposite=next((t for t in m if t.sku==move.sku and t.source==move.destination and t.destination==move.source and t.dispatch_date<move.dispatch_date),None)
         if opposite:
             exceptions.append(Failure(code='LATER_RETURN_MOVEMENT',message=f'Stock moved on {opposite.dispatch_date} returns on {move.dispatch_date}; it was retained only under dated demand/buffer objectives and rechecked for donor protection. Inspect the daily ledger.',sku=move.sku,location_id=move.source,day=move.dispatch_date,action_id=move.action_id))
-    # Compact ledgers: retain the proposed daily series; comparisons retain totals and service detail.
-    status=('feasible' if complete else 'feasible_fallback') if verified.feasible else 'invalid_plan'
-    kwargs['payment_through']=max(kwargs['payment_through'],max((x.due_date for x in verified.payments),default=kwargs['payment_through']))
-    return PlanResult(**kwargs,status=status,proposed=PolicyResult(name='Joint staged plan' if complete else ('Validated constrained plan' if p==bp and m==bm else 'Validated no-new-action projection'),purchases=p,movements=m,replay=verified),
-        benchmark=PolicyResult(name='Constrained order-up-to benchmark',purchases=bp,movements=bm,replay=br),
-        no_action=PolicyResult(name='No new actions',purchases=[],movements=[],replay=no),forecasts=trace,stages=stages,
-        issues=issues,failures=verified.failures,exceptions=exceptions,elapsed_ms=(perf_counter()-start)*1000)
+    return exceptions
 
 
 def _score(result,ctx):

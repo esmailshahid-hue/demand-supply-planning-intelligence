@@ -34,6 +34,14 @@ The two-second choice preserves fast exact completion for hand models while avoi
 
 Future scenarios may compare frozen and replanned validated policies when both use identical scenario assumptions and independent validation. This pass adds no scenario functionality. Scenario responses must share or reference ledgers rather than duplicate the full daily ledger: the current full response is approximately 3.75 MB against the 4.5 MB ceiling.
 
+## Runtime verification correction
+
+The 10-second sample HTTP gate remains unchanged. Smoke now prints all available measurements before evaluating gates, attempts fixture/full first/repeat despite an earlier acceptance failure, exposes malformed/transport errors, and exits nonzero with the collected failure report. Run `python -m scripts.planning_profile` inside the production image for forecast, benchmark, replay, joint construction, sparse preparation, SciPy/HiGHS solve, explanation and serialization timings. CI runs this diagnostic after planning smoke even when that gate fails; it does not turn a failed gate green.
+
+Receiving-space calculations are memoized only within unchanged location/day state in a single benchmark invocation, invalidated after movements, purchases and each day. No complete plan responses are cached. Rejected incomplete incumbents no longer trigger an unnecessary replay; no-action, benchmark and final proposed-plan replay remain separate. Deadline checks now cover later model construction and matrix preparation, whose elapsed time is subtracted from the solver allowance. A construction timeout discards all partial actions. Native solver termination is still cooperative.
+
+The corrected local production fixture first/repeat measured **2.775 / 2.651 s**, full **6.053 / 6.068 s**, with identical validated benchmark actions, totals and explanations. Full benchmark construction fell from approximately 1.03 to 0.55 s locally. This is macOS evidence only: the starting commit failed the full-sample latency gate in Ubuntu CI, and Docker/Linux profiling is unavailable in this workspace. See BUILD_STATUS.md for phase measurements and the remaining Linux verification blocker. Forecasts, horizons, objective definitions, constraints and independent replay are unchanged.
+
 ## Independent stock and cash replay
 
 `simulation/replay.py` imports no optimizer code or solver variables. It reconstructs actions from normalized inputs and recommendation records, checking identifiers, supplier/lane eligibility, packs/minimums, calendars, shared capacities, receiving peaks, funding and conservation. A corrupt action is reported, never silently fixed.
