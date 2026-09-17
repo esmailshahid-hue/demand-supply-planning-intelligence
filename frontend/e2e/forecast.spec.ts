@@ -65,8 +65,11 @@ test('production UI renders the actual API result, recalculates and navigates ho
   await expectHeadlineMatchesDisplayedMaes(page);
   await page.getByRole('button', { name: 'Held-out final check' }).click();
   await expect(page.getByText('These results do not choose the winner.', { exact: false })).toBeVisible();
+  test.setTimeout(70_000);
+  const planning = page.waitForResponse(r => r.url().endsWith('/api/plan/sample') && r.ok(), { timeout: 60_000 });
   await page.getByRole('button', { name: /Plan Review/ }).click();
-  await expect(page.getByText('Purchasing and allocation come next.')).toBeVisible();
+  await planning;
+  await expect(page.getByTestId('plan-result')).toBeVisible();
   await expect(content).toHaveCount(0);
   await page.getByRole('button', { name: /Scenarios/ }).click();
   await expect(page.getByText('Scenario comparisons need a validated plan.')).toBeVisible();

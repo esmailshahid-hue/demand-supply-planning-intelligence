@@ -1,8 +1,76 @@
 # Build status
 
-Updated: **17 September 2026**. Completed scope: **Pass 1 only**.
+Updated: **17 September 2026**. Current scope: **Passes 1 and 2**. Earlier Pass 1 evidence is preserved below as historical evidence.
 
 **Pass 1 exit gate: met locally and in Ubuntu CI.** The seeded sample travels through the live Python API into the built React UI; historical forecast evaluation passes invariant tests; production-style single-service startup and HTTP smoke tests pass. GitHub Actions verified the Linux container path for commit `f939b3e`; no public host or Vercel deployment has been verified. No infrastructure was provisioned. This is not the full MVP release gate.
+
+## Pass 2 — purchasing, allocation and cash
+
+Implemented the complete 56-day network planning path through Python and the existing React application. Pass 1 forecasting files and presentation calculations are unchanged. No push, merge, deployment, external provisioning, scenario controls, uploads, exports or persistence was performed.
+
+### Implementation and contracts
+
+- `planning/inputs.py` connects all ranged SKU/store series to the real Pass 1 evaluator, with calendar-adjusted protection evidence and separate full-input/series hashes. Missing stock/capacity, unreachable calendars, excessive protection envelopes, unfunded inputs and existing payment breaches are explicit failures.
+- `planning/optimizer.py` builds the joint case/pack MILP with staged visible then tail must-stock/A/B/C class-store shortfalls, weekly buffers, cost and stable action ties. Stages share one runtime budget; lower objectives do not run after a timeout. `planning/benchmark.py` supplies a deterministic constrained order-up-to comparison.
+- `simulation/replay.py` independently reconstructs stock, transit, acquisition value, dated supplier/lane capacity, peak receiving volume, donor protection, grouped minimums/fees and SAR-cent cash. It does not import the optimizer or trust its status. Existing unpaid obligations and already-dispatched stock are counted once. Recommendations failing replay cannot be shown as executable.
+- New `/api/plan/sample` and `/api/plan` endpoints share the existing process admission limit. Generated contracts expose forecast traces, solver stages, proposed/benchmark/no-action policies, cash, class-store and SKU-store service, structured failures and constraint explanations. Only the proposed policy returns a daily inventory ledger; normalized historical inputs remain server-side.
+- Plan Review replaces its placeholder using the current visual styles. It shows purchases, shared allocations, commitment/payment totals, coverage/shortages, comparisons, cash limits, action dates, linked stock/payment/forecast evidence and exceptions. Loading removes stale results; dataset changes/recalculation replace the entire response. Demand Review retains all Pass 1 corrections; Scenarios and workbook actions remain unavailable.
+- New production HTTP planning smoke checks are included in the existing CI/container verification path. Docker and Vercel architecture/configuration are preserved; only the new smoke script is copied into Docker.
+
+Detailed formulas, rounding, forecast provenance, benchmark conservatism and fallback policy are in [PLANNING.md](PLANNING.md). No buffer or target is a guaranteed service level. Day-56 excess explicitly repeats the final forecast week and uses net store needs at the DC. Purchasing payments exclude tax, receivables and revenue cash.
+
+### Acceptance evidence
+
+The exact seven-day fixture reconciles independently:
+
+| Policy | Unmet | Ending units | New commitment | Visible payments | Later payment |
+|---|---:|---:|---:|---:|---:|
+| No new action | 50 | 65 | SAR 0 | SAR 0 | SAR 0 |
+| Transfer 50 B→A | 0 | 15 | SAR 0 | SAR 20 | SAR 0 |
+| Buy 40 then move | 10 | 65 | SAR 400 | SAR 220 | SAR 200 on day 33 (offset 32) |
+
+| Command / check | Actual result |
+|---|---|
+| `.venv/bin/python -m pytest -q` | **56 passed in 7.07 s**, including all 35 existing Pass 1 regressions and 21 planning/validator cases. Two unchanged upstream Starlette/AnyIO deprecation warnings. |
+| `.venv/bin/python -m scripts.solver_smoke` | SciPy **1.18.1**, import **0.351 s**; HiGHS cold **0.006 s**, warm **<0.001 s**, status 0 and expected integer result 2. |
+| `.venv/bin/python -m pip check` | **No broken requirements found.** Pip cache was disabled under sandbox permissions; dependency validation completed. |
+| `.venv/bin/python -m compileall -q backend scripts` | Passed. |
+| Contract export and `npm --prefix frontend run generate:types` | Passed; TypeScript result schemas generated from current OpenAPI. |
+| `npm --prefix frontend run build` | Passed TypeScript and Vite production build: **259.25 kB JS / 79.38 kB gzip**, **11.15 kB CSS / 3.34 kB gzip**. |
+| `PORT=8011 CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm --prefix frontend run test:e2e` | **8 passed in 2.1 min**. Live fixture calculation, recalculation and full 240-series planning; every displayed purchase value, allocation quantity and weekly cash row matched the API. Also verified stale-result removal, failure/invalid-input states, navigation and existing forecast regressions. |
+| `agent-browser` against the built application | Demand/Plan navigation and real Plan Review render passed; no browser errors, blank page, error overlay or desktop horizontal overflow. Screenshot inspected locally. |
+| `PORT=8011 ./scripts/start.sh` then `.venv/bin/python -m scripts.smoke --url http://127.0.0.1:8011` | Passed built UI, health and live fixture/full forecast. Fixture **0.138 / 0.021 s**, full **0.809 / 0.090 s** first/repeat. |
+
+Tests cover adequate/zero demand, shared scarce stock, deterministic priority ties, late receipts/day-29 effects, packs versus budgets, grouped supplier minimums, shared supplier/lane limits, receiving space, donor protection with late receipts, blocked/reserved/in-transit and confirmed stock counted once, existing/received-order obligations, separate commitment/payment ceilings, same-week installments, cent rounding, obligations beyond day 90, zero-price supply, corrupt actions/dates/values, opposing lanes, disjoint calendars, solver timeout, input rejection and the unchanged forecast boundary. Early new-test failures were missing required fixture fields and one missing optional buffer lookup; these were corrected and the suite rerun successfully. An initially slow benchmark receiving-space lookup was replaced with indexed dated lookups before final performance checks.
+
+### Final planning performance and exit gate
+
+Final `.venv/bin/python -m scripts.planning_smoke --url http://127.0.0.1:8011` passed against the restarted production service. Measurements include HTTP response delivery and use the full dimensions, with no reduced network or static plan. Host: local macOS arm64, Python 3.14.4, Node v25.6.1. The forecast smoke populated sample caches first; “first” below is the first plan for that dataset in the fresh service, not an isolated Vercel cold invocation.
+
+| Dataset / run | HTTP seconds | Engine milliseconds | Response bytes | Purchases / movements | Result |
+|---|---:|---:|---:|---:|---|
+| Fixture first | 28.178 | 28,165.8 | 782,412 | 24 / 311 | Feasible fallback |
+| Fixture repeat | 28.169 | 28,162.8 | 782,411 | 24 / 311 | Feasible fallback |
+| Full first | 28.321 | 28,302.1 | 3,747,783 | 31 / 607 | Feasible fallback |
+| Full repeat | 28.343 | 28,323.6 | 3,747,785 | 31 / 607 | Feasible fallback |
+
+All four returned no independent hard-constraint failures. Purchase-line values exactly reconciled to commitments; payments exactly reconciled to payment totals; all weekly funding headrooms were nonnegative. Full sample retains **60 SKUs, one DC, four stores, 12 suppliers, 240 forecasts and 16,800 proposed SKU/location/day stock rows**. The largest observed response is below **4,500,000 bytes** and requests are small selectors. Local response time meets the 30-second target and is below configured Vercel `maxDuration: 60`; this does not verify a Vercel cold start or platform memory usage.
+
+A separate fresh Python process generated the full sample, ran `plan(data)` and serialized the result in **28.720 s** (**28,342.9 ms** inside the engine). `resource.getrusage(RUSAGE_SELF).ru_maxrss` reported **672,497,664 bytes (641.3 MiB)** peak RSS on macOS. It returned the independently checked benchmark fallback after `visible_must_stock` reached its time limit. Visible projected unit fill was **41.10%**, with **59,973.76** visible unmet units and **92,198.78** provisional-tail unmet units. New commitments were **SAR 92,550** and total scheduled payments **SAR 99,050**. These are projected results, not measured achieved service.
+
+Final checks also confirmed generated contracts are reproducible, the root Vercel entrypoint still re-exports the same FastAPI app, `maxDuration` remains 60, and `git diff --check` passed. No backend forecast source or forecast display formula changed.
+
+**Pass 2 exit gate: met locally; ready for review and a subsequent user-controlled commit.** The hand fixture reconciles, the full sample is independently feasible while explicitly reporting shortages, and complete runtime is measured. No scope or runtime target was weakened. New hosted/Ubuntu/container checks remain outstanding and are not claimed as completed gates. The complete six-pass MVP release gate remains unmet.
+
+### Limitations and handoff
+
+The measured sample results are independently feasible fallbacks with substantial visible and provisional-tail shortages. The joint solver did not finish its highest-priority stage within the allotted budget on this machine; neither sample is advertised as lexicographically optimal or better than the constrained benchmark. A small hand model finishes all stages optimally. Benchmark receiving-space reservations and single-line supplier-minimum handling are conservative. Runtime may change with hardware; the shared budget is cooperative, not an OS-enforced deadline.
+
+Docker is not installed locally (`command -v docker` returned no executable). Therefore **Pass 2 Docker build/startup, new Ubuntu CI and Vercel-hosted measurements were not run**. Earlier successful Ubuntu CI for `f939b3e` is Pass 1 evidence only. Hosted cold latency, memory, wheel packaging and response limits still need verification. The future workbook payload/storage gap remains unchanged; no upload transport was introduced.
+
+**Exact starting point for Pass 3:** reuse `planning/engine.py`, `planning/contracts.py`, `simulation/replay.py`, `PlanReview.tsx` and the API-backed planning tests. Implement the specified demand uplift, supplier delay/capacity loss, commitment and payment shocks with frozen-action versus replanned comparisons. Keep both policies under identical scenario assumptions, preserve provenance/independent validation, and then complete the sample-data review experience. Do not replace the forecast/model or start workbook review/export work early. Scenario controls and immutable baseline/reset behavior are not implemented in Pass 2.
+
+## Historical Pass 1 records
 
 ## Vercel deployment readiness
 
@@ -191,7 +259,7 @@ Details and formulas: [FORECASTING.md](FORECASTING.md). Hosting assessment and s
 - The current Pass 1 server-generated sample flow is configured for one native FastAPI Vercel deployment. Its actual catalog/forecast responses fit the platform limit. The **17.5 MB** full normalized sample still exceeds Vercel Functions' documented **4.5 MB** payload limit, so the later workbook upload requires direct object storage or a container-capable host. No storage or paid host was selected.
 - Ubuntu CI verified the Docker/Linux build, startup and smoke path for commit `f939b3e`; Docker remains unavailable locally. Hosted memory/runtime/retention and a genuine cold target-host solver start are outstanding. The first local SciPy import exceeded 30 seconds; no full-plan performance claim is made. None of these prevents later work.
 
-## Exact starting point for Pass 2
+## Historical Pass 1 handoff to Pass 2 (now implemented above)
 
 Read the build plan, this file and the forecasting/deployment notes. **Reuse this app and its existing contracts. Do not rebuild the frontend or replace the forecast engine.**
 

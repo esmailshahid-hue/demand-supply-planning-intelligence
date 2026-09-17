@@ -1,4 +1,4 @@
-name: Verify Pass 1
+name: Verify planning MVP
 on: [push, pull_request]
 jobs:
   verify:
@@ -32,4 +32,5 @@ jobs:
             sleep 1
           done
           .venv/bin/python -m scripts.smoke
+          .venv/bin/python -m scripts.planning_smoke
           docker exec planning-pass1 python scripts/solver_smoke.py

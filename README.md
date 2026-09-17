@@ -1,8 +1,8 @@
 # Demand and Supply Planning Intelligence
 
-An independent, synthetic Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. **Pass 1 is implemented.** Purchasing, allocation, scenarios, uploads and exports remain unavailable.
+An independent, synthetic Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. **Passes 1 and 2 are implemented.** Forecast evaluation feeds live purchasing, allocation and dated payment plans. Scenarios, uploads and exports remain unavailable.
 
-The working app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review loads the 10-SKU fixture, evaluates three weekday forecasting methods and displays the actual result. A 60-SKU sample is also available.
+The working app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review loads the 10-SKU fixture, evaluates three weekday forecasting methods and displays the actual result. A 60-SKU sample is also available. Open **Plan Review** to calculate the complete network, inspect independently checked recommendations and compare the constrained benchmark. Allow roughly 30 seconds per plan on the measured local machine. Time-limited results are explicitly labeled as fallbacks.
 
 ## Run locally
 
@@ -29,6 +29,7 @@ For frontend development, run the API above and `npm --prefix frontend run dev` 
 npm --prefix frontend run generate:types
 npm --prefix frontend run build
 .venv/bin/python -m scripts.smoke  # requires the running production server
+.venv/bin/python -m scripts.planning_smoke  # fixture/full, first/repeat; about two minutes
 ```
 
 Browser tests (the suite can start the production server itself):
@@ -62,16 +63,17 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is not installed in the local implementation environment. GitHub Actions successfully built and started the image on Ubuntu for commit `f939b3e`, then passed the production HTTP smoke test. The current Pass 1 app also has committed native Vercel configuration; no public deployment or infrastructure was created. See the [deployment readiness assessment](docs/DEPLOYMENT.md) for exact settings and the future upload limitation.
+Docker is not installed in the local implementation environment. GitHub Actions successfully built and started the image on Ubuntu for commit `f939b3e`, then passed the production HTTP smoke test. The same native Vercel configuration is preserved. Pass 2 Linux/container and hosted checks have not run locally; the earlier CI success proves only the recorded Pass 1 commit. See the [deployment readiness assessment](docs/DEPLOYMENT.md) for exact settings and the future upload limitation.
 
 ## Project guide
 
 - [Build specification](docs/DEMAND_SUPPLY_MVP_BUILD_PLAN.md): source of truth and six-pass scope.
-- [Build status](docs/BUILD_STATUS.md): executed checks, limitations and exact Pass 2 handoff.
+- [Build status](docs/BUILD_STATUS.md): executed checks, limitations and exact Pass 3 handoff.
 - [Forecast methodology and contracts](docs/FORECASTING.md): cutoff rules, fallback policy and metric definitions.
+- [Planning methodology](docs/PLANNING.md): staged model, benchmark, independent replay and cash semantics.
 - `backend/app/contracts.py`: canonical Pydantic request/data/result schemas; frontend types are generated from OpenAPI.
 - `backend/app/data/`: seeded samples and cross-row validation.
 - `backend/app/forecasting/engine.py`: the sole forecast/evaluation implementation.
-- `frontend/src/`: four-screen shell and live Demand Review.
+- `frontend/src/`: four-screen shell, live Demand Review and Plan Review.
 
-Calculations process inputs on the server. This is not a browser-only application. There are no user uploads, accounts or persistent user datasets in Pass 1, and no claim about a future host's retention policies.
+Calculations process inputs on the server. This is not a browser-only application. There are no user uploads, accounts or persistent user datasets in Passes 1–2, and no claim about a future host's retention policies.

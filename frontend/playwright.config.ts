@@ -1,8 +1,9 @@
 import { defineConfig } from '@playwright/test';
+const baseURL = `http://127.0.0.1:${process.env.PORT || '8000'}`;
 export default defineConfig({
   testDir: './e2e', timeout: 30_000, workers: 1,
-  use: { baseURL: 'http://127.0.0.1:8000', headless: true,
+  use: { baseURL, headless: true,
     launchOptions: process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {},
   },
-  webServer: { command: '../scripts/start.sh', url: 'http://127.0.0.1:8000/api/health', reuseExistingServer: !process.env.CI, timeout: 30_000 },
+  webServer: { command: '../scripts/start.sh', url: `${baseURL}/api/health`, reuseExistingServer: !process.env.CI, timeout: 30_000 },
 });

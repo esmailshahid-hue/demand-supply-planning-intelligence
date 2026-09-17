@@ -109,5 +109,5 @@ def test_api_bounds_unknown_series_busy_and_safe_errors():
 
 
 def test_health_and_schema():
-    assert client.get("/api/health").json()["capabilities"] == ["forecast"]
+    assert client.get("/api/health").json()["capabilities"] == ["forecast", "planning"]
     assert "/api/forecast" in client.get("/openapi.json").json()["paths"]

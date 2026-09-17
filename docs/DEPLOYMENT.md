@@ -86,3 +86,32 @@ The first real preview deployment still needs these host-specific checks:
 5. Reconfirm that requests and responses stay below 4.5 MB. Do not test the future 17.5 MB normalized upload as if it were supported.
 
 Until those checks run, this repository is deployment-ready but no public or Vercel-hosted application has been verified.
+
+
+## Pass 2 runtime assessment — local evidence only
+
+Pass 2 preserves `app.py`, the native FastAPI preset, relative same-domain API paths, the existing frontend build and the **60-second** Vercel Function setting. No services were provisioned or deployed. The Dockerfile adds only the planning smoke script; the existing Ubuntu workflow now includes it. Neither the updated Docker image nor this Pass 2 workflow was executed on Linux in this session because Docker is unavailable locally. The successful `f939b3e` CI run remains historical Pass 1 evidence.
+
+The new `/api/plan/sample` path calculates all 60 products/four stores over 56 days, including 240 evaluated forecasts, a benchmark, the joint model and independent replay. SciPy/HiGHS is now imported during planning requests, whereas Demand Review still follows the existing forecast-only calculation path. The total planning target remains 30 seconds across all stages with replay time reserved; timed-out stages stop and return only independently validated incumbents/fallbacks. No optimality or serverless performance guarantee is implied.
+
+Final local production HTTP measurements on macOS arm64:
+
+| Planning sample | First / repeat seconds | Largest response |
+|---|---:|---:|
+| Fixture | 28.178 / 28.169 | 782,412 bytes |
+| Full (60 SKUs, 240 series) | 28.321 / 28.343 | 3,747,785 bytes |
+
+These requests followed forecast smoke in the same fresh service, so sample caches were already populated. Both planning runs used live Python calculations and returned feasible fallbacks with disclosed shortages; all purchase/payment totals reconciled. These values are below the configured 60-second ceiling and documented 4.5 MB response limit, but leave less payload margin than Pass 1. Raw normalized inputs are not returned. Any later result expansion must remeasure the payload rather than assume the current margin remains.
+
+A separate fresh Python process measured full-sample generation, planning and serialization at **28.720 s**, with macOS peak RSS **672,497,664 bytes (641.3 MiB)**. This includes the lazy solver import but is not a Vercel invocation or a Linux bundle measurement.
+
+The target-host first/repeat planning runtime, peak memory, packaging and HTTP behavior still require actual Vercel verification. Local tests cannot establish those properties. Keep the existing per-instance concurrency limitation and future 17.5 MB workbook transport gap in the hosting decision. No storage, job queue, scenario API or upload workaround was added in Pass 2.
+
+Reproduce the local check after a production startup:
+
+```sh
+PORT=8011 ./scripts/start.sh
+# In another terminal:
+.venv/bin/python -m scripts.smoke --url http://127.0.0.1:8011
+.venv/bin/python -m scripts.planning_smoke --url http://127.0.0.1:8011
+```

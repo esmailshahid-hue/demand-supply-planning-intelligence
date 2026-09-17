@@ -72,6 +72,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plan/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sample Plan */
+        post: operations["sample_plan_api_plan_sample_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Custom Plan */
+        post: operations["custom_plan_api_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -161,6 +195,36 @@ export interface components {
             /** Windows */
             windows: components["schemas"]["WindowRecord"][];
         };
+        /** CashWeek */
+        CashWeek: {
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            /** Commitments */
+            commitments: number;
+            /** Commitment Cap */
+            commitment_cap: number | null;
+            /** Commitment Headroom */
+            commitment_headroom: number | null;
+            /** Existing Payments */
+            existing_payments: number;
+            /** New Payments */
+            new_payments: number;
+            /** Total Payments */
+            total_payments: number;
+            /** Payment Ceiling */
+            payment_ceiling: number | null;
+            /** Payment Headroom */
+            payment_headroom: number | null;
+            /** Movement Fees */
+            movement_fees: number;
+            /** Transfer Budget */
+            transfer_budget: number | null;
+            /** Transfer Headroom */
+            transfer_headroom: number | null;
+        };
         /** Dataset */
         Dataset: {
             /**
@@ -240,6 +304,23 @@ export interface components {
              * Format: date-time
              */
             known_at: string;
+        };
+        /** Failure */
+        Failure: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Sku */
+            sku?: string | null;
+            /** Location Id */
+            location_id?: string | null;
+            /** Supplier Id */
+            supplier_id?: string | null;
+            /** Day */
+            day?: string | null;
+            /** Action Id */
+            action_id?: string | null;
         };
         /** ForecastDay */
         ForecastDay: {
@@ -340,6 +421,22 @@ export interface components {
             elapsed_ms: number;
             /** Evaluation Policy */
             evaluation_policy: string;
+        };
+        /** ForecastTrace */
+        ForecastTrace: {
+            /** Sku */
+            sku: string;
+            /** Location Id */
+            location_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Input Hash */
+            input_hash: string;
+            /** Method */
+            method: string;
+            /** Status */
+            status: string;
+            buffer: components["schemas"]["BufferEvidence"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -444,6 +541,34 @@ export interface components {
             /** Mean Quantity Bias */
             mean_quantity_bias: number | null;
         };
+        /** Movement */
+        Movement: {
+            /** Action Id */
+            action_id: string;
+            /** Sku */
+            sku: string;
+            /** Source */
+            source: string;
+            /** Destination */
+            destination: string;
+            /** Units */
+            units: number;
+            /**
+             * Dispatch Date
+             * Format: date
+             */
+            dispatch_date: string;
+            /**
+             * Arrival Date
+             * Format: date
+             */
+            arrival_date: string;
+            /**
+             * Reason
+             * @default Allocate dated shared stock to store demand within donor protection.
+             */
+            reason: string;
+        };
         /** Observation */
         Observation: {
             /** Sku */
@@ -546,6 +671,127 @@ export interface components {
             /** Amount */
             amount: number;
         };
+        /** Payment */
+        Payment: {
+            /** Reference */
+            reference: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "existing" | "deposit" | "balance" | "movement";
+            /** Amount */
+            amount: number;
+        };
+        /** PlanRequest */
+        PlanRequest: {
+            dataset: components["schemas"]["Dataset"];
+        };
+        /** PlanResult */
+        PlanResult: {
+            /** Run Id */
+            run_id: string;
+            /** Input Hash */
+            input_hash: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /** Synthetic */
+            synthetic: boolean;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Horizon Days
+             * @default 56
+             */
+            horizon_days: number;
+            /**
+             * Visible Days
+             * @default 28
+             */
+            visible_days: number;
+            /**
+             * Release Days
+             * @default 7
+             */
+            release_days: number;
+            /**
+             * Payment Through
+             * Format: date
+             */
+            payment_through: string;
+            /**
+             * Engine Version
+             * @default planning-0.2.0
+             */
+            engine_version: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "feasible" | "feasible_fallback" | "invalid_inputs" | "invalid_plan";
+            proposed?: components["schemas"]["PolicyResult"] | null;
+            benchmark?: components["schemas"]["PolicyResult"] | null;
+            no_action?: components["schemas"]["PolicyResult"] | null;
+            /**
+             * Forecasts
+             * @default []
+             */
+            forecasts: components["schemas"]["ForecastTrace"][];
+            /**
+             * Stages
+             * @default []
+             */
+            stages: components["schemas"]["SolverStage"][];
+            /**
+             * Issues
+             * @default []
+             */
+            issues: components["schemas"]["Issue"][];
+            /**
+             * Failures
+             * @default []
+             */
+            failures: components["schemas"]["Failure"][];
+            /**
+             * Exceptions
+             * @default []
+             */
+            exceptions: components["schemas"]["Failure"][];
+            /**
+             * Assumptions
+             * @default []
+             */
+            assumptions: string[];
+            /** Elapsed Ms */
+            elapsed_ms: number;
+        };
+        /** PlanSampleRequest */
+        PlanSampleRequest: {
+            /**
+             * Size
+             * @default fixture
+             * @enum {string}
+             */
+            size: "fixture" | "full";
+        };
+        /** PolicyResult */
+        PolicyResult: {
+            /** Name */
+            name: string;
+            /** Purchases */
+            purchases: components["schemas"]["Purchase"][];
+            /** Movements */
+            movements: components["schemas"]["Movement"][];
+            replay: components["schemas"]["Replay"];
+        };
         /** Product */
         Product: {
             /** Sku */
@@ -575,6 +821,61 @@ export interface components {
             active_from: string;
             /** Active To */
             active_to?: string | null;
+        };
+        /** Purchase */
+        Purchase: {
+            /** Action Id */
+            action_id: string;
+            /** Offer Id */
+            offer_id: string;
+            /** Sku */
+            sku: string;
+            /** Supplier Id */
+            supplier_id: string;
+            /** Destination */
+            destination: string;
+            /** Units */
+            units: number;
+            /**
+             * Order Date
+             * Format: date
+             */
+            order_date: string;
+            /**
+             * Dispatch Date
+             * Format: date
+             */
+            dispatch_date: string;
+            /**
+             * Arrival Date
+             * Format: date
+             */
+            arrival_date: string;
+            /** Value */
+            value: number;
+            /**
+             * Reason
+             * @default Supply network demand and store protection buffers.
+             */
+            reason: string;
+        };
+        /** Replay */
+        Replay: {
+            /** Feasible */
+            feasible: boolean;
+            /** Failures */
+            failures: components["schemas"]["Failure"][];
+            summary: components["schemas"]["Summary"];
+            /** Cash */
+            cash: components["schemas"]["CashWeek"][];
+            /** Payments */
+            payments: components["schemas"]["Payment"][];
+            /** Service */
+            service: components["schemas"]["Service"][];
+            /** Service Groups */
+            service_groups: components["schemas"]["ServiceGroup"][];
+            /** Stock */
+            stock: components["schemas"]["StockDay"][];
         };
         /** SampleCatalog */
         SampleCatalog: {
@@ -612,6 +913,57 @@ export interface components {
              * @default S1
              */
             location_id: string;
+        };
+        /** Service */
+        Service: {
+            /** Sku */
+            sku: string;
+            /** Location Id */
+            location_id: string;
+            /** Service Class */
+            service_class: string;
+            /** Must Stock */
+            must_stock: boolean;
+            /** Demand */
+            demand: number;
+            /** Fulfilled */
+            fulfilled: number;
+            /** Unmet */
+            unmet: number;
+            /** Tail Unmet */
+            tail_unmet: number;
+            /** Fill Pct */
+            fill_pct: number | null;
+            /** Target */
+            target: number;
+            /** Buffer Units */
+            buffer_units: number;
+            /** Unconstrained Need */
+            unconstrained_need: number;
+            /** Reason Codes */
+            reason_codes: string[];
+        };
+        /** ServiceGroup */
+        ServiceGroup: {
+            /** Location Id */
+            location_id: string;
+            /** Service Class */
+            service_class: string;
+            /** Must Stock */
+            must_stock: boolean;
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "visible" | "tail";
+            /** Demand */
+            demand: number;
+            /** Fulfilled */
+            fulfilled: number;
+            /** Target */
+            target: number;
+            /** Target Shortfall */
+            target_shortfall: number;
         };
         /** Settings */
         Settings: {
@@ -691,6 +1043,84 @@ export interface components {
              * @enum {string}
              */
             funding_mode: "funded" | "unfunded_exploration";
+        };
+        /** SolverStage */
+        SolverStage: {
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Objective */
+            objective?: number | null;
+            /** Gap */
+            gap?: number | null;
+            /** Elapsed Ms */
+            elapsed_ms: number;
+        };
+        /** StockDay */
+        StockDay: {
+            /** Sku */
+            sku: string;
+            /** Location Id */
+            location_id: string;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Opening */
+            opening: number;
+            /** Receipts */
+            receipts: number;
+            /** Demand */
+            demand: number;
+            /** Fulfilled */
+            fulfilled: number;
+            /** Unmet */
+            unmet: number;
+            /** Dispatched */
+            dispatched: number;
+            /** Closing */
+            closing: number;
+        };
+        /** Summary */
+        Summary: {
+            /** Demand */
+            demand: number;
+            /** Fulfilled */
+            fulfilled: number;
+            /** Unmet */
+            unmet: number;
+            /** Fill Pct */
+            fill_pct: number | null;
+            /** Tail Demand */
+            tail_demand: number;
+            /** Tail Unmet */
+            tail_unmet: number;
+            /** Commitments */
+            commitments: number;
+            /** Visible Commitments */
+            visible_commitments: number;
+            /** Tail Commitments */
+            tail_commitments: number;
+            /** Payments */
+            payments: number;
+            /** Visible Payments */
+            visible_payments: number;
+            /** Later Payments */
+            later_payments: number;
+            /** Movement Expense */
+            movement_expense: number;
+            /** Ending Stock */
+            ending_stock: number;
+            /** Ending Inventory Investment */
+            ending_inventory_investment: number;
+            /** Revenue Exposure */
+            revenue_exposure: number;
+            /** Weekly Buffer Deficit */
+            weekly_buffer_deficit: number;
+            /** Terminal Excess Units */
+            terminal_excess_units: number;
         };
         /** Supplier */
         Supplier: {
@@ -950,6 +1380,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ForecastResult"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    sample_plan_api_plan_sample_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanSampleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResult"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+        };
+    };
+    custom_plan_api_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResult"];
                 };
             };
             /** @description Unprocessable Content */

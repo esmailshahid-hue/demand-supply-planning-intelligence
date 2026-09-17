@@ -13,11 +13,13 @@ from backend.app.contracts import APIError, ENGINE_VERSION, SCHEMA_VERSION, Fore
 from backend.app.data.sample import generate_sample
 from backend.app.data.validation import validate_dataset
 from backend.app.forecasting.engine import forecast
+from backend.app.planning.contracts import PlanRequest, PlanResult, PlanSampleRequest
+from backend.app.planning.engine import plan
 
 MAX_BODY_BYTES = 32 * 1024 * 1024
 calculation_slot = BoundedSemaphore(1)
 app = FastAPI(title="Demand and Supply Planning Intelligence", version=ENGINE_VERSION,
-              description="Synthetic portfolio. Forecasts only in Pass 1. Operational inputs are processed on the server.")
+              description="Synthetic portfolio. Evaluated forecasts and independently validated purchasing, allocation and payment plans.")
 
 
 class BodyLimit:
@@ -88,7 +90,7 @@ def calculate(data, sku, location_id, issues=None):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "engine_version": ENGINE_VERSION, "schema_version": SCHEMA_VERSION, "capabilities": ["forecast"]}
+    return {"status": "ok", "engine_version": ENGINE_VERSION, "schema_version": SCHEMA_VERSION, "capabilities": ["forecast", "planning"]}
 
 
 @app.get("/api/sample", response_model=SampleCatalog)
@@ -110,6 +112,26 @@ def sample_forecast(request: SampleRequest):
 @app.post("/api/forecast", response_model=ForecastResult, responses=ERRORS)
 def custom_forecast(request: ForecastRequest):
     return calculate(request.dataset, request.sku, request.location_id)
+
+
+def calculate_plan(data):
+    if not calculation_slot.acquire(blocking=False):
+        return JSONResponse(status_code=429, headers={'Retry-After': '2'}, content=APIError(code='busy', message='A calculation is running. Please retry shortly.').model_dump())
+    try:
+        return plan(data)
+    finally:
+        calculation_slot.release()
+
+
+@app.post('/api/plan/sample', response_model=PlanResult, responses=ERRORS)
+def sample_plan(request: PlanSampleRequest):
+    data, _ = sample(request.size)
+    return calculate_plan(data)
+
+
+@app.post('/api/plan', response_model=PlanResult, responses=ERRORS)
+def custom_plan(request: PlanRequest):
+    return calculate_plan(request.dataset)
 
 
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
