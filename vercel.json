@@ -3,10 +3,9 @@
   "framework": "fastapi",
   "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build",
   "functions": {
-    "backend/app/main.py": {
+    "app.py": {
       "maxDuration": 60,
       "excludeFiles": "{.venv/**,**/__pycache__/**,backend/tests/**,frontend/node_modules/**,frontend/e2e/**,frontend/test-results/**,frontend/playwright-report/**,artifacts/**,docs/**}"
     }
   }
 }
-

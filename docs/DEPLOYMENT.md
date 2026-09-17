@@ -12,7 +12,7 @@ The final MVP upload workflow is not yet compatible with a direct browser-to-Fun
 
 ## Committed Vercel shape
 
-- `pyproject.toml` declares the custom ASGI entrypoint `backend.app.main:app`.
+- Root `app.py` exposes the existing `backend.app.main:app` instance through a FastAPI entrypoint recognized by Vercel. Keeping deployment metadata out of `pyproject.toml` makes Vercel install the existing pinned `requirements.txt` instead of asking uv to lock a second dependency manifest.
 - `.python-version` pins Python 3.14, which is supported by Vercel's current Python runtime.
 - `vercel.json` selects the native FastAPI preset, runs the locked Vite production build, gives the calculation Function a 60-second ceiling and excludes tests, local dependencies and generated development artifacts from its bundle.
 - `.vercelignore` keeps caches, local environments, browser artifacts, generated samples, documentation and `.env*` files out of the deployment upload.
@@ -20,7 +20,7 @@ The final MVP upload workflow is not yet compatible with a direct browser-to-Fun
 - No rewrite or API base URL is required. FastAPI owns `/api/*` and `/`; the frontend uses relative `/api/*` requests. The application has one browser URL, `/`; its four screens are in-page navigation states, so there are no additional client-side route refreshes to configure.
 - The existing Dockerfile remains a separate, valid single-container deployment option. Vercel uses its native Python Function build and does not consume that Dockerfile.
 
-Vercel documents native FastAPI detection, a custom `tool.vercel.entrypoint`, build commands and the single-Function execution model in its [FastAPI guide](https://vercel.com/docs/frameworks/backend/fastapi). Its [Python runtime guide](https://vercel.com/docs/functions/runtimes/python) lists Python 3.14, `requirements.txt` support and a 500 MB uncompressed Python bundle limit.
+Vercel documents root `app.py` detection, build commands and the single-Function execution model in its [FastAPI guide](https://vercel.com/docs/frameworks/backend/fastapi). Its [Python runtime guide](https://vercel.com/docs/functions/runtimes/python) lists Python 3.14, `requirements.txt` support and a 500 MB uncompressed Python bundle limit.
 
 ## Current Pass 1 traffic and runtime fit
 
@@ -72,6 +72,8 @@ Pass 2 must also measure the real full planning solve with SciPy on the selected
 No storage, queue, database, background worker or upload transport is added in this readiness pass.
 
 ## Verification and first-deployment checks
+
+The first deployment of commit `1d251fc` failed before dependency installation. Vercel found the tool-only `pyproject.toml`, selected uv and ran `uv lock`; uv rejected the file because it had no PEP 621 `[project]` table. The correction removes that incomplete project manifest, adds the recognized root `app.py` wrapper and points the existing Function settings at `app.py`. Runtime dependencies remain pinned once in `requirements.txt`.
 
 Vercel CLI **59.20.0** was downloaded and invoked. `vercel build` stopped with `project_settings_required` because the repository has not been linked to a Vercel project. It was not rerun with `--yes`, because that would pull or create external project state and the requested scope explicitly stops before deployment. The committed build command, local production service and HTTP/browser paths all passed; details are recorded in `BUILD_STATUS.md`.
 
