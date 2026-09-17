@@ -1,3 +1,13 @@
+# Current Pass 2 readiness decision — 17 September 2026
+
+This update supersedes the historical strict fixture gate below. The live joint challenger now receives a two-second sub-budget inside the unchanged 30-second overall request budget; the Vercel setting remains 60 seconds. The user retired exact sample MILP completion in favor of independently replayed, deterministic constrained actions with honest `feasible_fallback` status. Completed joint plans still require every required stage to reach optimal status without a positive gap and pass replay.
+
+Local smoke now enforces a **10-second HTTP target** for fixture and full first/repeat requests, full dimensions, action/explanation determinism, benchmark identity, no worse lexicographic service than no new actions, independent replay and exact commitment/payment reconciliation. Final local HTTP first/repeat measurements were **2.908 / 2.644 seconds** for fixture and **6.468 / 6.673 seconds** for full, all independently validated benchmark fallbacks. Full responses were **3,747,963 bytes**. Repeated actions, totals, ledgers and explanations matched exactly. See BUILD_STATUS.md for the complete four-run evidence. This does not claim a successful GitHub Actions run or hosted/Vercel verification for the corrected code. Docker remains unavailable locally.
+
+Full responses remain approximately **3.75 MB**, close to the existing **4.5 MB** guard. Future frozen/replanned scenario comparisons must use identical assumptions and retain independent validation without duplicating full daily ledgers. No deployment, provisioning, scenario transport or paid infrastructure was added.
+
+---
+
 # Deployment readiness
 
 Assessed on **17 September 2026**. No public deployment, paid service, custom domain or external infrastructure was created.

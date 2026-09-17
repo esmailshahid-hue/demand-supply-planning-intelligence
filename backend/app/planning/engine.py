@@ -11,7 +11,10 @@ from backend.app.planning.inputs import Inputs, network_forecasts, planning_inpu
 from backend.app.planning.benchmark import benchmark
 from backend.app.simulation.replay import replay, EPS, cents, week
 
+JOINT_BUDGET_SECONDS = 2.0
+
 ASSUMPTIONS = [
+    'The live joint challenger has a two-second sub-budget within the 30-second request limit. Incomplete solves use the independently validated deterministic benchmark; no optimality is claimed.',
     'Receive, serve local expected demand, dispatch, then close stock. Unserved demand is lost, never backlogged.',
     'Only days 1–7 are release candidates. Later actions remain planned; days 29–56 depend on provisional forecasts.',
     'Store buffers use the unchanged Pass 1 evaluator at calendar-adjusted review plus replenishment protection periods. No independent DC buffer or retail demand is added.',
@@ -52,7 +55,7 @@ def plan(data, runtime_seconds=30):
     stages=[]
     solver_failure=None
     # Leave time for independent replay, serialization and safe fallback after solver termination.
-    solve_deadline=deadline-2
+    solve_deadline=min(deadline-2,perf_counter()+JOINT_BUDGET_SECONDS)
     if perf_counter()<solve_deadline:
         from backend.app.planning.optimizer import optimize
         try:
@@ -65,28 +68,29 @@ def plan(data, runtime_seconds=30):
     else:
         p,m=[],[];candidate=no
         stages=[SolverStage(name='joint_model',status='time_limit',elapsed_ms=0)]
-    complete=bool(stages) and all(s.status=='optimal' for s in stages) and stages[-1].name=='stable_action_ties'
-    # No incumbent can displace the independently feasible benchmark just on a solver flag.
-    if solver_failure is not None and br.feasible:
-        p,m,candidate=bp,bm,br
+    priorities=[priority for priority in ('must_stock','A','B','C')
+        if any(a.must_stock if priority=='must_stock' else not a.must_stock and a.service_class==priority
+               for a in ctx.assortment.values())]
+    required=[f'{window}_{priority}' for window in ('visible','tail') for priority in priorities]
+    required+=['weekly_buffer_deficit','commitment_movement_holding','stable_action_ties']
+    complete=([s.name for s in stages]==required and
+        all(s.status=='optimal' and (s.gap is None or s.gap==0) for s in stages))
+    if not complete and all(s.status=='optimal' for s in stages):
+        stages.append(SolverStage(name='joint_completion_check',status='incomplete',elapsed_ms=0))
+    # An incomplete incumbent is deliberately not selected: its actions can
+    # depend on solver timing. The benchmark is calculated before the challenger.
+    if not complete or not candidate.feasible:
         complete=False
-        stages.append(SolverStage(name='independent_fallback',status='benchmark',elapsed_ms=0))
-    elif solver_failure is not None and no.feasible:
-        p,m,candidate=[],[],no
-        complete=False
-        stages.append(SolverStage(name='independent_fallback',status='no_new_actions',elapsed_ms=0))
-    elif solver_failure is not None:
-        p,m,candidate=[],[],no
-        complete=False
-        stages.append(SolverStage(name='independent_fallback',status='invalid',elapsed_ms=0))
-    elif not candidate.feasible or (not complete and _score(br,ctx)<_score(candidate,ctx)):
-        p,m,candidate=bp,bm,br
-        complete=False
-        stages.append(SolverStage(name='independent_fallback',status='benchmark' if br.feasible else 'invalid',elapsed_ms=0))
-    if not candidate.feasible and no.feasible:
-        p,m,candidate=[],[],no
-        complete=False
-        stages.append(SolverStage(name='independent_fallback',status='no_new_actions',elapsed_ms=0))
+        if br.feasible and (not no.feasible or _score(br,ctx)[:8]<=_score(no,ctx)[:8]):
+            p,m,candidate=bp,bm,br
+            fallback='benchmark'
+        elif no.feasible:
+            p,m,candidate=[],[],no
+            fallback='no_new_actions'
+        else:
+            p,m,candidate=[],[],no
+            fallback='invalid'
+        stages.append(SolverStage(name='independent_fallback',status=fallback,elapsed_ms=0))
     verified=replay(data,demand,buffers,p,m)
     exceptions=list(ctx.exceptions.values()) if p==bp and m==bm else []
     if solver_failure is not None:
@@ -104,7 +108,7 @@ def plan(data, runtime_seconds=30):
     # Compact ledgers: retain the proposed daily series; comparisons retain totals and service detail.
     status=('feasible' if complete else 'feasible_fallback') if verified.feasible else 'invalid_plan'
     kwargs['payment_through']=max(kwargs['payment_through'],max((x.due_date for x in verified.payments),default=kwargs['payment_through']))
-    return PlanResult(**kwargs,status=status,proposed=PolicyResult(name='Joint staged plan' if complete else 'Validated incumbent / benchmark fallback',purchases=p,movements=m,replay=verified),
+    return PlanResult(**kwargs,status=status,proposed=PolicyResult(name='Joint staged plan' if complete else ('Validated constrained plan' if p==bp and m==bm else 'Validated no-new-action projection'),purchases=p,movements=m,replay=verified),
         benchmark=PolicyResult(name='Constrained order-up-to benchmark',purchases=bp,movements=bm,replay=br),
         no_action=PolicyResult(name='No new actions',purchases=[],movements=[],replay=no),forecasts=trace,stages=stages,
         issues=issues,failures=verified.failures,exceptions=exceptions,elapsed_ms=(perf_counter()-start)*1000)

@@ -1,5 +1,57 @@
 # Build status
 
+## Final Pass 2 product readiness — 17 September 2026
+
+**Revised product gate: passed locally.** Started from clean commit `5494b6ecceeba61f512b2c420bd4cde858782515`. This deliberate user-authorized decision supersedes the historical exact-fixture gate and blocked status below. The MVP requires independently feasible, useful purchasing/allocation/cash actions; default sample zero-gap MILP completion is no longer required. No Pass 3 implementation, push, merge or deployment occurred.
+
+The live joint challenger receives **2.0 seconds** inside the existing **30-second overall request limit**, with at least two seconds reserved from that limit for final replay/serialization. Forecast, deterministic benchmark and benchmark replay precede the challenger. Prior profiling spent approximately 28 seconds on the first objective and returned the same benchmark. Two seconds retains fast hand-model completion and leaves substantial room for full-network forecasts and replay. It is a cooperative solver budget, not a hard process termination guarantee. The live sample target is **under 10 seconds HTTP**, now enforced for both datasets by smoke; CI and hosted timing remain unverified for these edits.
+
+A completed joint plan must report the exact required stage sequence, every stage optimal, no positive reported gap, and pass independent replay. Otherwise the deterministic benchmark is selected only after replay passes and its eight-priority lexicographic service score is no worse than no new actions. Incomplete timing-dependent incumbents are not selected. The safe no-new-action/invalid-plan paths remain available for custom failures but do not satisfy the sample action gate. Solver implementation, zero-gap tolerance, forecasts, horizons, constraints, supplier rules and independent replay are unchanged.
+
+Plan Review says **“Validated constrained plan”** and explains that the deterministic constrained planner supplied the recommendations after the joint optimizer did not complete. API status remains `feasible_fallback`, with no global-optimality claim. Detailed interrupted/fallback stages and existing explanations remain available. The exact optimizer and hand-model tests remain available.
+
+### Final production measurements
+
+Fresh production process on localhost:8011; forecast smoke ran first, populating sample input caches. These are live calculations, not cached plan responses or proof of Vercel cold starts. Both networks retain one DC, four stores, 12 suppliers and the 56-day horizon.
+
+| Dataset/run | SKUs / series / stock rows | HTTP s | Engine ms | Bytes | Purchases / movements | Determinism |
+|---|---|---:|---:|---:|---|---|
+| Fixture first | 10 / 40 / 2,800 | 2.908 | 2,895.0 | 782,590 | 24 / 311 | Reference |
+| Fixture repeat | 10 / 40 / 2,800 | 2.644 | 2,639.5 | 782,591 | 24 / 311 | Exact match |
+| Full first | 60 / 240 / 16,800 | 6.468 | 6,450.7 | 3,747,963 | 31 / 607 | Reference |
+| Full repeat | 60 / 240 / 16,800 | 6.673 | 6,654.3 | 3,747,963 | 31 / 607 | Exact match |
+
+Every run returned **`feasible_fallback`**, with exactly **`visible_must_stock:time_limit` → `independent_fallback:benchmark`**. Every proposed replay was feasible with zero failures. Proposed actions matched benchmark actions; both repeated complete policy results (including stock/cash ledgers, totals and explanations) matched exactly. Run IDs and timing fields are excluded from this comparison.
+
+| Runs | Purchase lines = commitments | Payment ledger = scheduled payments | Minimum commitment / payment / transfer headroom |
+|---|---:|---:|---|
+| Fixture first and repeat | SAR 91,606.00 | SAR 97,746.00 | SAR 0.00 / 14.00 / 120.00 |
+| Full first and repeat | SAR 92,550.00 | SAR 99,050.00 | SAR 40.00 / 5.00 / 120.00 |
+
+All four passed the no-worse-than-no-action lexicographic service comparison, funding limits, full-dimension and 4,500,000-byte response guards. The planning smoke **exited zero**. The full response still approaches the Vercel payload limit; future scenarios must compare frozen/replanned validated policies under identical assumptions and share/reference daily ledgers rather than duplicate them.
+
+### Checks actually executed
+
+| Check | Result |
+|---|---|
+| Complete backend suite | **71 passed in 11.93 s**, two existing TestClient deprecation warnings. Added budget/fallback determinism, false-completion/positive-gap rejection, completed hand-model selection, and smoke-gate corruption checks. |
+| Solver smoke | SciPy 1.18.1; import 0.319 s, cold solve 0.001 s, warm <0.001 s; expected integer result/status. |
+| Contract export, TypeScript generation, committed-contract diff | Passed; no schema/type changes. |
+| Production frontend build | Passed TypeScript/Vite; JS 259.40 kB (79.41 kB gzip), CSS 11.15 kB (3.34 kB gzip), Vite 398 ms. |
+| Full Playwright suite | **8 passed in 21.1 s**, including real API fallback wording, repeat action/explanation equality, dataset changes and existing Pass 1 checks. |
+| Production startup and forecast smoke | Passed; fixture HTTP 0.140 / 0.021 s and full 0.814 / 0.090 s first/repeat. |
+| Production planning smoke | All four validated-plan gates passed; exact measurements above. Earlier run also passed (fixture 2.621 / 2.740 s, full 7.124 / 7.368 s during concurrent local verification). |
+| Python dependency check / frontend dependency tree | No broken Python requirements; frontend tree resolved. |
+| `npm audit --omit=dev` | Zero vulnerabilities. |
+| Compileall / `git diff --check` | Passed. |
+| Docker | Unavailable locally (`command -v docker` returned no executable). Container build/start/smoke remains an outstanding CI check. |
+| Protected implementation diff | Optimizer, benchmark, independent replay and prior GitHub Actions maintenance unchanged. |
+
+No GitHub Actions success is claimed for this uncommitted correction. Earlier successful runs below apply only to their named commits; no public/Vercel hosted planning verification was performed. Next work may begin Pass 3 only when separately requested, preserving identical scenario assumptions, independent replay, provenance, honest fallback labels and the ledger response-size constraint.
+
+## Historical correction evidence
+
+
 ## Focused Pass 2 correction attempt — 17 September 2026
 
 This worktree is **not ready for review as the requested complete correction** because the unchanged 10-SKU fixture still does not finish the first lexicographic stage within the existing budget. The strict fixture smoke assertion remains active and correctly exits nonzero. No solver incumbent is relabeled, no objective or hard constraint is relaxed, and Pass 3 has not started.

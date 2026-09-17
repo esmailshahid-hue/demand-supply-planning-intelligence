@@ -489,3 +489,62 @@ def test_series_without_valid_replenishment_path_is_explicit(dataset):
             offer.valid_to=data.settings.as_of-timedelta(days=1)
     _,_,_,failures=network_forecasts(data,perf_counter()+10)
     assert any(f.code=='no_valid_replenishment_path' and f.sku=='SKU001' and f.location_id=='S1' for f in failures)
+
+
+def test_live_budget_and_deterministic_benchmark_gate(dataset,monkeypatch):
+    from backend.app.planning.engine import plan,JOINT_BUDGET_SECONDS
+    from backend.app.planning.contracts import SolverStage
+    from scripts.planning_smoke import validate_plan,stable_plan
+    def incomplete(ctx,deadline):
+        assert 0<deadline-perf_counter()<=JOINT_BUDGET_SECONDS
+        # Even a valid incumbent cannot replace the deterministic fallback.
+        p,m=benchmark(ctx)
+        return p,m,[SolverStage(name='visible_must_stock',status='time_limit',elapsed_ms=0)]
+    monkeypatch.setattr('backend.app.planning.optimizer.optimize',incomplete)
+    first=plan(dataset).model_dump(mode='json')
+    repeat=plan(dataset).model_dump(mode='json')
+    validate_plan(first)
+    assert stable_plan(first)==stable_plan(repeat)
+    assert first['proposed']['name']=='Validated constrained plan'
+    from copy import deepcopy
+    for corrupt in ('status','stage','actions','replay','cash','money'):
+        bad=deepcopy(first)
+        if corrupt=='status':bad['status']='feasible'
+        if corrupt=='stage':bad['stages'].pop()
+        if corrupt=='actions':bad['proposed']['purchases'][0]['units']+=10
+        if corrupt=='replay':bad['proposed']['replay']['failures']=[{'code':'stock_overallocated'}]
+        if corrupt=='cash':bad['proposed']['replay']['cash'][0]['payment_headroom']=-1
+        if corrupt=='money':bad['proposed']['replay']['summary']['payments']+=1
+        with pytest.raises(AssertionError):validate_plan(bad)
+
+
+def test_completed_small_joint_plan_is_selected(monkeypatch):
+    from backend.app.planning.engine import plan
+    data=hand_data()
+    monkeypatch.setattr('backend.app.planning.engine.network_forecasts',
+        lambda *args:(hand_demand(56),{},[],[]))
+    result=plan(data)
+    assert result.status=='feasible'
+    assert result.stages[-1].name=='stable_action_ties'
+    assert all(s.status=='optimal' for s in result.stages)
+    assert result.proposed.replay.feasible
+    assert result.proposed.name=='Joint staged plan'
+
+
+@pytest.mark.parametrize('defect',['missing_stages','positive_gap'])
+def test_incomplete_optimal_claim_cannot_be_selected(dataset,monkeypatch,defect):
+    from backend.app.planning.engine import plan
+    from backend.app.planning.contracts import SolverStage
+    def false_completion(ctx,deadline):
+        names=[f'{window}_{priority}' for window in ('visible','tail')
+            for priority in ('must_stock','A','B','C')]
+        names+=['weekly_buffer_deficit','commitment_movement_holding','stable_action_ties']
+        if defect=='missing_stages':names=['stable_action_ties']
+        stages=[SolverStage(name=name,status='optimal',gap=.01 if defect=='positive_gap' else 0,elapsed_ms=0)
+                for name in names]
+        p,m=benchmark(ctx)
+        return p,m,stages
+    monkeypatch.setattr('backend.app.planning.optimizer.optimize',false_completion)
+    result=plan(dataset)
+    assert result.status=='feasible_fallback'
+    assert result.stages[-1].status=='benchmark'

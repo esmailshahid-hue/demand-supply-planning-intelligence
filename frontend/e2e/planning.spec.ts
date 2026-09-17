@@ -7,6 +7,11 @@ const response = (page: Page) => page.waitForResponse(r => new URL(r.url()).path
 async function verifyPlan(page: Page, plan: Plan) {
   expect(['feasible', 'feasible_fallback']).toContain(plan.status);
   const proposed = plan.proposed!;
+  if (plan.status === 'feasible_fallback') {
+    await expect(page.getByRole('heading', { name: 'Validated constrained plan', exact: true })).toBeVisible();
+    await expect(page.getByText(/These recommendations come from the deterministic constrained planner/)).toBeVisible();
+    expect(plan.stages.at(-1)?.status).toBe('benchmark');
+  }
   expect(proposed.replay.feasible).toBe(true);
   expect(proposed.replay.failures).toEqual([]);
   await expect(page.getByTestId('plan-result')).toHaveAttribute('data-run-id', plan.run_id);
@@ -45,6 +50,8 @@ test('Plan Review matches live purchases, allocations and cash; recalculation an
   const recalculated: Plan = await (await again).json();
   expect(recalculated.run_id).not.toBe(fixture.run_id);
   expect(recalculated.input_hash).toBe(fixture.input_hash);
+  expect(recalculated.proposed).toEqual(fixture.proposed);
+  expect(recalculated.exceptions).toEqual(fixture.exceptions);
   await verifyPlan(page,recalculated);
   const fullResponse = response(page);
   await page.getByRole('combobox', { name: 'Planning dataset', exact: true }).selectOption('full');
