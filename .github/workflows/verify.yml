@@ -4,33 +4,54 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14'
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-      - run: .venv/bin/python -m pytest -q
-      - run: .venv/bin/python -m scripts.solver_smoke
-      - run: npm ci
+      - name: Install Python dependencies
+        run: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+      - name: Run backend tests
+        run: .venv/bin/python -m pytest -q
+      - name: Run host solver smoke
+        run: .venv/bin/python -m scripts.solver_smoke
+      - name: Install frontend dependencies
+        run: npm ci
         working-directory: frontend
-      - run: .venv/bin/python -m scripts.export_contracts
-      - run: npm run generate:types && npm run build && npx playwright install --with-deps chromium
+      - name: Export API contracts
+        run: .venv/bin/python -m scripts.export_contracts
+      - name: Generate frontend types and build
+        run: npm run generate:types && npm run build
         working-directory: frontend
-      - run: git diff --exit-code -- frontend/src/contracts.generated.ts
-      - run: npm run test:e2e
+      - name: Verify generated contracts are committed
+        run: git diff --exit-code -- frontend/src/contracts.generated.ts
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - run: docker build -t planning-pass1 .
-      - run: docker run -d --name planning-pass1 -p 8000:8000 planning-pass1
-      - run: |
+      - name: Run browser tests
+        run: npm run test:e2e
+        working-directory: frontend
+      - name: Build Docker image
+        run: docker build -t planning-pass1 .
+      - name: Start Docker application
+        run: docker run -d --name planning-pass1 -p 8000:8000 planning-pass1
+      - name: Wait for Docker application
+        run: |
           for attempt in $(seq 1 15); do
             if curl --fail --silent http://127.0.0.1:8000/api/health; then break; fi
             sleep 1
           done
-          .venv/bin/python -m scripts.smoke
-          .venv/bin/python -m scripts.planning_smoke
-          docker exec planning-pass1 python scripts/solver_smoke.py
+          curl --fail --silent http://127.0.0.1:8000/api/health
+      - name: Run production forecast smoke
+        run: .venv/bin/python -m scripts.smoke
+      - name: Run solver smoke inside container
+        run: docker exec planning-pass1 python scripts/solver_smoke.py
+      - name: Run production planning smoke
+        run: .venv/bin/python -m scripts.planning_smoke

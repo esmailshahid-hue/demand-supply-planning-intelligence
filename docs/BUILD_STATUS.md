@@ -1,5 +1,30 @@
 # Build status
 
+## GitHub Actions maintenance — 17 September 2026
+
+Failed GitHub Actions run `35215202230`, job `105181927681`, was inspected through GitHub's public Actions API. It ran commit `bb06db8` on `ubuntu-latest`. Checkout, Python/Node setup, dependency installation, backend tests, host solver smoke, contract generation/diff, frontend build, browser tests, Docker build and Docker startup all succeeded. The final combined smoke step failed because both fixture planning calls returned the independently replayed `feasible_fallback` after `visible_must_stock` reached its time limit. That is the unresolved application-level optimizer gate documented below; the Node 20 annotations did not cause the failure.
+
+Workflow-only maintenance now uses the current Node 24 action lines recommended by the official repositories:
+
+- `actions/checkout@v7` (currently v7.0.1) uses Node 24 internally. Its safer behavior for `pull_request_target` and `workflow_run` does not change this workflow's existing `push` and `pull_request` triggers. The Node 24 action runtime requires Actions Runner **2.327.1 or newer**; the maintained GitHub-hosted `ubuntu-latest` runner satisfies that requirement.
+- `actions/setup-node@v7` (currently v7.0.0) retains `node-version: '24'`, explicit npm caching and `frontend/package-lock.json`. Its ESM/dependency update and cache-output additions require no input changes here; the workflow does not use the removed `always-auth` input.
+- `actions/setup-python@v7` (currently v7.0.0) retains `python-version: '3.14'`. Its ESM/dependency update requires no input changes here; the workflow does not use the removed `pip-install` input.
+
+The workflow now gives forecast smoke, container solver smoke and planning smoke separate named steps. Container readiness has its own final health check. The planning smoke remains last and retains its nonzero exit when the fixture is anything other than `feasible`; full continues to allow `feasible` or `feasible_fallback`. No assertion, test, Docker check, trigger, cache, permission or runtime version was removed or weakened. `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`, warning suppression, `continue-on-error` and Pass 3 changes were not added.
+
+Local maintenance validation is recorded after the workflow edits. No GitHub Actions success is claimed for this worktree; a run for a future committed/pushed correction will be separate evidence. The next application correction must still make fixture first/repeat complete every joint stage through `stable_action_ties` within the existing budget.
+
+| Maintenance check | Actual result |
+|---|---|
+| GitHub public Actions API for run `35215202230`, job `105181927681` | Confirmed `failure` for commit `bb06db8`; steps through Docker startup succeeded and the final combined smoke step failed. The `gh` CLI was unavailable locally, so the public API was used instead. |
+| Official v7 `action.yml` metadata and release notes | Confirmed all three actions declare `using: node24`; existing `node-version`, `python-version`, npm cache and cache lockfile inputs remain supported. Confirmed the minimum Node 24 action runner requirement and reviewed the v7 input changes before selecting the versions. |
+| Ruby YAML parse plus workflow invariant script | Passed. Verified `ubuntu-latest`, push/pull-request triggers, Node 24, Python 3.14, npm cache path, contract diff, backend/browser/Docker checks, three separately named smoke steps, absence of `continue-on-error` and the unchanged planning acceptance policy. |
+| `.venv/bin/python -m py_compile scripts/planning_smoke.py` | Passed; the fixture/full acceptance assertions remain executable. |
+| `.venv/bin/python -m pytest -q` | **62 passed in 9.06 s**; two unchanged upstream TestClient deprecation warnings. |
+| Contract export, generated TypeScript comparison | Passed; no generated contract diff. |
+| `npm --prefix frontend run build` | Passed: **259.25 kB JS / 79.38 kB gzip**, **11.15 kB CSS / 3.34 kB gzip**, Vite build **388 ms**. |
+| `git diff --check` | Passed. |
+
 ## Narrow Pass 2 correction — 17 September 2026
 
 This correction remains **blocked at the fixture joint-optimizer exit gate** and is not ready for review or commit. The default 10-SKU fixture still reaches the 30-second planning budget in `visible_must_stock` with an open MIP gap and correctly returns `feasible_fallback`; it does not complete through `stable_action_ties`. No incomplete incumbent is labeled optimal, no hard constraint or horizon was relaxed, and Pass 3 has not started.
@@ -14,7 +39,7 @@ Implemented and locally covered in the current worktree:
 
 Measured optimizer blocker: repeated profiles show forecasting/context/benchmark construction completes in under one second, while HiGHS spends the remaining approximately 27 seconds on the first fixture service objective. Formulation experiments reduced variables and found feasible incumbents, but exact optimality proof and the remaining ordered objectives still exceeded the unchanged budget. Unsafe service relaxations and incomplete certificates were discarded; `backend/app/planning/optimizer.py` remains at the original Pass 2 implementation.
 
-GitHub Actions run `35201527675` succeeded on Ubuntu for original Pass 2 commit `6c587cc`. It completed **56 backend tests**, solver smoke, frontend production build, browser tests, Docker build/start, forecast smoke, fixture/full planning smoke and solver smoke inside the container. This does not verify the current correction, whose CI remains pending until a corrected commit is pushed. It also does not verify a public host or Vercel-hosted planning runtime.
+GitHub Actions run `35201527675` succeeded on Ubuntu for original Pass 2 commit `6c587cc`. It completed **56 backend tests**, solver smoke, frontend production build, browser tests, Docker build/start, forecast smoke, fixture/full planning smoke and solver smoke inside the container. Later run `35215202230` for correction commit `bb06db8` failed only at the intentionally stricter fixture planning gate described above. Neither run verifies a public host or Vercel-hosted planning runtime.
 
 Local correction checks executed so far:
 
