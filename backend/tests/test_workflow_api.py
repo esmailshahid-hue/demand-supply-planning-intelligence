@@ -1,7 +1,10 @@
+import pytest
 from fastapi.testclient import TestClient
 from backend.app.main import app,sample
+from backend.app.data.accepted import read_snapshot
 from backend.app.data.workbook import template
 from backend.app.data.storage import store
+from backend.app.data import workflow_api
 
 
 def upload(client,size):
@@ -9,6 +12,14 @@ def upload(client,size):
         'X-Server-Processing':'confirmed','X-Filename':size+'.xlsx'})
     assert response.status_code==200,response.text
     return response.json()['reference']['object_id']
+
+
+def expected_provenance(size,source='uploaded'):
+    data=sample(size)[0]
+    return {'source':source,'sample_size':size if source.startswith('bundled_') else None,
+        'dataset_id':data.dataset_id,'dataset_hash':workflow_api.dataset_hash(data),
+        'dimensions':{'products':len(data.products),'locations':len(data.locations),
+            'assortment':len(data.assortment),'history_rows':len(data.demand_history)}}
 
 
 def test_upload_same_plan_private_session_stale_export_and_cleanup():
@@ -120,3 +131,92 @@ def test_missing_private_reference_fails_clearly():
         response=client.post('/api/plan/sample',headers={'X-Dataset-Ref':'x'*43},json={'size':'fixture'})
         assert response.status_code==404
         assert 'unavailable' in response.json()['message'].lower()
+
+
+@pytest.mark.parametrize('size,client_size',[('fixture','full'),('full','fixture')])
+def test_uploaded_provenance_survives_regeneration_acceptance_and_portable_reopen(size,client_size):
+    with TestClient(app) as client:
+        client.get('/api/workflow/session')
+        reference=upload(client,size);headers={'X-Dataset-Ref':reference}
+        expected=expected_provenance(size)
+        planned=client.post('/api/plan/sample',headers=headers,json={'size':client_size})
+        assert planned.status_code==200,planned.text
+        planned=planned.json();assert planned['provenance']==expected
+        assert planned['status'] in ('feasible','feasible_fallback') and planned['proposed']['replay']['feasible']
+        review=client.get('/api/workflow/review/'+planned['review_id']).json()
+        action=planned['proposed']['purchases'][0]
+        changed=client.post('/api/workflow/review/'+review['reference']+'/decision',json={
+            'revision':review['revision'],'action_id':action['action_id'],'status':'accepted'})
+        assert changed.status_code==200,changed.text
+        changed=changed.json();assert changed['state']=='stale' and changed['provenance']==expected
+        regenerated=client.post('/api/workflow/review/'+changed['reference']+'/regenerate',json={'revision':changed['revision']})
+        assert regenerated.status_code==200,regenerated.text
+        regenerated=regenerated.json();assert regenerated['state']=='draft' and regenerated['provenance']==expected
+        regenerated_plan=client.get('/api/workflow/review/'+regenerated['reference']+'/plan').json()
+        assert regenerated_plan['provenance']==expected
+        assert regenerated_plan['status'] in ('feasible','feasible_fallback') and regenerated_plan['proposed']['replay']['feasible']
+        trace=regenerated_plan['forecasts'][0]
+        evidence=client.post('/api/workflow/review/'+regenerated['reference']+'/detail',json={
+            'sku':trace['sku'],'location_id':trace['location_id'],'action_id':action['action_id']})
+        assert evidence.status_code==200,evidence.text
+        assert evidence.json()['provenance']==expected
+        accepted=client.post('/api/workflow/review/'+regenerated['reference']+'/accept',json={
+            'revision':regenerated['revision'],'acknowledge_shortfalls':True})
+        assert accepted.status_code==200,accepted.text
+        accepted=accepted.json();assert accepted['state']=='accepted' and accepted['provenance']==expected
+        portable=client.get('/api/workflow/review/'+accepted['reference']+'/download/snapshot')
+        again=client.get('/api/workflow/review/'+accepted['reference']+'/download/snapshot')
+        assert portable.status_code==200 and portable.content==again.content
+        snapshot=read_snapshot(portable.content)
+        assert snapshot.draft.result.provenance.model_dump(mode='json')==expected
+        reopened=client.put('/api/workflow/snapshot',content=portable.content,headers={'X-Server-Processing':'confirmed'})
+        assert reopened.status_code==200,reopened.text
+        reopened=reopened.json();portable_source={**expected,'source':'portable','sample_size':None}
+        assert reopened['state']=='read_only' and reopened['provenance']==portable_source
+        reopened_plan=client.get('/api/workflow/review/'+reopened['reference']+'/plan').json()
+        assert reopened_plan['provenance']==portable_source
+
+
+@pytest.mark.parametrize('size,source',[('fixture','bundled_fixture'),('full','bundled_full')])
+def test_bundled_provenance_survives_regeneration_and_acceptance(size,source):
+    with TestClient(app) as client:
+        client.get('/api/workflow/session')
+        planned=client.post('/api/plan/sample',json={'size':size}).json()
+        expected=expected_provenance(size,source);assert planned['provenance']==expected
+        review=client.get('/api/workflow/review/'+planned['review_id']).json()
+        action=planned['proposed']['purchases'][0]
+        changed=client.post('/api/workflow/review/'+review['reference']+'/decision',json={
+            'revision':review['revision'],'action_id':action['action_id'],'status':'accepted'}).json()
+        regenerated=client.post('/api/workflow/review/'+changed['reference']+'/regenerate',json={'revision':changed['revision']})
+        assert regenerated.status_code==200,regenerated.text
+        regenerated=regenerated.json();assert regenerated['provenance']==expected
+        plan=client.get('/api/workflow/review/'+regenerated['reference']+'/plan').json()
+        assert plan['provenance']==expected
+        accepted=client.post('/api/workflow/review/'+regenerated['reference']+'/accept',json={
+            'revision':regenerated['revision'],'acknowledge_shortfalls':True})
+        assert accepted.status_code==200,accepted.text
+        accepted=accepted.json();assert accepted['provenance']==expected
+        snapshot=read_snapshot(client.get('/api/workflow/review/'+accepted['reference']+'/download/snapshot').content)
+        assert snapshot.draft.result.provenance.model_dump(mode='json')==expected
+
+
+@pytest.mark.parametrize('corruption',['missing','mismatched'])
+def test_final_acceptance_rejects_missing_or_mismatched_provenance(monkeypatch,corruption):
+    with TestClient(app) as client:
+        client.get('/api/workflow/session')
+        reference=upload(client,'fixture');headers={'X-Dataset-Ref':reference}
+        planned=client.post('/api/plan/sample',headers=headers,json={'size':'full'}).json()
+        real=workflow_api.draft_for
+        def corrupted(request,reference):
+            record,draft,data,context=real(request,reference)
+            value=None if corruption=='missing' else context.model_copy(update={'source':'portable'})
+            draft.result=draft.result.model_copy(update={'provenance':value})
+            return record,draft,data,context
+        monkeypatch.setattr(workflow_api,'draft_for',corrupted)
+        response=client.post('/api/workflow/review/'+planned['review_id']+'/accept',json={
+            'revision':client.get('/api/workflow/review/'+planned['review_id']).json()['revision'],
+            'acknowledge_shortfalls':True})
+        assert response.status_code==409,response.text
+        assert response.json()['failures']==[{'code':'stale_provenance','message':
+            'Plan provenance does not match the current dataset. Regenerate the plan against the current dataset before final acceptance.',
+            'sku':None,'location_id':None,'supplier_id':None,'day':None,'action_id':None}]

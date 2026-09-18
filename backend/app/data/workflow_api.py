@@ -10,7 +10,7 @@ from backend.app.contracts import Contract, Dataset, DatasetProvenance, SampleCa
 from backend.app.data.storage import store, configuration, TOKEN, ObjectReference, ObjectUnavailable
 from backend.app.data.workbook import template, parse, WorkbookError, WorkbookIssue, MAX_FILE, MIME
 from backend.app.data.accepted import create_snapshot, snapshot_bytes, read_snapshot, export_workbook
-from backend.app.planning.contracts import PlanResult
+from backend.app.planning.contracts import PlanResult, Failure
 from backend.app.planning.review import Draft, ReviewConflict, new_draft, decide, regenerate, accept
 from backend.app.scenarios.engine import dataset_hash, provenance
 from backend.app.scenarios.contracts import ScenarioRequest, DetailRequest, Actions, ScenarioDetail
@@ -142,6 +142,19 @@ def view(reference,draft,measurements=None):
         provenance=draft.result.provenance.model_dump(mode='json') if draft.result.provenance else None)
 
 
+def attach_provenance(draft, context):
+    """Bind a fresh calculation to the authoritative stored dataset context."""
+    draft.result=draft.result.model_copy(update={'provenance':context})
+    return draft
+
+
+def require_provenance(draft, context):
+    """Block acceptance when calculation lineage is absent or no longer current."""
+    if draft.result.provenance!=context:
+        raise ReviewConflict([Failure(code='stale_provenance',
+            message='Plan provenance does not match the current dataset. Regenerate the plan against the current dataset before final acceptance.')])
+
+
 def draft_for(request,reference):
     available();record=load(request,reference,'draft');draft=Draft.model_validate(record['draft'])
     if 'snapshot' in record:
@@ -257,8 +270,8 @@ def guarded(function):
 def rerun(reference:str,body:RevisionRequest,request:Request):
     def calculate():
         with store.lock:
-            record,draft,data,_=draft_for(request,reference)
-            next_draft=regenerate(draft,data,body.revision)
+            record,draft,data,context=draft_for(request,reference)
+            next_draft=attach_provenance(regenerate(draft,data,body.revision),context)
             ref=save_draft(request,reference,record,next_draft)
             return view(ref,next_draft)
     return guarded(calculate)
@@ -268,8 +281,10 @@ def rerun(reference:str,body:RevisionRequest,request:Request):
 def final_accept(reference:str,body:RevisionRequest,request:Request):
     def calculate():
         with store.lock:
-            record,draft,data,_=draft_for(request,reference)
+            record,draft,data,context=draft_for(request,reference)
+            require_provenance(draft,context)
             accepted,_,versions=accept(draft,data,body.revision,body.acknowledge_shortfalls)
+            require_provenance(accepted,context)
             try: snapshot=create_snapshot(data,accepted,versions)
             except ValueError as error: raise HTTPException(422,str(error)) from error
             binary,raw_size=snapshot_bytes(snapshot);workbook=export_workbook(snapshot)
