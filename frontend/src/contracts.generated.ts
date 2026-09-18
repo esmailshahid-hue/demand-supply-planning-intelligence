@@ -285,6 +285,8 @@ export interface components {
             as_of: string;
             /** Suppliers */
             suppliers: string[];
+            /** Supplier Options */
+            supplier_options: components["schemas"]["SupplierOption"][];
             /** Categories */
             categories: string[];
             /** Existing Orders */
@@ -522,6 +524,24 @@ export interface components {
              * Format: date-time
              */
             known_at: string;
+        };
+        /** EvidenceTarget */
+        EvidenceTarget: {
+            /** Action Id */
+            action_id: string;
+            /** Sku */
+            sku: string;
+            /** Location Id */
+            location_id?: string | null;
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "earliest_shortage" | "greatest_replenishment_need" | "no_store_association";
+            /** Shortage Date */
+            shortage_date?: string | null;
+            /** Affected Units */
+            affected_units?: number | null;
         };
         /** Failure */
         Failure: {
@@ -923,6 +943,11 @@ export interface components {
              * @default []
              */
             stages: components["schemas"]["SolverStage"][];
+            /**
+             * Evidence Targets
+             * @default []
+             */
+            evidence_targets: components["schemas"]["EvidenceTarget"][];
         };
         /** Payable */
         Payable: {
@@ -1037,6 +1062,8 @@ export interface components {
              * @default []
              */
             assumptions: string[];
+            /** Challenger Budget Seconds */
+            challenger_budget_seconds: number;
             /** Elapsed Ms */
             elapsed_ms: number;
         };
@@ -1058,6 +1085,11 @@ export interface components {
             /** Movements */
             movements: components["schemas"]["Movement"][];
             replay: components["schemas"]["Replay"];
+            /**
+             * Evidence Targets
+             * @default []
+             */
+            evidence_targets: components["schemas"]["EvidenceTarget"][];
         };
         /** Product */
         Product: {
@@ -1548,6 +1580,17 @@ export interface components {
             deposit_fraction: number;
             /** Balance Days After Receipt */
             balance_days_after_receipt: number;
+        };
+        /** SupplierOption */
+        SupplierOption: {
+            /** Supplier Id */
+            supplier_id: string;
+            /** Name */
+            name: string;
+            /** Existing Order Ids */
+            existing_order_ids: string[];
+            /** Future Paths */
+            future_paths: boolean;
         };
         /** TransferLane */
         TransferLane: {

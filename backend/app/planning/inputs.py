@@ -93,17 +93,23 @@ def network_forecasts(data, deadline):
     rows = defaultdict(list)
     for r in data.demand_history:
         rows[r.sku,r.location_id].append(r)
+    offers = defaultdict(list)
+    for offer in data.supplier_offers:
+        offers[offer.sku].append(offer)
+    direct_lanes = defaultdict(list)
+    dcs = {location.location_id for location in data.locations if location.kind == 'dc'}
+    for lane in data.transfer_lanes:
+        if lane.source in dcs:
+            direct_lanes[lane.destination].append(lane)
     demand, buffers, trace, failures = {}, {}, [], []
     for a in sorted(data.assortment,key=lambda a:(a.sku,a.location_id)):
         key = a.sku,a.location_id
         # The declared protection_days remains a floor. Review + worst eligible supplier
         # replenishment path to this store (including calendar wait) determines evidence.
         days = data.settings.protection_days
-        direct = [l for l in data.transfer_lanes if l.destination==a.location_id and any(x.kind=='dc' and x.location_id==l.source for x in data.locations) and a.sku in l.allowed_skus]
+        direct = [lane for lane in direct_lanes[a.location_id] if a.sku in lane.allowed_skus]
         valid_paths = []
-        for o in data.supplier_offers:
-            if o.sku!=a.sku:
-                continue
+        for o in offers[a.sku]:
             for lane in direct:
                 for i in range(7):
                     origin=data.settings.as_of+timedelta(days=i)

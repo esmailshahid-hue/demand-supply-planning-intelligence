@@ -57,6 +57,8 @@ jobs:
         id: planning_smoke
         run: .venv/bin/python -m scripts.planning_smoke
       - name: Run production scenario smoke
+        id: scenario_smoke
+        if: ${{ !cancelled() }}
         run: .venv/bin/python -m scripts.scenario_smoke
       - name: Profile planning components inside container
         if: ${{ !cancelled() && (steps.planning_smoke.outcome == 'success' || steps.planning_smoke.outcome == 'failure') }}

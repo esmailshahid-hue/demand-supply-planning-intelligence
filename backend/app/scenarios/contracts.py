@@ -3,7 +3,7 @@ from datetime import date
 from typing import Literal
 from pydantic import Field
 from backend.app.contracts import Contract, ForecastResult, NonNegative, BufferEvidence
-from backend.app.planning.contracts import Purchase, Movement, Summary, CashWeek, Failure, Service, StockDay, Payment, ForecastTrace, SolverStage
+from backend.app.planning.contracts import Purchase, Movement, Summary, CashWeek, Failure, Service, StockDay, Payment, ForecastTrace, SolverStage, EvidenceTarget
 
 class Uplift(Contract):
     scope: Literal['sku','category','store']
@@ -57,6 +57,7 @@ class Outcome(Actions):
     shortages: list[Service]
     explanations: list[Failure] = []
     stages: list[SolverStage] = []
+    evidence_targets: list[EvidenceTarget] = []
 
 class ActionChange(Contract):
     kind: Literal['purchase','movement']
@@ -89,10 +90,18 @@ class BaselineResult(Contract):
     original: Outcome
     as_of: date
     suppliers: list[str]
+    supplier_options: list['SupplierOption']
     categories: list[str]
     existing_orders: list[dict[str,str]]
     weeks: list[Funding]
     elapsed_ms: float
+
+
+class SupplierOption(Contract):
+    supplier_id: str
+    name: str
+    existing_order_ids: list[str]
+    future_paths: bool
 
 class DetailRequest(ScenarioRequest):
     policy: Literal['original','frozen','replanned']

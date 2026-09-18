@@ -5,9 +5,12 @@ async function run(page:Page){const pending=wait(page,'/api/scenarios/compare');
 test('sample action evidence, actual forecast, three presets, combined scenario and exact reset',async({page})=>{
   test.setTimeout(180_000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await expect(page.getByTestId('forecast-result')).toBeVisible();
-  const planning=wait(page,'/api/plan/sample');await page.getByRole('button',{name:/Plan Review/}).click();await planning;
-  await page.getByTestId('purchase-table').locator('summary').first().click();
-  const detailResponse=wait(page,'/api/scenarios/detail');await page.getByRole('button',{name:'Inspect purchase and forecast'}).first().click();const detail=await(await detailResponse).json();
+  const planning=wait(page,'/api/plan/sample');await page.getByRole('button',{name:/Plan Review/}).click();const plan=await(await planning).json();
+  const nonS1=plan.proposed.evidence_targets.find((target:{location_id:string|null})=>target.location_id&&target.location_id!=='S1');expect(nonS1).toBeTruthy();
+  const purchaseIndex=plan.proposed.purchases.findIndex((purchase:{action_id:string})=>purchase.action_id===nonS1.action_id);expect(purchaseIndex).toBeGreaterThanOrEqual(0);
+  const purchaseRow=page.getByTestId('purchase-table').locator('tbody tr').nth(purchaseIndex);await purchaseRow.locator('summary').click();
+  const inspectPurchase=purchaseRow.getByRole('button',{name:'Inspect purchase and forecast'});await expect(inspectPurchase).toHaveAttribute('data-evidence-location',nonS1.location_id);
+  const detailResponse=wait(page,'/api/scenarios/detail');await inspectPurchase.click();const detail=await(await detailResponse).json();expect(detail.forecast.location_id).toBe(nonS1.location_id);
   await expect(page.getByRole('heading',{name:'SKU payments and grouped movement fees'})).toBeVisible();
   expect(detail.stock.length).toBe(280);expect(detail.feasible).toBe(true);
   await page.getByRole('button',{name:'Open this forecast in Demand Review'}).click();
@@ -19,16 +22,27 @@ test('sample action evidence, actual forecast, three presets, combined scenario 
   // New controls hide the comparison and explicitly mark the draft dirty.
   await page.getByLabel('Uplift percent',{exact:true}).fill('35');await expect(page.getByText(/Controls changed —/)).toBeVisible();await expect(page.getByTestId('scenario-results')).toHaveAttribute('data-scenario-hash','baseline');
   await page.getByRole('button',{name:'Reset to baseline'}).click();
-  await page.getByRole('button',{name:'Supplier disruption',exact:true}).click();result=await run(page);
+  await page.getByRole('button',{name:'Supplier disruption',exact:true}).click();
+  const supplier=base.supplier_options.find((option:{existing_order_ids:string[];future_paths:boolean})=>option.existing_order_ids.length&&option.future_paths);expect(supplier).toBeTruthy();
+  await expect(page.getByTestId('supplier-preset-summary')).toContainText(`${supplier.supplier_id} · ${supplier.name}`);
+  await expect(page.getByLabel('Delayed supplier')).toHaveValue(supplier.supplier_id);await expect(page.getByLabel('Capacity supplier')).toHaveValue(supplier.supplier_id);
+  const alternate=base.suppliers.find((id:string)=>id!==supplier.supplier_id);await page.getByLabel('Capacity supplier').selectOption(alternate);await expect(page.getByLabel('Delayed supplier')).toHaveValue(supplier.supplier_id);await page.getByLabel('Capacity supplier').selectOption(supplier.supplier_id);
+  result=await run(page);expect(result.definition.delays[0].supplier_id).toBe(supplier.supplier_id);expect(result.definition.availability[0].supplier_id).toBe(supplier.supplier_id);
   expect(result.definition.delays.length).toBeGreaterThan(0);expect(result.frozen.feasible).toBe(false);expect(result.frozen.summary).toBeNull();
   await expect(page.getByText(/supplier_capacity/).first()).toBeVisible();
   await page.getByRole('button',{name:'Reset to baseline'}).click();await page.getByRole('button',{name:'Tighter funds',exact:true}).click();result=await run(page);expect(result.frozen.feasible).toBe(false);expect(result.replanned.feasible).toBe(true);
   await page.getByRole('button',{name:'Promotion',exact:true}).click();await page.getByRole('button',{name:'Supplier disruption',exact:true}).click();result=await run(page);
   expect(result.definition.funding.length).toBeGreaterThan(0);expect(result.definition.uplifts.length).toBeGreaterThan(0);expect(result.replanned.feasible).toBe(true);
   await page.getByText('Purchases, movements and forecast inspection · replanned',{exact:true}).click();
-  const scoped=wait(page,'/api/scenarios/detail');await page.getByRole('button',{name:'Inspect action',exact:true}).last().click();const d=await(await scoped).json();expect(d.assumptions_hash).toBe(result.scenario_hash);expect(d.cash).toEqual(result.replanned.cash);
+  const replannedTarget=result.replanned.evidence_targets.find((target:{location_id:string|null})=>target.location_id);const replannedMovement=result.replanned.movements[0];
+  const replannedAction=replannedTarget?.action_id||replannedMovement?.action_id;const replannedLocation=replannedTarget?.location_id||replannedMovement?.destination;expect(replannedAction).toBeTruthy();expect(replannedLocation).toBeTruthy();
+  const replannedRow=page.getByRole('row').filter({hasText:replannedAction});const replannedButton=replannedRow.getByRole('button',{name:'Inspect action'});await expect(replannedButton).toHaveAttribute('data-evidence-location',replannedLocation);
+  const scoped=wait(page,'/api/scenarios/detail');await replannedButton.click();const d=await(await scoped).json();expect(d.policy).toBe('replanned');expect(d.forecast.location_id).toBe(replannedLocation);expect(d.assumptions_hash).toBe(result.scenario_hash);expect(d.cash).toEqual(result.replanned.cash);
+  await page.getByRole('button',{name:'Close evidence'}).click();expect(result.frozen.evidence_targets).toEqual([]);
   await page.getByRole('button',{name:'Reset to baseline'}).click();await expect(page.getByTestId('scenario-results')).toHaveAttribute('data-scenario-hash','baseline');await expect(page.getByText('Original baseline restored.',{exact:false})).toBeVisible();
   const noop=await run(page);expect(noop.frozen.summary).toEqual(base.original.summary);expect(noop.replanned.summary).toEqual(base.original.summary);
+  await page.getByText('Purchases, movements and forecast inspection · frozen',{exact:true}).click();const noopFrozenTarget=noop.frozen.evidence_targets.find((target:{location_id:string|null})=>target.location_id);expect(noopFrozenTarget).toBeTruthy();
+  const noopFrozenButton=page.getByRole('row').filter({hasText:noopFrozenTarget.action_id}).getByRole('button',{name:'Inspect action'}).first();const noopFrozenDetail=wait(page,'/api/scenarios/detail');await noopFrozenButton.click();const noopFrozen=await(await noopFrozenDetail).json();expect(noopFrozen.policy).toBe('frozen');expect(noopFrozen.forecast.location_id).toBe(noopFrozenTarget.location_id);
   expect(errors).toEqual([]);
 });
 

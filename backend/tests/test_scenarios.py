@@ -7,6 +7,7 @@ from backend.app.main import app
 from backend.tests.test_planning import hand_data,hand_demand
 from backend.app.contracts import OpenOrder,Payable
 from backend.app.planning.inputs import Inputs
+from backend.app.planning.evidence import purchase_evidence_targets
 from backend.app.scenarios.contracts import *
 from backend.app.scenarios.engine import *
 
@@ -37,6 +38,13 @@ def test_delay_preserves_decisions_moves_balance_and_suppresses_impossible_servi
     assert r.frozen.assumptions_hash==r.replanned.assumptions_hash
     assert data.model_dump_json()==before and base.model_dump_json()==actions
     assert r.replanned.feasible
+    changed,normalized,_=transform(data,definition)
+    frozen=frozen_actions(changed,normalized,Actions(purchases=base.purchases,movements=base.movements))
+    frozen_ledger=replay(changed,hand_demand(56),{},frozen.purchases,frozen.movements)
+    replanned_actions=Actions(purchases=r.replanned.purchases,movements=r.replanned.movements)
+    replanned_ledger=replay(changed,hand_demand(56),{},replanned_actions.purchases,replanned_actions.movements)
+    assert r.frozen.evidence_targets==[]
+    assert r.replanned.evidence_targets==purchase_evidence_targets(changed,replanned_ledger,replanned_actions.purchases)
 
 
 def test_existing_delay_uses_calendar_and_leaves_fixed_payables_once(hand):
@@ -134,6 +142,26 @@ def test_real_noop_repeat_reset_and_snapshot_integrity(real_baseline):
     assert len(first.model_dump_json().encode())<4_500_000 and '"stock":' not in first.model_dump_json()
     bad=base.baseline.model_copy(deep=True);bad.purchases[0].units+=10
     with pytest.raises(ValueError,match='checksum'):compare(data,ScenarioRequest(baseline=bad))
+
+
+def test_supplier_preset_metadata_identifies_one_usable_supplier(real_baseline):
+    _,base=real_baseline
+    supplier=next(option for option in base.supplier_options if option.existing_order_ids and option.future_paths)
+    assert supplier.name and supplier.supplier_id
+    assert all(order['supplier']==supplier.supplier_id for order in base.existing_orders if order['id'] in supplier.existing_order_ids)
+    assert supplier.supplier_id in base.suppliers
+
+
+def test_feasible_frozen_evidence_uses_frozen_policy_replay(real_baseline):
+    data,base=real_baseline;s=data.settings.as_of
+    definition=ScenarioDefinition(availability=[Availability(supplier_id='SUP01',start=s,end=s+timedelta(days=55),remaining_fraction=1)])
+    result=compare(data,ScenarioRequest(baseline=base.baseline,scenario=definition))
+    assert result.frozen.feasible
+    changed,normalized,_=transform(data,definition)
+    actions=frozen_actions(changed,normalized,Actions(purchases=base.baseline.purchases,movements=base.baseline.movements))
+    prepared=adjust_forecasts(changed,normalized,network_forecasts(data,perf_counter()+30))
+    ledger=replay(changed,*prepared[:2],actions.purchases,actions.movements)
+    assert result.frozen.evidence_targets==purchase_evidence_targets(changed,ledger,actions.purchases)
 
 
 def test_compact_detail_matches_comparison_forecast_cash_and_policy(real_baseline):

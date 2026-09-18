@@ -6,6 +6,7 @@ from backend.app.contracts import Dataset, OpenTransfer, Payable, OpenOrder
 from backend.app.planning.contracts import Movement
 from backend.app.planning.inputs import Inputs, planning_input_failures
 from backend.app.planning.benchmark import benchmark
+from backend.app.planning.evidence import purchase_evidence_targets
 from backend.app.planning.optimizer import optimize
 from backend.app.simulation.replay import replay
 
@@ -27,6 +28,45 @@ def hand_data():
 
 def hand_demand(h=7):
     return {('X','A'):[10.]*7+[0.]*(h-7),('X','B'):[5.]*7+[0.]*(h-7)}
+
+
+def evidence_case(demand, buffers=None):
+    data=hand_data()
+    for row in data.inventory:
+        row.on_hand=0
+    ctx=Inputs(data,demand,buffers or {})
+    purchase=ctx.purchase(data.supplier_offers[0],0,10)
+    ledger=replay(data,demand,buffers or {},[purchase])
+    assert ledger.feasible
+    return purchase_evidence_targets(data,ledger,[purchase])[0]
+
+
+def test_purchase_evidence_prefers_earliest_reachable_shortage_not_s1():
+    demand={('X','A'):[0,0,0,0,10]+[0]*51,('X','B'):[0,0,0,20]+[0]*52}
+    target=evidence_case(demand)
+    assert target.location_id=='B' and target.basis=='earliest_shortage'
+    assert target.shortage_date==date(2026,9,17) and target.affected_units==20
+
+
+def test_purchase_evidence_uses_shortage_size_then_location_for_deterministic_ties():
+    demand={('X','A'):[0,0,0,10]+[0]*52,('X','B'):[0,0,0,20]+[0]*52}
+    assert evidence_case(demand).location_id=='B'
+    demand['X','A'][3]=20
+    assert evidence_case(demand).location_id=='A'
+
+
+def test_purchase_evidence_uses_need_or_withholds_unsupported_store():
+    empty={('X','A'):[0]*56,('X','B'):[0]*56}
+    need=evidence_case(empty,{('X','A'):30,('X','B'):10})
+    assert need.location_id=='A' and need.basis=='greatest_replenishment_need'
+    missing=evidence_case(empty)
+    assert missing.location_id is None and missing.basis=='no_store_association'
+
+
+def test_size_aware_joint_budget_preserves_fixture_challenger():
+    from backend.app.planning.engine import joint_budget_seconds,JOINT_BUDGET_SECONDS,FULL_SAMPLE_JOINT_BUDGET_SECONDS
+    assert joint_budget_seconds(40)==JOINT_BUDGET_SECONDS==2
+    assert joint_budget_seconds(240)==FULL_SAMPLE_JOINT_BUDGET_SECONDS==0
 
 
 def test_exact_three_hand_alternatives():

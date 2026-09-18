@@ -6,9 +6,10 @@ from math import floor
 from time import perf_counter
 from backend.app.planning.engine import plan
 from backend.app.planning.inputs import Inputs, network_forecasts
+from backend.app.planning.evidence import purchase_evidence_targets
 from backend.app.simulation.replay import replay
 from backend.app.forecasting.engine import forecast
-from backend.app.scenarios.contracts import (Actions, BaselineSnapshot, Outcome, BaselineResult, Funding, ActionChange, ScenarioResult, Adjustment, ScenarioDetail)
+from backend.app.scenarios.contracts import (Actions, BaselineSnapshot, Outcome, BaselineResult, Funding, ActionChange, ScenarioResult, Adjustment, ScenarioDetail, SupplierOption)
 
 
 def digest(value):
@@ -148,12 +149,13 @@ def frozen_actions(data,definition,actions):
     return result
 
 
-def outcome(policy,hash_,actions,ledger,status,failures=(),explanations=(),stages=()):
+def outcome(policy,hash_,actions,ledger,status,data,failures=(),explanations=(),stages=()):
     failures=list(failures)+ledger.failures
     feasible=ledger.feasible and not failures
     return Outcome(policy=policy,assumptions_hash=hash_,action_hash=digest(actions),**actions.model_dump(),feasible=feasible,
         status=status if feasible else 'invalid_plan',summary=ledger.summary if feasible else None,cash=ledger.cash,
-        failures=failures,shortages=[s for s in ledger.service if s.unmet+s.tail_unmet>0] if feasible else [],explanations=list(explanations),stages=list(stages))
+        failures=failures,shortages=[s for s in ledger.service if s.unmet+s.tail_unmet>0] if feasible else [],explanations=list(explanations),stages=list(stages),
+        evidence_targets=purchase_evidence_targets(data,ledger,actions.purchases) if feasible else [])
 
 
 def capture(data,request):
@@ -168,15 +170,24 @@ def capture(data,request):
     return baseline_result(request.size,data,result,started)
 
 
-def baseline_result(size,data,result=None,started=None):
+def baseline_result(size,data,result=None,started=None,validated_issues=None):
     started=perf_counter() if started is None else started
-    result=plan(data) if result is None else result
+    result=plan(data,validated_issues=validated_issues) if result is None else result
     if not result.proposed or not result.proposed.replay.feasible:raise ValueError('Sample baseline is not independently feasible.')
     base=snapshot(size,data,actions_of(result.proposed))
     # Baseline identifier is the immutable original assumption/action version.
-    original=outcome('original',base.dataset_hash,actions_of(result.proposed),result.proposed.replay,result.status,explanations=result.exceptions,stages=result.stages)
+    original=outcome('original',base.dataset_hash,actions_of(result.proposed),result.proposed.replay,result.status,data,explanations=result.exceptions,stages=result.stages)
+    orders=[o for o in data.open_orders if o.status!='received']
+    supplier_options=[]
+    for supplier in sorted(data.suppliers,key=lambda row:row.supplier_id):
+        existing=sorted(o.external_id for o in orders if o.supplier_id==supplier.supplier_id)
+        future=any(o.supplier_id==supplier.supplier_id for o in data.supplier_offers) and any(
+            row.supplier_id==supplier.supplier_id and data.settings.as_of<=row.dispatch_date<=data.settings.as_of+timedelta(days=55)
+            for row in data.supplier_capacity)
+        supplier_options.append(SupplierOption(supplier_id=supplier.supplier_id,name=supplier.name,
+            existing_order_ids=existing,future_paths=future))
     return BaselineResult(baseline=base,original=original,as_of=data.settings.as_of,suppliers=[s.supplier_id for s in data.suppliers],
-        categories=sorted({p.category for p in data.products}),existing_orders=[{'id':o.external_id,'supplier':o.supplier_id,'arrival':str(o.arrival_date)} for o in data.open_orders if o.status!='received'],
+        supplier_options=supplier_options,categories=sorted({p.category for p in data.products}),existing_orders=[{'id':o.external_id,'supplier':o.supplier_id,'arrival':str(o.arrival_date)} for o in orders],
         weeks=[Funding(week_start=b.week_start,commitment=b.new_commitment_cap,payment=b.payment_ceiling) for b in data.budgets],elapsed_ms=(perf_counter()-started)*1000)
 
 
@@ -218,16 +229,16 @@ def forecast_versions(prepared):
 def compare(data,request):
     start=perf_counter();changed,definition,changes,base_forecasts,scenario_forecasts,hash_=prepare(data,request)
     original_actions=Actions(purchases=request.baseline.purchases,movements=request.baseline.movements)
-    original_replay=replay(data,*base_forecasts[:2],original_actions.purchases,original_actions.movements,include_stock=False)
+    original_replay=replay(data,*base_forecasts[:2],original_actions.purchases,original_actions.movements)
     if not original_replay.feasible:raise ValueError('Baseline actions fail independent replay under original assumptions. Reload baseline.')
     frozen=frozen_actions(changed,definition,original_actions)
-    frozen_replay=replay(changed,*scenario_forecasts[:2],frozen.purchases,frozen.movements,include_stock=False)
+    frozen_replay=replay(changed,*scenario_forecasts[:2],frozen.purchases,frozen.movements)
     planned=plan(changed,runtime_seconds=max(.01,30-(perf_counter()-start)),prepared_forecasts=scenario_forecasts)
     new=actions_of(planned.proposed) if planned.proposed else Actions()
     new_replay=planned.proposed.replay if planned.proposed else replay(changed,*scenario_forecasts[:2],include_stock=False)
-    original=outcome('original',request.baseline.dataset_hash,original_actions,original_replay,'validated_snapshot')
-    frozen_out=outcome('frozen',hash_,frozen,frozen_replay,'validated_frozen')
-    replanned=outcome('replanned',hash_,new,new_replay,planned.status,planned.failures if planned.proposed is None else (),planned.exceptions,planned.stages)
+    original=outcome('original',request.baseline.dataset_hash,original_actions,original_replay,'validated_snapshot',data)
+    frozen_out=outcome('frozen',hash_,frozen,frozen_replay,'validated_frozen',changed)
+    replanned=outcome('replanned',hash_,new,new_replay,planned.status,changed,planned.failures if planned.proposed is None else (),planned.exceptions,planned.stages)
     return ScenarioResult(baseline_id=request.baseline.snapshot_id,scenario_hash=hash_,definition=definition,changes=changes,
         original=original,frozen=frozen_out,replanned=replanned,shock_delta=delta(original,frozen_out),replan_delta=delta(frozen_out,replanned),
         forecast_versions=forecast_versions(scenario_forecasts),action_changes=action_diff(frozen,new),elapsed_ms=(perf_counter()-start)*1000)

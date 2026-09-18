@@ -70,7 +70,7 @@ def run_smoke(url):
                 payments=sum(Decimal(str(x['amount'])) for x in r['payments'])
                 headrooms=[min(w[key] for w in r['cash']) for key in ('commitment_headroom','payment_headroom','transfer_headroom')]
                 print(f'{label}: HTTP {elapsed:.3f}s (status {status}); engine {result["elapsed_ms"]:.1f}ms; {len(raw):,} bytes; '
-                      f'{len(result["forecasts"])} series; {len(r["stock"]):,} stock rows; {result["status"]}; stages [{stages}]; '
+                      f'{len(result["forecasts"])} series; {len(r["stock"]):,} stock rows; {result["status"]}; challenger budget {result["challenger_budget_seconds"]:.3f}s; stages [{stages}]; '
                       f'{len(p["purchases"])} purchases; {len(p["movements"])} movements; replay {r["feasible"]}; failures {r["failures"]}; '
                       f'commitments SAR {s["commitments"]:.2f} / lines SAR {lines:.2f} (match {lines==Decimal(str(s["commitments"]))}); '
                       f'payments SAR {s["payments"]:.2f} / ledger SAR {payments:.2f} (match {payments==Decimal(str(s["payments"]))}); '

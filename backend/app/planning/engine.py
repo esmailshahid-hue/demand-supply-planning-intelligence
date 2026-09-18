@@ -9,12 +9,14 @@ from backend.app.data.validation import validate_dataset
 from backend.app.planning.contracts import PlanResult, PolicyResult, Failure, SolverStage
 from backend.app.planning.inputs import Inputs, network_forecasts, planning_input_failures
 from backend.app.planning.benchmark import benchmark
+from backend.app.planning.evidence import purchase_evidence_targets
 from backend.app.simulation.replay import replay, EPS, cents, week
 
 JOINT_BUDGET_SECONDS = 2.0
+FULL_SAMPLE_JOINT_BUDGET_SECONDS = 0.0
 
 ASSUMPTIONS = [
-    'The live joint challenger has a two-second sub-budget within the 30-second request limit. Incomplete solves use the independently validated deterministic benchmark; no optimality is claimed.',
+    'The live joint challenger has a two-second fixture sub-budget within the 30-second request limit. At 240 series its live sub-budget is unavailable because measured preparation and validated fallback work consume the 10-second response target. Incomplete or unattempted solves use the independently validated deterministic benchmark; no optimality is claimed.',
     'Receive, serve local expected demand, dispatch, then close stock. Unserved demand is lost, never backlogged.',
     'Only days 1–7 are release candidates. Later actions remain planned; days 29–56 depend on provisional forecasts.',
     'Store buffers use the unchanged Pass 1 evaluator at calendar-adjusted review plus replenishment protection periods. No independent DC buffer or retail demand is added.',
@@ -29,11 +31,16 @@ ASSUMPTIONS = [
 ]
 
 
-def plan(data, runtime_seconds=30, *, prepared_forecasts=None):
+def joint_budget_seconds(series_count):
+    return JOINT_BUDGET_SECONDS if series_count <= 40 else FULL_SAMPLE_JOINT_BUDGET_SECONDS
+
+
+def plan(data, runtime_seconds=30, *, prepared_forecasts=None, validated_issues=None):
     start=perf_counter(); deadline=start+runtime_seconds
     kwargs=dict(run_id=str(uuid4()),input_hash=sha256(data.model_dump_json().encode()).hexdigest(),dataset_id=data.dataset_id,
         synthetic=data.synthetic,as_of=data.settings.as_of,payment_through=max([data.settings.as_of+timedelta(days=89)]+[p.due_date for p in data.payables]),assumptions=ASSUMPTIONS)
-    issues=validate_dataset(data)
+    kwargs['challenger_budget_seconds']=joint_budget_seconds(len(data.assortment))
+    issues=validate_dataset(data) if validated_issues is None else validated_issues
     failures=planning_input_failures(data)
     if any(i.severity=='error' for i in issues) or failures:
         return PlanResult(**kwargs,status='invalid_inputs',issues=issues,failures=failures,elapsed_ms=(perf_counter()-start)*1000)
@@ -55,8 +62,9 @@ def plan(data, runtime_seconds=30, *, prepared_forecasts=None):
     stages=[]
     solver_failure=None
     # Leave time for independent replay, serialization and safe fallback after solver termination.
-    solve_deadline=min(deadline-2,perf_counter()+JOINT_BUDGET_SECONDS)
-    if perf_counter()<solve_deadline:
+    joint_budget = joint_budget_seconds(len(ctx.assortment))
+    solve_deadline=min(deadline-2,perf_counter()+joint_budget)
+    if joint_budget > 0 and perf_counter()<solve_deadline:
         from backend.app.planning.optimizer import optimize
         try:
             p,m,stages=optimize(ctx,solve_deadline)
@@ -67,7 +75,7 @@ def plan(data, runtime_seconds=30, *, prepared_forecasts=None):
             solver_failure=Failure(code='SOLVER_EXECUTION_ERROR',message='The joint optimizer could not complete because its solver runtime failed. No partial optimizer actions were accepted.')
     else:
         p,m=[],[];candidate=no
-        stages=[SolverStage(name='joint_model',status='time_limit',elapsed_ms=0)]
+        stages=[SolverStage(name='joint_model',status='not_attempted' if joint_budget <= 0 else 'time_limit',elapsed_ms=0)]
     priorities=[priority for priority in ('must_stock','A','B','C')
         if any(a.must_stock if priority=='must_stock' else not a.must_stock and a.service_class==priority
                for a in ctx.assortment.values())]
@@ -98,7 +106,8 @@ def plan(data, runtime_seconds=30, *, prepared_forecasts=None):
     # Compact ledgers: retain the proposed daily series; comparisons retain totals and service detail.
     status=('feasible' if complete else 'feasible_fallback') if verified.feasible else 'invalid_plan'
     kwargs['payment_through']=max(kwargs['payment_through'],max((x.due_date for x in verified.payments),default=kwargs['payment_through']))
-    return PlanResult(**kwargs,status=status,proposed=PolicyResult(name='Joint staged plan' if complete else ('Validated constrained plan' if p==bp and m==bm else 'Validated no-new-action projection'),purchases=p,movements=m,replay=verified),
+    targets=purchase_evidence_targets(data,verified,p)
+    return PlanResult(**kwargs,status=status,proposed=PolicyResult(name='Joint staged plan' if complete else ('Validated constrained plan' if p==bp and m==bm else 'Validated no-new-action projection'),purchases=p,movements=m,replay=verified,evidence_targets=targets),
         benchmark=PolicyResult(name='Constrained order-up-to benchmark',purchases=bp,movements=bm,replay=br),
         no_action=PolicyResult(name='No new actions',purchases=[],movements=[],replay=no),forecasts=trace,stages=stages,
         issues=issues,failures=verified.failures,exceptions=exceptions,elapsed_ms=(perf_counter()-start)*1000)

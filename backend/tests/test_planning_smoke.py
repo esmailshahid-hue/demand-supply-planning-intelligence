@@ -14,7 +14,7 @@ def response(size):
             'stock':[{}]*(56*(count+count//4)), 'payments':[{'amount':5}],
             'cash':[{'commitment_headroom':0,'payment_headroom':1,'transfer_headroom':2}]}}
     return {'status':'feasible_fallback','proposed':policy,'benchmark':policy,'no_action':policy,
-        'exceptions':[],'forecasts':[{}]*count,'elapsed_ms':123,
+        'exceptions':[],'forecasts':[{}]*count,'elapsed_ms':123,'challenger_budget_seconds':2 if size=='fixture' else 0,
         'stages':[{'name':'visible_must_stock','status':'time_limit'},
                   {'name':'independent_fallback','status':'benchmark'}]}
 

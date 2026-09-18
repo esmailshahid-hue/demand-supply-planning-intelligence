@@ -1,8 +1,59 @@
 # Build status
 
+## Focused Pass 3 runtime, supplier-preset and evidence correction — 18 September 2026
+
+Started from clean Pass 3 commit `bfce1ded9de5e74c2b9c0d49e9b6b9b2d1825b0a`. The local correction gates pass, but **Pass 3 is not formally closed** because the exact corrected commit has not yet completed a green GitHub Actions run. No push, merge, deployment or Pass 4 work occurred.
+
+### Failed CI evidence and root cause
+
+User-supplied GitHub Actions run **35242117761** passed 102 backend tests, 10 browser tests, frontend build, Docker build/start, forecast smoke and container solver smoke, then failed both full planning latency assertions at **13.009 s HTTP / 12,960.3 ms engine** and **12.283 s / 12,234.7 ms**. Fixture passed. The valid deterministic full results were `feasible_fallback`, independently replayed, financially reconciled, repeat-identical and approximately 3.75 MB. Production scenario smoke did not run because the preceding planning step failed. The GitHub CLI is unavailable here and the public workflow page could not be fetched, so this supplied run evidence was not independently downloaded.
+
+The workflow profile attributed about **6.6 s** to forecast preparation, **1.45 s** to the deterministic benchmark, **3.0 s** to the joint challenger and **1.6–1.7 s** to remaining work. The 240-series challenger did not complete its first required objective and could never be selected, but consumed the margin needed by the unchanged 10-second live target. The route also revalidated the same immutable cached sample after sample generation had already validated it.
+
+### Correction and calculation guarantees
+
+- The joint MILP implementation, objectives, zero-gap completion rule and focused small-model tests are unchanged. The fixture remains a genuine **2.0-second** best-effort challenger. The full 240-series sample has a disclosed **0-second live challenger budget** and reports `joint_model:not_attempted`; it selects the same deterministic benchmark only after independent replay. A joint plan is still selected only if every required objective stage completes correctly. No fallback is labeled optimal.
+- Exact per-series forecast results are preserved. Within a forecast call, range, event, status and training results are memoized by their complete date/cutoff inputs; planning indexes immutable offers and DC/store lanes once per request. The sample API passes its already calculated validation result into planning. Custom datasets and transformed scenarios still validate their complete current input, so changed assumptions cannot reuse stale validation, forecasts or plans. No complete API response is cached.
+- Scenario smoke now runs with `if: !cancelled()` after planning smoke, so it still supplies diagnostic coverage when planning fails. Either nonzero smoke result still fails the job; there is no `continue-on-error`, retry, threshold increase or assertion removal.
+- Supplier disruption now chooses one supplier with an existing receipt and applicable future paths. The sample selects **SUP08**: `PO-LATE-001` receives the delay and SUP08 receives the dated remaining-availability reduction. The summary displays the supplier ID and name, the submitted request is tested against it, reset remains exact and manual controls remain independent.
+- Purchase evidence is derived once in Python from the selected feasible policy's validated replay. It chooses the earliest reachable store shortage, then the largest same-day shortage and location ID; without a shortage it chooses the greatest positive replay-backed replenishment need and location ID. If neither exists, or the policy is infeasible, no store link is invented. Plan Review, original, frozen and replanned scenario outcomes use the same typed targets. Evidence states that purchases arrive into pooled DC inventory, the store is demand context, and other stores compete for that stock.
+
+Correction files: planning/forecast performance and contracts in `backend/app/forecasting/engine.py`, `backend/app/planning/{engine,inputs,contracts,evidence}.py` and `backend/app/main.py`; scenario metadata/targets in `backend/app/scenarios/{contracts,engine}.py`; shared UI routing and preset behavior in `frontend/src/PlanReview.tsx`, `Scenarios.tsx`, `ScenarioEvidence.tsx` and `evidenceTarget.ts` plus generated contracts; regressions in `backend/tests/test_{planning,planning_smoke,scenarios}.py` and `frontend/e2e/scenarios.spec.ts`; smoke/workflow changes in `scripts/{planning_smoke,scenario_smoke}.py` and `.github/workflows/verify.yml`; and the four handoff documents.
+
+### Verification actually executed
+
+| Check | Actual result |
+|---|---|
+| Complete backend suite | **108 passed in 38.61 s**, with two existing TestClient deprecation warnings. |
+| Targeted engine/evidence tests | Final focused run: **7 passed** for purchase routing, deterministic ties, replenishment/no-association fallbacks, size-aware budget, coherent supplier metadata and feasible/invalid scenario-policy routing. Earlier exact small-MILP/deadline-focused selection also passed eight tests. |
+| Supplier/evidence browser regression | `scenarios.spec.ts`: **2 passed in 32.9 s**; request/summary supplier consistency, manual independence, non-S1 Plan Review routing, replanned/frozen policy routing, reset and stale-response behavior passed. |
+| Complete browser suite | **10 passed in 51.2 s**. |
+| Contract reproducibility | OpenAPI SHA-256 `dba747a4…e10331` and generated TypeScript `b0a093f0…2a7378` were identical before and after a second export/generation. |
+| Frontend production build | Passed: 38 modules; JS **284.66 kB / 85.63 kB gzip**, CSS **11.60 kB / 3.45 kB gzip**. |
+| Solver/dependencies/compilation | SciPy 1.18.1/HiGHS status 0; cold 0.001 s, warm <0.001 s. `pip check` found no broken requirements; production `npm audit` found **0 vulnerabilities**; Python compileall passed. |
+| Workflow/diff | Ruby parsed the workflow; scenario follows planning with `!cancelled()` and no `continue-on-error`. `git diff --check` passed. |
+| Docker/Linux/CI/hosted | `docker`, Podman, Colima and Lima are unavailable locally. No corrected-commit Docker, Linux CI, Vercel build or hosted runtime verification was performed. |
+
+Production forecast smoke passed at fixture **0.132 / 0.020 s** and full **0.796 / 0.089 s** HTTP. Final production planning measurements were:
+
+| Planning run | Dimensions | HTTP s | Engine ms | Status / stages | Budget s | Actions | Bytes | Replay | Commitments / payments | Minimum headroom C/P/T |
+|---|---:|---:|---:|---|---:|---:|---:|---|---:|---:|
+| Fixture first | 40 series / 2,800 rows | 2.690 | 2,676.3 | fallback; visible must-stock timeout → benchmark | 2.0 | 24 / 311 | 786,362 | pass | 91,606 / 97,746 | 0 / 14 / 120 |
+| Fixture repeat | 40 / 2,800 | 2.468 | 2,464.3 | same | 2.0 | 24 / 311 | 786,362 | pass | 91,606 / 97,746 | 0 / 14 / 120 |
+| Full first | 240 / 16,800 | 2.985 | 2,968.4 | fallback; joint not attempted → benchmark | 0.0 | 31 / 607 | 3,752,770 | pass | 92,550 / 99,050 | 40 / 5 / 120 |
+| Full repeat | 240 / 16,800 | 2.946 | 2,929.3 | same | 0.0 | 31 / 607 | 3,752,770 | pass | 92,550 / 99,050 | 40 / 5 / 120 |
+
+All purchase values equaled commitments, payment ledgers equaled payment totals, capacity/funding headrooms were nonnegative, and repeat actions, totals and explanations matched. The existing 10-second and 4,500,000-byte gates passed without relaxation.
+
+The production combined scenario was SKU001 +30% for days 1–14, SUP08 `PO-LATE-001` +3 days, SUP08 remaining availability zero for days 1–56, and first-week new commitment authority zero. Final fixture baseline/first/repeat/detail were **2.736 / 2.691 / 2.651 / 0.449 s**, with comparison/detail responses **365,892–365,893 / 114,604 bytes**. Full baseline/first/repeat/detail were **3.763 / 4.101 / 4.020 / 2.812 s**, with comparison/detail responses **921,311–921,312 / 113,298 bytes**. Fixture/full future-path checks were **2.981 / 6.230 s**, below the 30-second scenario limit; the full future-path response was **1,034,943 bytes**. Frozen replay was explicitly infeasible and therefore exposed no evidence targets; replanned replay passed as `feasible_fallback`. Repeats matched, finances reconciled, applied changes were returned, and the measured first replanned purchase targeted **SKU001 / S4** from its own outcome evidence.
+
+### Remaining gate
+
+The local correction is ready for commit and CI, but Pass 3 is ready to close only after the exact corrected commit completes a green GitHub Actions run with both production smoke suites. That run must provide the outstanding Ubuntu/Docker timings. No public-host or Vercel-runtime claim is made.
+
 ## Pass 3 — sample review and immutable scenarios — 17 September 2026
 
-**Pass 3 exit gate: met locally.** Started from clean `47dc0217df22d8f31eed2a534e7d279e597861bd`, preserving the accepted Pass 2 engine. No push, merge, deployment or later-pass implementation occurred.
+**Historical pre-correction Pass 3 implementation gate: met locally.** Started from clean `47dc0217df22d8f31eed2a534e7d279e597861bd`, preserving the accepted Pass 2 engine. The 18 September correction and its outstanding exact-commit CI gate supersede this readiness statement. No push, merge, deployment or later-pass implementation occurred.
 
 ### Pass 2 closure evidence
 
@@ -50,7 +101,7 @@ Local macOS arm64, Python 3.14.4, one production Uvicorn worker on port 8011. Th
 
 All four baseline runs returned `feasible_fallback`, with `visible_must_stock:time_limit` → `independent_fallback:benchmark`, independent replay true and no failures. Repeated actions, totals and explanations matched. Fixture purchase values/commitments reconciled at **SAR 91,606**, payment ledger/total at **SAR 97,746**, minimum commitment/payment/transfer headroom **0 / 14 / 120 SAR**. Full values reconciled at **SAR 92,550 / 99,050**, minimum headroom **40 / 5 / 120 SAR**. The unchanged baseline 10-second and 4,500,000-byte gates passed.
 
-Scenario smoke combined SKU001 +30% demand on days 1–14, the selected existing SUP08 receipt +3 days, SUP01 remaining availability zero for days 1–56, and first-week new commitment authority zero. It also separately tested a SUP01 future purchasing-path delay of one day.
+The pre-correction scenario smoke combined SKU001 +30% demand on days 1–14, the selected existing SUP08 receipt +3 days, SUP01 remaining availability zero for days 1–56, and first-week new commitment authority zero. That mixed-supplier definition is historical evidence only; the corrected coherent SUP08 definition and final measurements are recorded above. It also separately tested a SUP01 future purchasing-path delay of one day.
 
 | Scenario request | HTTP s | Engine ms | Request bytes | Response bytes |
 |---|---:|---:|---:|---:|

@@ -37,6 +37,15 @@ class Movement(Contract):
     reason: str = 'Allocate dated shared stock to store demand within donor protection.'
 
 
+class EvidenceTarget(Contract):
+    action_id: str
+    sku: str
+    location_id: str | None = None
+    basis: Literal['earliest_shortage', 'greatest_replenishment_need', 'no_store_association']
+    shortage_date: date | None = None
+    affected_units: float | None = None
+
+
 class Failure(Contract):
     code: str
     message: str
@@ -146,6 +155,7 @@ class PolicyResult(Contract):
     purchases: list[Purchase]
     movements: list[Movement]
     replay: Replay
+    evidence_targets: list[EvidenceTarget] = []
 
 
 class ForecastTrace(Contract):
@@ -187,4 +197,5 @@ class PlanResult(Contract):
     failures: list[Failure] = []
     exceptions: list[Failure] = []
     assumptions: list[str] = []
+    challenger_budget_seconds: float
     elapsed_ms: float

@@ -114,19 +114,19 @@ def custom_forecast(request: ForecastRequest):
     return calculate(request.dataset, request.sku, request.location_id)
 
 
-def calculate_plan(data):
+def calculate_plan(data, issues=None):
     if not calculation_slot.acquire(blocking=False):
         return JSONResponse(status_code=429, headers={'Retry-After': '2'}, content=APIError(code='busy', message='A calculation is running. Please retry shortly.').model_dump())
     try:
-        return plan(data)
+        return plan(data,validated_issues=issues)
     finally:
         calculation_slot.release()
 
 
 @app.post('/api/plan/sample', response_model=PlanResult, responses=ERRORS)
 def sample_plan(request: PlanSampleRequest):
-    data, _ = sample(request.size)
-    return calculate_plan(data)
+    data, issues = sample(request.size)
+    return calculate_plan(data,issues)
 
 
 @app.post('/api/plan', response_model=PlanResult, responses=ERRORS)
@@ -144,8 +144,8 @@ def scenario_call(fn, request):
         return JSONResponse(status_code=429, headers={'Retry-After':'2'}, content={'message':'A calculation is running. Please retry shortly.'})
     try:
         size=request.size if isinstance(request, (PlanSampleRequest,CaptureRequest)) else request.baseline.size
-        data,_=sample(size)
-        return fn(size,data) if isinstance(request, PlanSampleRequest) else fn(data,request)
+        data,issues=sample(size)
+        return fn(size,data,validated_issues=issues) if isinstance(request, PlanSampleRequest) else fn(data,request)
     except ValueError as error:
         return JSONResponse(status_code=422,content={'code':'invalid_scenario','message':str(error)})
     except TimeoutError:

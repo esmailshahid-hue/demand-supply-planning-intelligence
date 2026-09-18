@@ -1,5 +1,15 @@
 # Pass 3 sample scenario transport — 17 September 2026
 
+## Focused Pass 3 correction — 18 September 2026
+
+User-supplied GitHub Actions run **35242117761** for Pass 3 commit `bfce1ded` failed the unchanged 10-second planning gate: full first/repeat were **13.009 / 12.283 seconds**. The results themselves were valid, replayed deterministic fallbacks. The workflow profile showed approximately 6.6 seconds of forecasts, 1.45 seconds of benchmark work, 3.0 seconds in a full-sample challenger that did not complete its first required stage, and 1.6–1.7 seconds elsewhere.
+
+The corrected live policy retains a two-second exact challenger for the fixture and discloses `joint_model:not_attempted` with a zero sub-budget for the 240-series sample. Full sample validation is reused from the exact immutable cached sample; custom/scenario inputs still validate current contents. Forecast memoization is per calculation and keyed by complete date/cutoff inputs. No plan or API response is cached, and the 10-second, 30-second and 4.5 MB gates are unchanged.
+
+Local production planning passed at fixture **2.690 / 2.468 s** and full **2.985 / 2.946 s**. Final scenario comparison passed at fixture **2.691 / 2.651 s** and full **4.101 / 4.020 s**; full comparison/detail responses were **921,311–921,312 / 113,298 bytes**. The workflow now runs scenario smoke after a planning-smoke failure unless the job is cancelled, while preserving both nonzero exit codes and the overall failed job state.
+
+This workspace has no Docker, Podman, Colima or Lima runtime. Therefore these are local macOS results. No corrected-commit Ubuntu/Docker run, new Vercel build or hosted runtime was verified, and Pass 3 remains open until the exact corrected commit completes a green workflow. No deployment, push, merge or provisioning occurred.
+
 User-confirmed Ubuntu GitHub Actions run **35228781514** passed for **47dc0217df22d8f31eed2a534e7d279e597861bd**, closing Pass 2: 82 backend tests, eight browser tests, contracts/build, Docker build/start, forecast/container solver smoke and deterministic reconciled planning at 2.865 / 2.851 s fixture and 7.604 / 7.496 s full. Historical blocked statements below are superseded for Pass 2. This is not verification of the new Pass 3 code or a public host.
 
 Pass 3 retains the single FastAPI deployment, relative API paths, existing Docker startup, Vercel configuration and 60-second Function ceiling. Scenario comparisons transport action snapshots/definitions, never full history or daily baseline ledgers. Each request reconstructs the selected sample and validates its versions/actions without depending on durable process memory. Summary responses omit all daily stock; scoped detail independently replays the complete network and returns only the selected SKU's evidence. No database, signing secret, paid service or persistent session is required. Snapshot checksums establish consistency, not authenticated plan provenance; no action execution or accepted export exists.

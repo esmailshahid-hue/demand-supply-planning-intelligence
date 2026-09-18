@@ -32,31 +32,50 @@ class Series:
         self.assortment = next(a for a in data.assortment if a.sku == sku and a.location_id == location_id)
         self.rows = {r.day: r for r in data.demand_history if r.sku == sku and r.location_id == location_id}
         self.events = [e for e in data.events if event_matches(e, self.product, location_id)]
+        self._ranged = {}
+        self._events = {}
+        self._statuses = {}
+        self._training = {}
 
     def ranged(self, day):
+        if day in self._ranged:
+            return self._ranged[day]
         a, p = self.assortment, self.product
-        return (a.ranged_from <= day and (a.ranged_to is None or day <= a.ranged_to)
-                and p.active_from <= day and (p.active_to is None or day <= p.active_to))
+        value = (a.ranged_from <= day and (a.ranged_to is None or day <= a.ranged_to)
+                 and p.active_from <= day and (p.active_to is None or day <= p.active_to))
+        self._ranged[day] = value
+        return value
 
     def event(self, day, origin):
-        return next((e for e in self.events if e.start <= day <= e.end and e.known_at < midnight(origin)), None)
+        key = day, origin
+        if key not in self._events:
+            self._events[key] = next((e for e in self.events if e.start <= day <= e.end and e.known_at < midnight(origin)), None)
+        return self._events[key]
 
     def status(self, day, knowledge_cutoff):
+        key = day, knowledge_cutoff
+        if key in self._statuses:
+            return self._statuses[key]
         if not self.ranged(day):
-            return "unranged"
-        row = self.rows.get(day)
-        if row is not None and row.available_at < midnight(knowledge_cutoff):
+            value = "unranged"
+        elif (row := self.rows.get(day)) is not None and row.available_at < midnight(knowledge_cutoff):
             if not row.is_open:
-                return "closed"
-            if row.sales_units is None or row.stock_available is None:
-                return "missing"
-            return "observed" if row.stock_available else "censored"
-        if day.weekday() not in self.location.open_weekdays:
-            return "closed"
-        return "missing" if row is None else "not_yet_available"
+                value = "closed"
+            elif row.sales_units is None or row.stock_available is None:
+                value = "missing"
+            else:
+                value = "observed" if row.stock_available else "censored"
+        elif day.weekday() not in self.location.open_weekdays:
+            value = "closed"
+        else:
+            value = "missing" if row is None else "not_yet_available"
+        self._statuses[key] = value
+        return value
 
     def training(self, origin):
         """Censored estimates use strictly earlier uncensored values, never later rows or estimates."""
+        if origin in self._training:
+            return self._training[origin]
         observed, values, estimates = {}, {}, {}
         for day in sorted(d for d in self.rows if d < origin):
             status = self.status(day, origin)
@@ -69,7 +88,8 @@ class Series:
                 if pool:
                     estimate = max(self.rows[day].sales_units, mean(pool))
                     values[day] = estimates[day] = estimate
-        return values, estimates, observed
+        self._training[origin] = values, estimates, observed
+        return self._training[origin]
 
     def predict_all(self, origin, horizon):
         values, _, observed = self.training(origin)

@@ -23,11 +23,12 @@ def main():
         print(size,flush=True)
         baseline=call(args.url,'/api/scenarios/baseline',{'size':size});saved=json.dumps(baseline,sort_keys=True)
         start=baseline['as_of'];end=str(date.fromisoformat(start)+timedelta(days=55))
+        supplier=next((s for s in baseline['supplier_options'] if s['existing_order_ids'] and s['future_paths']),None)
+        assert supplier, 'Sample Supplier disruption requires one supplier with an existing receipt and future paths.'
         definition={'uplifts':[{'scope':'sku','scope_id':'SKU001','start':start,'end':str(date.fromisoformat(start)+timedelta(days=13)),'percent':30}],
-            'availability':[{'supplier_id':'SUP01','start':start,'end':end,'remaining_fraction':0}],
+            'availability':[{'supplier_id':supplier['supplier_id'],'start':start,'end':end,'remaining_fraction':0}],
             'funding':[{'week_start':start,'commitment':0}]}
-        if baseline['existing_orders']:
-            o=baseline['existing_orders'][0];definition['delays']=[{'supplier_id':o['supplier'],'days':3,'existing_order_ids':[o['id']],'future_paths':False}]
+        definition['delays']=[{'supplier_id':supplier['supplier_id'],'days':3,'existing_order_ids':supplier['existing_order_ids'][:1],'future_paths':False}]
         previous=None
         for run in ('first','repeat'):
             result=call(args.url,'/api/scenarios/compare',{'baseline':baseline['baseline'],'scenario':definition})
@@ -43,7 +44,11 @@ def main():
             signature={k:p[k] for k in ('purchases','movements','summary','cash','shortages','explanations')}
             if previous is not None:assert signature==previous
             previous=signature
-            print(f'{size} {run}: frozen feasible {result["frozen"]["feasible"]}; frozen failures {len(result["frozen"]["failures"])}; replanned {p["status"]}; purchases/movements {len(p["purchases"])}/{len(p["movements"])}; commitments/payments {p["summary"]["commitments"]}/{p["summary"]["payments"]}; determinism {"matched" if run=="repeat" else "reference"}',flush=True)
+            target=p['evidence_targets'][0] if p['evidence_targets'] else None
+            print(f'{size} {run}: scenario {definition}; baseline/frozen/replanned {result["original"]["status"]}/{result["frozen"]["status"]}/{p["status"]}; '
+                  f'frozen/replanned replay {result["frozen"]["feasible"]}/{p["feasible"]}; frozen failures {len(result["frozen"]["failures"])}; '
+                  f'purchases/movements {len(p["purchases"])}/{len(p["movements"])}; commitments/payments {p["summary"]["commitments"]}/{p["summary"]["payments"]}; '
+                  f'applied changes {result["changes"]}; purchase evidence target {target}; determinism {"matched" if run=="repeat" else "reference"}',flush=True)
         detail=call(args.url,'/api/scenarios/detail',{'baseline':baseline['baseline'],'scenario':definition,'policy':'replanned','actions':{'purchases':p['purchases'],'movements':p['movements']},'expected_action_hash':p['action_hash'],'expected_scenario_hash':result['scenario_hash'],'sku':'SKU001','location_id':'S1'})
         assert detail['feasible'] and len(detail['stock'])==280 and detail['cash']==p['cash']
         assert detail['forecast_version']==result['forecast_versions']['SKU001/S1']
