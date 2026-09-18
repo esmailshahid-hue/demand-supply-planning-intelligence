@@ -23,9 +23,9 @@ export default function PlanReview({onReady,onForecast,onScenarios,initialPlan,u
   const [inspectError,setInspectError]=useState('');
   useEffect(()=>{if(!inspectRequest||!result?.proposed)return;const c=new AbortController();setInspectError('');
     if(initialPlan&&result.review_id){setEvidence({sku:inspectRequest.sku,location_id:inspectRequest.loc,action_id:inspectRequest.id});return()=>c.abort();}
-    const load=captured?Promise.resolve(captured):scenarioApi<Baseline>('/api/scenarios/capture',c.signal,{size,dataset_hash:result.input_hash,purchases:result.proposed.purchases,movements:result.proposed.movements});
+    const load=captured?Promise.resolve(captured):scenarioApi<Baseline>('/api/scenarios/capture',c.signal,{size:uploaded?null:size,dataset_hash:result.input_hash,purchases:result.proposed.purchases,movements:result.proposed.movements});
     load.then(b=>{if(!c.signal.aborted){setCaptured(b);setEvidence({baseline:b.baseline,scenario:emptyScenario(),policy:'original',sku:inspectRequest.sku,location_id:inspectRequest.loc,action_id:inspectRequest.id,expected_action_hash:b.original.action_hash});}}).catch(e=>{if(!c.signal.aborted)setInspectError(e.message);});return()=>c.abort();
-  },[inspectRequest,result,size]);
+  },[inspectRequest,result,size,uploaded]);
   useEffect(() => {
     if(initialPlan&&refresh===0){setResult(initialPlan);setBusy(false);onReady(initialPlan,size);return;}
     const controller = new AbortController();

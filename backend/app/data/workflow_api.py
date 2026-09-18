@@ -6,13 +6,13 @@ from typing import Literal
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import Field
-from backend.app.contracts import Contract, Dataset, SampleCatalog
+from backend.app.contracts import Contract, Dataset, DatasetProvenance, SampleCatalog
 from backend.app.data.storage import store, configuration, TOKEN, ObjectReference, ObjectUnavailable
 from backend.app.data.workbook import template, parse, WorkbookError, WorkbookIssue, MAX_FILE, MIME
 from backend.app.data.accepted import create_snapshot, snapshot_bytes, read_snapshot, export_workbook
 from backend.app.planning.contracts import PlanResult
 from backend.app.planning.review import Draft, ReviewConflict, new_draft, decide, regenerate, accept
-from backend.app.scenarios.engine import dataset_hash
+from backend.app.scenarios.engine import dataset_hash, provenance
 from backend.app.scenarios.contracts import ScenarioRequest, DetailRequest, Actions, ScenarioDetail
 from backend.app.planning.constraints import ReviewConstraints, business_key
 from backend.app.data.reconciliation import Execution, reconcile
@@ -45,25 +45,33 @@ def dataset_for(request,size='fixture'):
     reference=request.headers.get('X-Dataset-Ref')
     if reference:
         available()
-        return Dataset.model_validate(load(request,reference,'dataset')['dataset']), None
+        record=load(request,reference,'dataset')
+        data=Dataset.model_validate(record['dataset'])
+        context=provenance(data,record.get('source_type','uploaded'),None)
+        if record.get('provenance') != context.model_dump(mode='json'):
+            raise HTTPException(409,'Stored dataset provenance does not match the private dataset. Import or reopen it again.')
+        return data, None, context
+    if size not in ('fixture','full'):
+        raise HTTPException(409,'This scenario requires its matching private uploaded or portable dataset reference.')
     from backend.app.main import sample
-    return sample(size)
+    data,issues=sample(size)
+    return data,issues,provenance(data,'bundled_'+size,size)
 
 
-def attach_draft(request,data,result):
+def attach_draft(request,data,result,context):
     # Review session persistence is never substituted for a live calculation.
     if not configuration()['enabled'] or not TOKEN.fullmatch(request.cookies.get(COOKIE,'')):
         return result
     draft=new_draft(data,result)
-    apply_imported(draft,request)
-    source={'size':'full' if len(data.products)>10 else 'fixture','dataset_ref':request.headers.get('X-Dataset-Ref')}
+    apply_imported(draft,request,context)
+    source={'size':context.sample_size,'dataset_ref':request.headers.get('X-Dataset-Ref'),'provenance':context.model_dump(mode='json')}
     ref=store.put(owner(request),encoded({'source':source,'draft':draft.model_dump(mode='json')}),'draft')
     return result.model_copy(update={'review_id':ref.object_id})
 
 
-def apply_imported(draft,request):
+def apply_imported(draft,request,context):
     result=draft.result
-    draft.input_source='uploaded' if request.headers.get('X-Dataset-Ref') else 'bundled'
+    draft.input_source={'bundled_fixture':'bundled','bundled_full':'bundled','uploaded':'uploaded','portable':'portable'}[context.source]
     imported=imported_constraints(request)
     if imported is not None:
         draft.execution_rejections=sorted(imported.rejected)
@@ -99,6 +107,7 @@ class ImportResult(Contract):
     issues: list[WorkbookIssue]
     measurements: dict = Field(default_factory=dict)
     input_hash: str | None = None
+    provenance: DatasetProvenance | None = None
 
 
 class ReviewView(Contract):
@@ -110,6 +119,7 @@ class ReviewView(Contract):
     accepted_version: str | None = None
     measurements: dict = Field(default_factory=dict)
     dataset_ref: str | None = None
+    provenance: DatasetProvenance | None = None
 
 
 class DecisionRequest(Contract):
@@ -128,19 +138,28 @@ class RevisionRequest(Contract):
 def view(reference,draft,measurements=None):
     return ReviewView(reference=reference,revision=draft.revision,state=draft.state,
         decisions=[d.model_dump(mode='json') for d in draft.decisions],
-        failures=[f.model_dump(mode='json') for f in draft.failures],accepted_version=draft.accepted_version,measurements=measurements or {})
+        failures=[f.model_dump(mode='json') for f in draft.failures],accepted_version=draft.accepted_version,measurements=measurements or {},
+        provenance=draft.result.provenance.model_dump(mode='json') if draft.result.provenance else None)
 
 
 def draft_for(request,reference):
     available();record=load(request,reference,'draft');draft=Draft.model_validate(record['draft'])
     if 'snapshot' in record:
         data=Dataset.model_validate(record['snapshot']['dataset'])
+        context=provenance(data,record['source']['provenance']['source'],record['source']['provenance']['sample_size'])
     elif record['source'].get('dataset_ref'):
-        data=Dataset.model_validate(load(request,record['source']['dataset_ref'],'dataset')['dataset'])
+        source_record=load(request,record['source']['dataset_ref'],'dataset')
+        data=Dataset.model_validate(source_record['dataset'])
+        context=provenance(data,source_record.get('source_type','uploaded'),None)
+        if source_record.get('provenance')!=context.model_dump(mode='json'):
+            raise HTTPException(409,'Stored dataset provenance does not match the private dataset. Import or reopen it again.')
     else:
         from backend.app.main import sample
         data=sample(record['source']['size'])[0]
-    return record,draft,data
+        context=provenance(data,'bundled_'+record['source']['size'],record['source']['size'])
+    if context.model_dump(mode='json')!=record['source']['provenance']:
+        raise HTTPException(409,'Draft provenance does not match its stored dataset. Create a new draft.')
+    return record,draft,data,context
 
 
 def save_draft(request,reference,record,draft,**extra):
@@ -180,7 +199,9 @@ async def import_workbook(request:Request):
     try:
         from urllib.parse import unquote
         data,issues,measurements=await run_in_threadpool(parse,store.get(session,upload,'upload'),unquote(request.headers.get('X-Filename','data.xlsx')))
-        record={'dataset':data.model_dump(mode='json'),'warnings':[i.model_dump() for i in issues]}
+        context=provenance(data,'uploaded',None)
+        record={'dataset':data.model_dump(mode='json'),'warnings':[i.model_dump() for i in issues],
+            'source_type':'uploaded','provenance':context.model_dump(mode='json')}
         if measurements['reconciliation']:
             accepted_ref=request.headers.get('X-Accepted-Ref')
             if not accepted_ref: raise WorkbookError([WorkbookIssue(sheet='Reconciliation',field='external_id',code='missing_accepted_snapshot',guidance='Supply the portable accepted snapshot before reconciling execution IDs.')])
@@ -196,7 +217,7 @@ async def import_workbook(request:Request):
             raise WorkbookError([WorkbookIssue(sheet='Reconciliation',field='external_id',code='missing_execution',guidance='Exported DSP identifiers require explicit Reconciliation rows and the accepted snapshot.')])
         ref=store.put(session,encoded(record),'dataset')
         measurements['upload_body_bytes']=len(content)
-        return ImportResult(reference=ref,catalog=SampleCatalog(dataset_id=data.dataset_id,as_of=data.settings.as_of,products=data.products,locations=[l for l in data.locations if l.kind=='store'],history_rows=len(data.demand_history),warnings=[]),issues=issues,measurements=measurements,input_hash=dataset_hash(data))
+        return ImportResult(reference=ref,catalog=SampleCatalog(dataset_id=data.dataset_id,as_of=data.settings.as_of,products=data.products,locations=[l for l in data.locations if l.kind=='store'],history_rows=len(data.demand_history),warnings=[]),issues=issues,measurements=measurements,input_hash=dataset_hash(data),provenance=context)
     except WorkbookError as error:
         return JSONResponse(status_code=422,content={'issues':[i.model_dump() for i in error.issues],'message':str(error)})
     except ReviewConflict as error:
@@ -207,19 +228,19 @@ async def import_workbook(request:Request):
 
 @router.get('/review/{reference}',response_model=ReviewView)
 def review_view(reference:str,request:Request):
-    _,draft,_=draft_for(request,reference);return view(reference,draft)
+    _,draft,_,_=draft_for(request,reference);return view(reference,draft)
 
 
 @router.get('/review/{reference}/plan',response_model=PlanResult)
 def review_plan(reference:str,request:Request):
-    _,draft,_=draft_for(request,reference)
+    _,draft,_,_=draft_for(request,reference)
     return draft.result.model_copy(update={'review_id':reference})
 
 
 @router.post('/review/{reference}/decision',response_model=ReviewView)
 def decision(reference:str,body:DecisionRequest,request:Request):
     with store.lock:
-        record,draft,data=draft_for(request,reference)
+        record,draft,data,_=draft_for(request,reference)
         next_draft=decide(draft,data,body.revision,body.action_id,body.status,body.quantity,body.note)
         ref=save_draft(request,reference,record,next_draft)
         return view(ref,next_draft)
@@ -236,7 +257,7 @@ def guarded(function):
 def rerun(reference:str,body:RevisionRequest,request:Request):
     def calculate():
         with store.lock:
-            record,draft,data=draft_for(request,reference)
+            record,draft,data,_=draft_for(request,reference)
             next_draft=regenerate(draft,data,body.revision)
             ref=save_draft(request,reference,record,next_draft)
             return view(ref,next_draft)
@@ -247,7 +268,7 @@ def rerun(reference:str,body:RevisionRequest,request:Request):
 def final_accept(reference:str,body:RevisionRequest,request:Request):
     def calculate():
         with store.lock:
-            record,draft,data=draft_for(request,reference)
+            record,draft,data,_=draft_for(request,reference)
             accepted,_,versions=accept(draft,data,body.revision,body.acknowledge_shortfalls)
             try: snapshot=create_snapshot(data,accepted,versions)
             except ValueError as error: raise HTTPException(422,str(error)) from error
@@ -259,7 +280,7 @@ def final_accept(reference:str,body:RevisionRequest,request:Request):
 
 @router.get('/review/{reference}/download/{kind}')
 def download(reference:str,kind:Literal['workbook','snapshot'],request:Request):
-    record,draft,_=draft_for(request,reference)
+    record,draft,_,_=draft_for(request,reference)
     if draft.state not in ('accepted','read_only') or 'snapshot' not in record: raise HTTPException(409,'Current plan is stale or not finally accepted.')
     from backend.app.data.accepted import AcceptedSnapshot
     snapshot=AcceptedSnapshot.model_validate(record['snapshot'])
@@ -274,23 +295,28 @@ async def reopen(request:Request):
     if request.headers.get('X-Server-Processing')!='confirmed': raise HTTPException(422,'Confirm server processing before importing.')
     try: snapshot=read_snapshot(await request.body())
     except ValueError as error: raise HTTPException(422,str(error)) from error
-    draft=snapshot.draft.model_copy(update={'state':'read_only'})
-    ref=store.put(owner(request),encoded({'draft':draft.model_dump(mode='json'),'snapshot':snapshot.model_dump(mode='json')}),'draft')
-    source=store.put(owner(request),encoded({'dataset':snapshot.dataset.model_dump(mode='json')}),'dataset')
+    context=provenance(snapshot.dataset,'portable',None)
+    draft=snapshot.draft.model_copy(update={'state':'read_only','input_source':'portable',
+        'result':snapshot.draft.result.model_copy(update={'provenance':context})})
+    source=store.put(owner(request),encoded({'dataset':snapshot.dataset.model_dump(mode='json'),'source_type':'portable','provenance':context.model_dump(mode='json')}),'dataset')
+    source_record={'size':None,'dataset_ref':source.object_id,'provenance':context.model_dump(mode='json')}
+    ref=store.put(owner(request),encoded({'source':source_record,'draft':draft.model_dump(mode='json'),'snapshot':snapshot.model_dump(mode='json')}),'draft')
     return view(ref.object_id,draft).model_copy(update={'dataset_ref':source.object_id})
 
 
 @router.post('/review/{reference}/new-draft',response_model=ReviewView)
 def fork(reference:str,body:RevisionRequest,request:Request):
-    record,draft,data=draft_for(request,reference)
+    record,draft,data,context=draft_for(request,reference)
     if draft.revision!=body.revision: raise HTTPException(409,'Draft version changed.')
     next_draft=new_draft(data,draft.result.model_copy(update={'review_id':None}),draft.scenario)
     next_draft.execution_rejections=list(draft.execution_rejections)
     next_draft.execution_remainders=[a.model_copy(deep=True) for a in draft.execution_remainders]
     next_draft.input_source='portable'
     next_draft.state='stale' # Explicit fresh solve/replay is required after reopening.
-    source=store.put(owner(request),encoded({'dataset':data.model_dump(mode='json')}),'dataset')
-    ref=store.put(owner(request),encoded({'source':{'dataset_ref':source.object_id},'draft':next_draft.model_dump(mode='json')}),'draft')
+    context=provenance(data,'portable',None)
+    next_draft.result=next_draft.result.model_copy(update={'provenance':context})
+    source=store.put(owner(request),encoded({'dataset':data.model_dump(mode='json'),'source_type':'portable','provenance':context.model_dump(mode='json')}),'dataset')
+    ref=store.put(owner(request),encoded({'source':{'size':None,'dataset_ref':source.object_id,'provenance':context.model_dump(mode='json')},'draft':next_draft.model_dump(mode='json')}),'draft')
     return view(ref.object_id,next_draft)
 
 
@@ -300,12 +326,13 @@ def scenario_draft(body:ScenarioRequest,request:Request):
     def calculate():
         from backend.app.scenarios.engine import prepare
         from backend.app.planning.engine import plan
-        data,_=dataset_for(request,body.baseline.size)
-        changed,definition,_,_,prepared,_=prepare(data,body)
-        result=plan(changed,prepared_forecasts=prepared,review=imported_constraints(request))
+        data,_,context=dataset_for(request,body.baseline.size)
+        changed,definition,_,_,prepared,_=prepare(data,body,context)
+        result=plan(changed,prepared_forecasts=prepared,review=imported_constraints(request)).model_copy(update={'provenance':context})
         draft=new_draft(data,result,definition)
-        apply_imported(draft,request)
-        ref=store.put(owner(request),encoded({'source':{'size':body.baseline.size,'dataset_ref':request.headers.get('X-Dataset-Ref')},'draft':draft.model_dump(mode='json')}),'draft')
+        apply_imported(draft,request,context)
+        source={'size':context.sample_size,'dataset_ref':request.headers.get('X-Dataset-Ref'),'provenance':context.model_dump(mode='json')}
+        ref=store.put(owner(request),encoded({'source':source,'draft':draft.model_dump(mode='json')}),'draft')
         return result.model_copy(update={'review_id':ref.object_id})
     return guarded(calculate)
 
@@ -320,11 +347,11 @@ class EvidenceRequest(Contract):
 def review_detail(reference:str,body:EvidenceRequest,request:Request):
     def calculate():
         from backend.app.scenarios.engine import snapshot,detail,actions_of,digest
-        _,draft,data=draft_for(request,reference)
+        _,draft,data,context=draft_for(request,reference)
         if not draft.result.proposed: raise HTTPException(409,'No policy available for inspection.')
         actions=actions_of(draft.result.proposed)
-        selected=DetailRequest(baseline=snapshot('fixture',data,Actions()),scenario=draft.scenario,policy='replanned',actions=actions,expected_action_hash=digest(actions),**body.model_dump())
-        return detail(data,selected)
+        selected=DetailRequest(baseline=snapshot(context.sample_size,data,Actions(),context),scenario=draft.scenario,policy='replanned',actions=actions,expected_action_hash=digest(actions),**body.model_dump())
+        return detail(data,selected,context)
     return guarded(calculate)
 
 

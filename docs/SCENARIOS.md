@@ -1,5 +1,13 @@
 # Sample scenarios — Pass 3
 
+## Pass 4 provenance correction
+
+Scenario baselines now carry a typed canonical provenance record: `bundled_fixture`, `bundled_full`, `uploaded` or `portable`, the normalized dataset ID/hash, and product/location/assortment/history dimensions. The legacy fixture/full size remains only for bundled routing; uploaded and portable snapshots use no bundled size. Newly issued snapshot checksums cover provenance. Legacy bundled snapshots without that field remain readable when their size, dataset hash and checksum match the canonical bundled input.
+
+The backend derives provenance from the actual cached sample or the owner-bound stored dataset record. `X-Dataset-Ref` remains authoritative; a browser size label cannot substitute another dataset. Compare/detail validates the baseline checksum, hash, source and dimensions against the dataset loaded for that request. Missing or expired references return a clear unavailable response, and pairing a valid baseline with a different private reference is rejected. Scenario comparison and reviewed detail return the verified provenance used for calculation. Reopened accepted snapshots are exposed as `portable`, while the immutable downloaded snapshot retains its original accepted source record.
+
+This changes metadata and snapshot identifiers only. Forecasts, actions, financial totals, original/frozen/replanned semantics, replay and scenario transformations are unchanged.
+
 ## Pass 4 integration
 
 User-confirmed run `35308623547` for `259ddab` closes Pass 3 (108 backend/10 browser tests and production planning/scenario/Docker checks). Its hosted Vercel calculations were not independently verified. Historical pending statements below refer to their earlier commits.

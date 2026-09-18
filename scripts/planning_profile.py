@@ -13,10 +13,22 @@ from time import perf_counter
 from unittest.mock import patch
 
 from pydantic import TypeAdapter
+from starlette.requests import Request
 from backend.app import main as api
 from backend.app.planning import engine
 from backend.app.planning.contracts import PlanResult, PlanSampleRequest
 from scripts.planning_smoke import stable_plan, validate_plan
+
+
+def production_request():
+    """Request context for the public bundled route: no dataset ref or session."""
+    return Request({'type':'http','asgi':{'version':'3.0','spec_version':'2.3'},'http_version':'1.1',
+        'method':'POST','scheme':'http','path':'/api/plan/sample','raw_path':b'/api/plan/sample',
+        'query_string':b'','root_path':'','headers':[], 'client':('planning-profile',0),'server':('profile',80)})
+
+
+def invoke_production_route(size):
+    return api.sample_plan(PlanSampleRequest(size=size),production_request())
 
 
 def main():
@@ -44,7 +56,7 @@ def main():
         for size in ('fixture','full'):
             for run in ('first','repeat'):
                 totals.clear();counts.clear();start=perf_counter()
-                result=api.sample_plan(PlanSampleRequest(size=size))
+                result=invoke_production_route(size)
                 route_seconds=perf_counter()-start
                 start=perf_counter();raw=adapter.dump_json(result);serialization=perf_counter()-start
                 value=json.loads(raw);signature=stable_plan(value)

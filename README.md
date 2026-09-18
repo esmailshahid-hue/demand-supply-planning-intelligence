@@ -6,6 +6,12 @@ The app serves a React/TypeScript interface and a Python calculation API from on
 
 Workbook processing happens on the server after explicit consent. Local data and review files are private temporary session objects, not durable history. Download accepted files before the one-hour expiry or reset. [WORKBOOK.md](docs/WORKBOOK.md) documents all sheets, units, validation, limits, review rules, file formats and external-ID reconciliation. On Vercel, sample workflows remain available but uploads and accepted-file workflows stay unavailable until a private storage adapter is implemented and verified.
 
+Plans and scenario snapshots carry canonical source provenance: bundled fixture, bundled full sample, uploaded workbook or reopened portable snapshot, plus the normalized dataset hash and dimensions. A private dataset reference is authoritative over browser size labels, and source/hash mismatches fail instead of falling back to a bundled sample. The production component profiler uses the same `/api/plan/sample` route function with an empty request context and creates no review session objects:
+
+```sh
+.venv/bin/python -m scripts.planning_profile
+```
+
 ## Run locally
 
 Prerequisites: Python **3.14**, Node **24+** (tested locally with Node 25), npm.

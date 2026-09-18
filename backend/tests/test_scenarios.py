@@ -211,6 +211,17 @@ def test_capture_reuses_actions_without_reoptimizing_and_detail_rejects_stale_ve
         detail(data,DetailRequest(baseline=base.baseline,policy='original',sku='SKU001',location_id='S1',expected_scenario_hash='stale'))
 
 
+@pytest.mark.parametrize('size,products,source',[('fixture',10,'bundled_fixture'),('full',60,'bundled_full')])
+def test_bundled_snapshot_provenance_and_ids_are_deterministic(size,products,source):
+    from backend.app.data.sample import generate_sample
+    data=generate_sample(size);actions=Actions()
+    first=snapshot(size,data,actions);second=snapshot(size,data,actions)
+    assert first==second and first.snapshot_id==second.snapshot_id
+    assert first.size==size and first.provenance.source==source
+    assert first.provenance.sample_size==size
+    assert first.provenance.dimensions.products==products
+
+
 def test_invalid_frozen_detail_exposes_failures_without_invalid_stock_service(real_baseline):
     data,base=real_baseline;s=data.settings.as_of
     definition=ScenarioDefinition(availability=[Availability(supplier_id='SUP01',start=s,end=s+timedelta(days=55),remaining_fraction=0)])

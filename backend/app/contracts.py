@@ -209,6 +209,29 @@ class Dataset(Contract):
     declared_empty: list[Literal["open_orders", "open_transfers", "payables"]]
 
 
+class DatasetDimensions(Contract):
+    products: int = Field(ge=1, le=60)
+    locations: int = Field(ge=2, le=5)
+    assortment: int = Field(ge=1, le=240)
+    history_rows: int = Field(ge=0, le=100800)
+
+
+class DatasetProvenance(Contract):
+    source: Literal["bundled_fixture", "bundled_full", "uploaded", "portable"]
+    sample_size: Literal["fixture", "full"] | None = None
+    dataset_id: str
+    dataset_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dimensions: DatasetDimensions
+
+    @model_validator(mode="after")
+    def source_matches_size(self):
+        expected = {"bundled_fixture": "fixture", "bundled_full": "full"}.get(self.source)
+        if expected != self.sample_size:
+            if expected is not None or self.sample_size is not None:
+                raise ValueError("Only bundled datasets have a matching sample size.")
+        return self
+
+
 class Issue(Contract):
     severity: Literal["error", "warning"]
     code: str

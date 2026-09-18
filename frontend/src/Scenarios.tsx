@@ -13,10 +13,10 @@ export default function Scenarios({initial,onForecast,onReview,uploaded=false,fi
   const stop=()=>{active.current?.abort();setBusy(false);setEvidence(null);};
   useEffect(()=>{const c=new AbortController();active.current?.abort();active.current=c;setBusy(true);setError('');setBase(null);setResult(null);setDraft(emptyScenario());setEdited(false);setEvidence(null);
     const captured=initial?.size===size&&initial.plan.proposed?.replay.feasible;
-    const body=captured?{size,dataset_hash:initial!.plan.input_hash,purchases:initial!.plan.proposed!.purchases,movements:initial!.plan.proposed!.movements}:{size};
+    const body=captured?{size:uploaded?null:size,dataset_hash:initial!.plan.input_hash,purchases:initial!.plan.proposed!.purchases,movements:initial!.plan.proposed!.movements}:{size};
     scenarioApi<Baseline>(captured?'/api/scenarios/capture':'/api/scenarios/baseline',c.signal,body).then(b=>{if(!c.signal.aborted)setBase(b);}).catch(e=>{if(!c.signal.aborted)setError(e.message);}).finally(()=>{if(!c.signal.aborted)setBusy(false);});
     return ()=>c.abort();
-  },[size,retry,initial]);
+  },[size,retry,initial,uploaded]);
   useEffect(()=>()=>active.current?.abort(),[]);
   const edit=(d:Definition)=>{stop();setDraft(d);setResult(null);setError('');setEdited(true);};
   const start=base?.as_of||'';const end=start?plus(start,55):'';

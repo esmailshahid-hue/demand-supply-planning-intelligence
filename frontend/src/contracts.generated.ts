@@ -526,11 +526,9 @@ export interface components {
             purchases?: components["schemas"]["Purchase"][];
             /** Movements */
             movements?: components["schemas"]["Movement"][];
-            /**
-             * Size
-             * @enum {string}
-             */
-            size: "fixture" | "full";
+            /** Size */
+            size?: ("fixture" | "full") | null;
+            provenance?: components["schemas"]["DatasetProvenance"] | null;
             /** Dataset Hash */
             dataset_hash: string;
             /**
@@ -594,11 +592,8 @@ export interface components {
             purchases?: components["schemas"]["Purchase"][];
             /** Movements */
             movements?: components["schemas"]["Movement"][];
-            /**
-             * Size
-             * @enum {string}
-             */
-            size: "fixture" | "full";
+            /** Size */
+            size?: ("fixture" | "full") | null;
             /** Dataset Hash */
             dataset_hash: string;
         };
@@ -675,6 +670,32 @@ export interface components {
             settings: components["schemas"]["Settings"];
             /** Declared Empty */
             declared_empty: ("open_orders" | "open_transfers" | "payables")[];
+        };
+        /** DatasetDimensions */
+        DatasetDimensions: {
+            /** Products */
+            products: number;
+            /** Locations */
+            locations: number;
+            /** Assortment */
+            assortment: number;
+            /** History Rows */
+            history_rows: number;
+        };
+        /** DatasetProvenance */
+        DatasetProvenance: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "bundled_fixture" | "bundled_full" | "uploaded" | "portable";
+            /** Sample Size */
+            sample_size?: ("fixture" | "full") | null;
+            /** Dataset Id */
+            dataset_id: string;
+            /** Dataset Hash */
+            dataset_hash: string;
+            dimensions: components["schemas"]["DatasetDimensions"];
         };
         /** DecisionRequest */
         DecisionRequest: {
@@ -969,6 +990,7 @@ export interface components {
             };
             /** Input Hash */
             input_hash?: string | null;
+            provenance?: components["schemas"]["DatasetProvenance"] | null;
         };
         /** Inventory */
         Inventory: {
@@ -1260,6 +1282,7 @@ export interface components {
         };
         /** PlanResult */
         PlanResult: {
+            provenance?: components["schemas"]["DatasetProvenance"] | null;
             /** Review Id */
             review_id?: string | null;
             /** Run Id */
@@ -1476,6 +1499,7 @@ export interface components {
             };
             /** Dataset Ref */
             dataset_ref?: string | null;
+            provenance?: components["schemas"]["DatasetProvenance"] | null;
         };
         /** RevisionRequest */
         RevisionRequest: {
@@ -1537,6 +1561,7 @@ export interface components {
         };
         /** ScenarioDetail */
         ScenarioDetail: {
+            provenance: components["schemas"]["DatasetProvenance"];
             /** Baseline Id */
             baseline_id: string;
             /** Scenario Hash */
@@ -1588,6 +1613,7 @@ export interface components {
         };
         /** ScenarioResult */
         ScenarioResult: {
+            provenance: components["schemas"]["DatasetProvenance"];
             /** Baseline Id */
             baseline_id: string;
             /** Scenario Hash */

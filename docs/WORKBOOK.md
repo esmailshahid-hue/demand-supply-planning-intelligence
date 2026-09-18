@@ -2,6 +2,8 @@
 
 This workflow uses the existing `Dataset` and the same forecast, planning, scenario and independent replay implementations as bundled samples. It creates planning files, not orders or transfers. There are no accounts, database or persistent server history.
 
+Every validated source receives canonical provenance containing its source kind, normalized dataset hash/ID and exact product, location, assortment and history-row dimensions. Uploaded files stay `uploaded` regardless of whether they happen to contain 10 or 60 products. Reopened accepted snapshots become `portable`; neither is relabeled as a bundled fixture/full sample. Calculation and scenario endpoints load the owner-bound private reference first and treat browser fixture/full labels as non-authoritative. Hash, dimension or source mismatches block the request instead of selecting a bundled fallback.
+
 ## Templates and field conventions
 
 Download blank and populated fixture XLSX files in Data and Assumptions. Generate larger files locally:

@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Literal
 from pydantic import Field
-from backend.app.contracts import Contract, ForecastResult, NonNegative, BufferEvidence
+from backend.app.contracts import Contract, DatasetProvenance, ForecastResult, NonNegative, BufferEvidence
 from backend.app.planning.contracts import Purchase, Movement, Summary, CashWeek, Failure, Service, StockDay, Payment, ForecastTrace, SolverStage, EvidenceTarget
 
 class Uplift(Contract):
@@ -40,7 +40,8 @@ class Actions(Contract):
     movements: list[Movement] = Field(default_factory=list, max_length=10000)
 
 class BaselineSnapshot(Actions):
-    size: Literal['fixture','full']
+    size: Literal['fixture','full'] | None = None
+    provenance: DatasetProvenance | None = None
     dataset_hash: str
     version: Literal['sample-scenarios-1'] = 'sample-scenarios-1'
     snapshot_id: str
@@ -71,6 +72,7 @@ class ScenarioRequest(Contract):
     scenario: ScenarioDefinition = Field(default_factory=ScenarioDefinition)
 
 class ScenarioResult(Contract):
+    provenance: DatasetProvenance
     baseline_id: str
     scenario_hash: str
     definition: ScenarioDefinition
@@ -119,6 +121,7 @@ class Adjustment(Contract):
     reason: str
 
 class ScenarioDetail(Contract):
+    provenance: DatasetProvenance
     baseline_id: str
     scenario_hash: str
     assumptions_hash: str
@@ -141,5 +144,5 @@ class ScenarioDetail(Contract):
     note: str = 'Stock is pooled by SKU/location. Related receipts and movements are evidence of shared availability, not one-to-one dependencies. Invalid policies suppress stock/service arithmetic; cash retains attempted obligations.'
 
 class CaptureRequest(Actions):
-    size: Literal['fixture','full']
+    size: Literal['fixture','full'] | None = None
     dataset_hash: str

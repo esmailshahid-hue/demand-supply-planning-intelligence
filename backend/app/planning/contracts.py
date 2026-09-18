@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 from pydantic import Field
-from backend.app.contracts import Contract, Dataset, BufferEvidence, Issue
+from backend.app.contracts import Contract, Dataset, DatasetProvenance, BufferEvidence, Issue
 
 
 class PlanRequest(Contract):
@@ -177,6 +177,7 @@ class SolverStage(Contract):
 
 
 class PlanResult(Contract):
+    provenance: DatasetProvenance | None = None
     review_id: str | None = None
     run_id: str
     input_hash: str

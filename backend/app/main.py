@@ -96,7 +96,7 @@ def health():
 
 @app.get("/api/sample", response_model=SampleCatalog)
 def catalog(request: Request, size: Literal["fixture", "full"] = "fixture"):
-    data, issues = dataset_for(request,size)
+    data, issues, _ = dataset_for(request,size)
     issues = validate_dataset(data) if issues is None else issues
     return SampleCatalog(dataset_id=data.dataset_id, as_of=data.settings.as_of, products=data.products,
                          locations=[l for l in data.locations if l.kind == "store"], history_rows=len(data.demand_history), warnings=issues)
@@ -107,7 +107,7 @@ ERRORS = {422: {"model": APIError}, 429: {"model": APIError}, 503: {"model": API
 
 @app.post("/api/forecast/sample", response_model=ForecastResult, responses=ERRORS)
 def sample_forecast(request: SampleRequest, http: Request):
-    data, issues = dataset_for(http,request.size)
+    data, issues, _ = dataset_for(http,request.size)
     return calculate(data, request.sku, request.location_id, issues)
 
 
@@ -127,9 +127,12 @@ def calculate_plan(data, issues=None, review=None):
 
 @app.post('/api/plan/sample', response_model=PlanResult, responses=ERRORS)
 def sample_plan(request: PlanSampleRequest, http: Request):
-    data, issues = dataset_for(http,request.size)
+    data, issues, context = dataset_for(http,request.size)
     result=calculate_plan(data,issues,imported_constraints(http))
-    return attach_draft(http,data,result) if isinstance(result,PlanResult) else result
+    if isinstance(result,PlanResult):
+        result=result.model_copy(update={'provenance':context})
+        return attach_draft(http,data,result,context)
+    return result
 
 
 @app.post('/api/plan', response_model=PlanResult, responses=ERRORS)
@@ -147,10 +150,14 @@ def scenario_call(fn, request, http=None):
         return JSONResponse(status_code=429, headers={'Retry-After':'2'}, content={'message':'A calculation is running. Please retry shortly.'})
     try:
         size=request.size if isinstance(request, (PlanSampleRequest,CaptureRequest)) else request.baseline.size
-        data,issues=dataset_for(http,size) if http is not None else sample(size)
+        if http is not None:
+            data,issues,context=dataset_for(http,size)
+        else:
+            data,issues=sample(size);context=None
         review=imported_constraints(http) if http is not None else None
-        if isinstance(request, PlanSampleRequest): return fn(size,data,validated_issues=issues,review=review)
-        return fn(data,request,review=review) if fn is compare else fn(data,request)
+        if isinstance(request, PlanSampleRequest): return fn(size,data,validated_issues=issues,review=review,context=context)
+        if fn is compare:return fn(data,request,review=review,context=context)
+        return fn(data,request,context=context)
     except ValueError as error:
         return JSONResponse(status_code=422,content={'code':'invalid_scenario','message':str(error)})
     except TimeoutError:

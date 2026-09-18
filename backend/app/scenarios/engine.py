@@ -9,6 +9,7 @@ from backend.app.planning.inputs import Inputs, network_forecasts
 from backend.app.planning.evidence import purchase_evidence_targets
 from backend.app.simulation.replay import replay
 from backend.app.forecasting.engine import forecast
+from backend.app.contracts import DatasetDimensions, DatasetProvenance
 from backend.app.scenarios.contracts import (Actions, BaselineSnapshot, Outcome, BaselineResult, Funding, ActionChange, ScenarioResult, Adjustment, ScenarioDetail, SupplierOption)
 
 
@@ -20,13 +21,26 @@ def digest(value):
 def dataset_hash(data):return sha256(data.model_dump_json().encode()).hexdigest()
 def actions_of(policy):return Actions(purchases=policy.purchases,movements=policy.movements)
 
-def snapshot(size,data,actions):
-    body=dict(size=size,dataset_hash=dataset_hash(data),version='sample-scenarios-1',**actions.model_dump(mode='json'))
+
+def provenance(data,source='bundled_fixture',sample_size='fixture'):
+    return DatasetProvenance(source=source,sample_size=sample_size,dataset_id=data.dataset_id,dataset_hash=dataset_hash(data),
+        dimensions=DatasetDimensions(products=len(data.products),locations=len(data.locations),assortment=len(data.assortment),history_rows=len(data.demand_history)))
+
+
+def snapshot(size,data,actions,context=None):
+    context=context or provenance(data,'bundled_'+size,size)
+    if context.dataset_hash!=dataset_hash(data):raise ValueError('Dataset provenance does not match the calculated dataset.')
+    body=dict(size=context.sample_size,provenance=context.model_dump(mode='json'),dataset_hash=context.dataset_hash,version='sample-scenarios-1',**actions.model_dump(mode='json'))
     return BaselineSnapshot(**body,snapshot_id=digest(body))
 
 
-def check_snapshot(data,base):
-    if base.dataset_hash!=dataset_hash(data) or base.snapshot_id!=digest(base.model_dump(mode='json',exclude={'snapshot_id'})):
+def check_snapshot(data,base,context=None):
+    context=context or (provenance(data,'bundled_'+base.size,base.size) if base.size else None)
+    payload=base.model_dump(mode='json',exclude={'snapshot_id'})
+    if 'provenance' not in base.model_fields_set:payload.pop('provenance',None)
+    source_ok=(base.provenance==context if base.provenance is not None else
+        context is not None and context.source.startswith('bundled_') and base.size==context.sample_size)
+    if context is None or not source_ok or base.dataset_hash!=context.dataset_hash or base.snapshot_id!=digest(payload):
         raise ValueError('Baseline snapshot does not match its sample version or action checksum. Reload the baseline.')
 
 
@@ -158,7 +172,7 @@ def outcome(policy,hash_,actions,ledger,status,data,failures=(),explanations=(),
         evidence_targets=purchase_evidence_targets(data,ledger,actions.purchases) if feasible else [])
 
 
-def capture(data,request):
+def capture(data,request,context=None):
     from types import SimpleNamespace
     if dataset_hash(data)!=request.dataset_hash:raise ValueError('Sample version changed; recalculate the baseline.')
     started=perf_counter();prepared=network_forecasts(data,started+30)
@@ -167,14 +181,14 @@ def capture(data,request):
     ledger=replay(data,*prepared[:2],actions.purchases,actions.movements)
     if not ledger.feasible:raise ValueError('Captured baseline actions fail independent replay.')
     result=SimpleNamespace(proposed=SimpleNamespace(purchases=actions.purchases,movements=actions.movements,replay=ledger),status='validated_snapshot',exceptions=[],stages=[])
-    return baseline_result(request.size,data,result,started)
+    return baseline_result(request.size,data,result,started,context=context)
 
 
-def baseline_result(size,data,result=None,started=None,validated_issues=None,review=None):
+def baseline_result(size,data,result=None,started=None,validated_issues=None,review=None,context=None):
     started=perf_counter() if started is None else started
     result=plan(data,validated_issues=validated_issues,review=review) if result is None else result
     if not result.proposed or not result.proposed.replay.feasible:raise ValueError('Sample baseline is not independently feasible.')
-    base=snapshot(size,data,actions_of(result.proposed))
+    base=snapshot(size,data,actions_of(result.proposed),context)
     # Baseline identifier is the immutable original assumption/action version.
     original=outcome('original',base.dataset_hash,actions_of(result.proposed),result.proposed.replay,result.status,data,explanations=result.exceptions,stages=result.stages)
     orders=[o for o in data.open_orders if o.status!='received']
@@ -191,8 +205,8 @@ def baseline_result(size,data,result=None,started=None,validated_issues=None,rev
         weeks=[Funding(week_start=b.week_start,commitment=b.new_commitment_cap,payment=b.payment_ceiling) for b in data.budgets],elapsed_ms=(perf_counter()-started)*1000)
 
 
-def prepare(data,request):
-    check_snapshot(data,request.baseline)
+def prepare(data,request,context=None):
+    check_snapshot(data,request.baseline,context)
     changed,definition,changes=transform(data,request.scenario)
     deadline=perf_counter()+30
     original=network_forecasts(data,deadline)
@@ -226,8 +240,8 @@ def forecast_versions(prepared):
     return {f'{t.sku}/{t.location_id}':digest({'input':t.input_hash,'method':t.method,'buffer':t.buffer.model_dump(mode='json'),'demand':demand[t.sku,t.location_id]}) for t in traces}
 
 
-def compare(data,request,review=None):
-    start=perf_counter();changed,definition,changes,base_forecasts,scenario_forecasts,hash_=prepare(data,request)
+def compare(data,request,review=None,context=None):
+    start=perf_counter();changed,definition,changes,base_forecasts,scenario_forecasts,hash_=prepare(data,request,context)
     original_actions=Actions(purchases=request.baseline.purchases,movements=request.baseline.movements)
     original_replay=replay(data,*base_forecasts[:2],original_actions.purchases,original_actions.movements)
     if not original_replay.feasible:raise ValueError('Baseline actions fail independent replay under original assumptions. Reload baseline.')
@@ -239,13 +253,13 @@ def compare(data,request,review=None):
     original=outcome('original',request.baseline.dataset_hash,original_actions,original_replay,'validated_snapshot',data)
     frozen_out=outcome('frozen',hash_,frozen,frozen_replay,'validated_frozen',changed)
     replanned=outcome('replanned',hash_,new,new_replay,planned.status,changed,planned.failures if planned.proposed is None else (),planned.exceptions,planned.stages)
-    return ScenarioResult(baseline_id=request.baseline.snapshot_id,scenario_hash=hash_,definition=definition,changes=changes,
+    return ScenarioResult(provenance=context or request.baseline.provenance or provenance(data,'bundled_'+request.baseline.size,request.baseline.size),baseline_id=request.baseline.snapshot_id,scenario_hash=hash_,definition=definition,changes=changes,
         original=original,frozen=frozen_out,replanned=replanned,shock_delta=delta(original,frozen_out),replan_delta=delta(frozen_out,replanned),
         forecast_versions=forecast_versions(scenario_forecasts),action_changes=action_diff(frozen,new),elapsed_ms=(perf_counter()-start)*1000)
 
 
-def detail(data,request):
-    start=perf_counter();changed,definition,_,original,adjusted,hash_=prepare(data,request)
+def detail(data,request,context=None):
+    start=perf_counter();changed,definition,_,original,adjusted,hash_=prepare(data,request,context)
     if request.expected_scenario_hash and request.expected_scenario_hash!=hash_:raise ValueError('Scenario detail assumptions changed; rerun the scenario.')
     actions=Actions(purchases=request.baseline.purchases,movements=request.baseline.movements)
     selected=data if request.policy=='original' else changed
@@ -266,7 +280,7 @@ def detail(data,request):
     purchases=[p for p in actions.purchases if p.sku==request.sku];moves=[m for m in actions.movements if m.sku==request.sku]
     references={p.action_id for p in purchases}|{f'{m.source}-{m.destination}-{m.dispatch_date}' for m in moves}
     existing={p.external_id for p in selected.payables if p.linked_external_id in {o.external_id for o in selected.open_orders+selected.open_transfers if o.sku==request.sku}}
-    return ScenarioDetail(baseline_id=request.baseline.snapshot_id,scenario_hash=hash_,assumptions_hash=request.baseline.dataset_hash if request.policy=='original' else hash_,action_hash=digest(actions),policy=request.policy,
+    return ScenarioDetail(provenance=context or request.baseline.provenance or provenance(data,'bundled_'+request.baseline.size,request.baseline.size),baseline_id=request.baseline.snapshot_id,scenario_hash=hash_,assumptions_hash=request.baseline.dataset_hash if request.policy=='original' else hash_,action_hash=digest(actions),policy=request.policy,
         feasible=ledger.feasible,failures=ledger.failures,forecast=fc,forecast_version=forecast_versions(prepared)[f'{request.sku}/{request.location_id}'],policy_buffer=trace.buffer,adjustments=adjustments,
         stock=[r for r in ledger.stock if r.sku==request.sku] if ledger.feasible else [],cash=ledger.cash,payments=[p for p in ledger.payments if p.reference in references|existing],
         purchases=purchases,movements=moves,confirmed_receipts=[{'id':o.external_id,'destination':o.destination,'arrival':str(o.arrival_date),'units':str(o.remaining_units)} for o in selected.open_orders+selected.open_transfers if o.sku==request.sku and o.status!='received'],
