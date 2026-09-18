@@ -5,6 +5,7 @@ from math import ceil, floor
 from datetime import timedelta
 from time import perf_counter
 from backend.app.simulation.replay import cents, week
+from backend.app.planning.constraints import business_key
 
 
 def benchmark(ctx, deadline=float('inf')):
@@ -13,6 +14,35 @@ def benchmark(ctx, deadline=float('inf')):
     commitments,payments,fees=defaultdict(int),defaultdict(int,ctx.existing),defaultdict(int)
     supplier_used,shared_used=defaultdict(int),defaultdict(float)
     purchases,movements=[],[]
+    dispatches=defaultdict(float,ctx.dispatches)
+    fixed_lanes=defaultdict(float,ctx.lane_used)
+    locked=ctx.review.locks()
+    prohibited=set(locked)|ctx.review.rejected
+    grouped_orders=defaultdict(int)
+    paid_groups={(s,d,t) for (s,d,t),q in fixed_lanes.items() if q>0}
+    # Reserve all exact reviewed obligations before discretionary choices. Proposed
+    # locked receipts do not alter the donor's confirmed-receipt reserve policy.
+    for a in ctx.review.purchases:
+        o=next(o for o in ctx.data.supplier_offers if o.offer_id==a.offer_id)
+        arrival=(a.arrival_date-ctx.start).days;dispatch=(a.dispatch_date-ctx.start).days
+        receipts[a.sku,a.destination,arrival]+=a.units
+        supplier_used[a.supplier_id,a.sku,dispatch]+=a.units
+        unit=ctx.products[a.sku].volume_per_unit if ctx.suppliers[a.supplier_id].shared_capacity_unit=='volume' else 1
+        shared_used[a.supplier_id,dispatch]+=a.units*unit
+        total=cents(a.value);w=week(a.order_date)
+        deposit=int((Decimal(total)*Decimal(str(o.deposit_fraction))).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+        commitments[w]+=total;grouped_orders[a.supplier_id,a.order_date]+=total
+        payments[w]+=deposit;payments[week(a.arrival_date+timedelta(days=o.balance_days_after_receipt))]+=total-deposit
+        purchases.append(a)
+    for a in ctx.review.movements:
+        i=(a.dispatch_date-ctx.start).days;j=(a.arrival_date-ctx.start).days
+        dispatches[a.sku,a.source,i]+=a.units;receipts[a.sku,a.destination,j]+=a.units
+        group=a.source,a.destination,i;fixed_lanes[group]+=a.units
+        lane=next(l for l in ctx.data.transfer_lanes if (l.source,l.destination)==(a.source,a.destination))
+        if group not in paid_groups:
+            fee=cents(lane.grouped_dispatch_fee);w=week(a.dispatch_date)
+            fees[w]+=fee;payments[w]+=fee;paid_groups.add(group)
+        movements.append(a)
     room_cache={}
     def invalidate_room(loc):
         room_cache.pop(loc,None)
@@ -27,7 +57,7 @@ def benchmark(ctx, deadline=float('inf')):
         value=stock[key]
         series=ctx.demand.get(key,[0.]*56)
         for d in range(i+1,until):
-            value=max(0.,value+receipts[*key,d]-series[d])-ctx.dispatches[*key,d]
+            value=max(0.,value+receipts[*key,d]-series[d])-dispatches[*key,d]
         return value+receipts[*key,until]
     def rank(key):
         a=ctx.assortment.get(key)
@@ -46,14 +76,16 @@ def benchmark(ctx, deadline=float('inf')):
         for key in ctx.keys:
             stock[key]+=receipts[*key,i]
             stock[key]=max(0.,stock[key]-ctx.demand.get(key,[0.]*56)[i])
-            stock[key]-=ctx.dispatches[*key,i]
-        paid_lanes={(src,dst) for (src,dst,t),q in ctx.lane_used.items() if t==i and q>0}
-        lane_used=defaultdict(float,{(s,d):q for (s,d,t),q in ctx.lane_used.items() if t==i})
+            stock[key]-=dispatches[*key,i]
+        paid_lanes={(src,dst) for (src,dst,t) in paid_groups if t==i}
+        lane_used=defaultdict(float,{(s,d):q for (s,d,t),q in fixed_lanes.items() if t==i})
         for key in sorted(ctx.assortment,key=rank):
             sku,dst=key
             for lane in sorted((l for l in ctx.data.transfer_lanes if l.destination==dst and sku in l.allowed_skus),key=lambda l:(l.transit_days,l.source)):
                 arrival=i+lane.transit_days
                 if arrival>=56 or day.weekday() not in lane.dispatch_weekdays or day.weekday() not in ctx.locations[lane.source].open_weekdays or ctx.day(arrival).weekday() not in ctx.locations[dst].open_weekdays:
+                    continue
+                if business_key(ctx.movement(lane,sku,i,lane.pack_units)) in prohibited:
                     continue
                 if any(t.sku==sku and t.source==dst and t.destination==lane.source and t.dispatch_date==day for t in movements+list(ctx.data.open_transfers)):
                     continue
@@ -61,6 +93,10 @@ def benchmark(ctx, deadline=float('inf')):
                 need=max(0.,target-projected(key,arrival))
                 if need<=0: continue
                 available=max(0.,stock[sku,lane.source]-ctx.reserve[sku,lane.source,i])
+                # Do not spend stock already promised to later reviewed dispatches.
+                future_reserved=sum(a.units for a in ctx.review.movements if a.sku==sku and a.source==lane.source and a.dispatch_date>day)
+                future_receipts=sum(receipts[sku,lane.source,d] for d in range(i+1,56))
+                available=max(0.,available-max(0.,future_reserved-future_receipts))
                 pack=lane.pack_units
                 requested=ceil(need/pack)*pack
                 limits={
@@ -93,6 +129,8 @@ def benchmark(ctx, deadline=float('inf')):
             options=[]
             for o in ctx.data.supplier_offers:
                 timing=ctx.timing(o,i) if o.sku==sku else None
+                if timing and business_key(ctx.purchase(o,i,o.case_size)) in prohibited:
+                    continue
                 if timing:
                     options.append((o.price_per_base_unit,timing[1],o.offer_id,o,timing))
             shortage=min((rank(k)[0] for k in ctx.assortment if k[0]==sku),default=56)
@@ -113,7 +151,7 @@ def benchmark(ctx, deadline=float('inf')):
                 if price==0 and s.minimum_order_value>0:
                     ctx.explain('SUPPLIER_MINIMUM','A zero-price line cannot meet this supplier-order minimum on its own.',sku=sku,supplier_id=o.supplier_id,day=day)
                     continue
-                minimum=max(o.moq_units,ceil(cents(s.minimum_order_value)/max(1,price)/pack)*pack,pack)
+                minimum=max(o.moq_units,ceil(max(0,cents(s.minimum_order_value)-grouped_orders[o.supplier_id,day])/max(1,price)/pack)*pack,pack)
                 qty=max(minimum,ceil(need/pack)*pack)
                 cap=ctx.capacity.get((o.supplier_id,sku,dispatch),0)-supplier_used[o.supplier_id,sku,dispatch]
                 unit=ctx.products[sku].volume_per_unit if s.shared_capacity_unit=='volume' else 1
@@ -144,6 +182,7 @@ def benchmark(ctx, deadline=float('inf')):
                 supplier_used[o.supplier_id,sku,dispatch]+=qty
                 shared_used[o.supplier_id,dispatch]+=qty*unit
                 commitments[w]+=total
+                if locked: grouped_orders[o.supplier_id,day]+=total
                 for x,v in additions.items(): payments[x]+=v
                 break
     return purchases,movements

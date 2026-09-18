@@ -1,8 +1,10 @@
 # Demand and Supply Planning Intelligence
 
-An independent, synthetic Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. **Passes 1 and 2 are implemented.** Forecast evaluation feeds live purchasing, allocation and dated payment plans. Scenarios, uploads and exports remain unavailable.
+An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–3 provide live sample forecasts, feasible planning and original/frozen/replanned scenarios. **Pass 4 adds local XLSX inputs, exact action review, final acceptance, reviewed exports and portable snapshots. Hosted uploads remain blocked pending authorized private storage.** No orders are sent.
 
-The working app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review loads the 10-SKU fixture, evaluates three weekday forecasting methods and displays the actual result. A 60-SKU sample is also available. Open **Plan Review** to calculate the complete network, inspect independently checked recommendations and compare the constrained benchmark. Allow roughly 30 seconds per plan on the measured local machine. Time-limited results are explicitly labeled as fallbacks.
+The app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review evaluates three weekday forecasting methods on a 10-SKU fixture or 60-SKU sample. Plan Review exposes dated stock/cash evidence and exact accept/reject/edit decisions. Scenarios compares unchanged actions with a fresh constrained plan. Data and Assumptions validates a documented workbook before calculation. Baseline smoke retains its 10-second warm live target; fallback status is explicit and does not claim global optimality. See [BUILD_STATUS](docs/BUILD_STATUS.md) for measured results and cold-start qualifications.
+
+Workbook processing happens on the server after explicit consent. Local data and review files are private temporary session objects, not durable history. Download accepted files before the one-hour expiry or reset. [WORKBOOK.md](docs/WORKBOOK.md) documents all sheets, units, validation, limits, review rules, file formats and external-ID reconciliation. On Vercel, sample workflows remain available but uploads and accepted-file workflows stay unavailable until a private storage adapter is implemented and verified.
 
 ## Run locally
 
@@ -29,7 +31,10 @@ For frontend development, run the API above and `npm --prefix frontend run dev` 
 npm --prefix frontend run generate:types
 npm --prefix frontend run build
 .venv/bin/python -m scripts.smoke  # requires the running production server
-.venv/bin/python -m scripts.planning_smoke  # fixture/full, first/repeat; about two minutes
+.venv/bin/python -m scripts.planning_smoke  # fixture/full, first/repeat
+.venv/bin/python -m scripts.scenario_smoke
+.venv/bin/python -m scripts.workflow_smoke  # local upload/review/accept/export, fixture + full
+.venv/bin/python -m scripts.workbook --size full --output artifacts/full.xlsx
 ```
 
 Browser tests (the suite can start the production server itself):
@@ -63,12 +68,13 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is not installed in the local implementation environment. GitHub Actions run `35201527675` successfully verified the original Pass 2 commit `6c587cc` on Ubuntu: 56 backend tests, solver smoke, frontend build, browser tests, Docker build/start, forecast smoke, fixture/full planning smoke and solver smoke inside the container. That evidence applies to the original commit; CI for the current correction remains pending until it is committed and pushed. No public host or Vercel-hosted planning runtime has been verified. See the [deployment readiness assessment](docs/DEPLOYMENT.md) for exact settings and the future upload limitation.
+Docker is unavailable locally. User-confirmed GitHub Actions `35308623547` passed for Pass 3 commit `259ddab`, including Docker and production planning/scenario checks. That evidence does not verify these Pass 4 changes. Exact-commit CI/container and hosted execution remain outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted storage blocker.
 
 ## Project guide
 
 - [Build specification](docs/DEMAND_SUPPLY_MVP_BUILD_PLAN.md): source of truth and six-pass scope.
-- [Build status](docs/BUILD_STATUS.md): executed checks, limitations and exact Pass 3 handoff.
+- [Build status](docs/BUILD_STATUS.md): executed checks and remaining verification boundaries.
+- [Workbook workflow](docs/WORKBOOK.md): sheets, validation, review, exports and reconciliation.
 - [Forecast methodology and contracts](docs/FORECASTING.md): cutoff rules, fallback policy and metric definitions.
 - [Planning methodology](docs/PLANNING.md): staged model, benchmark, independent replay and cash semantics.
 - `backend/app/contracts.py`: canonical Pydantic request/data/result schemas; frontend types are generated from OpenAPI.
@@ -76,4 +82,4 @@ Docker is not installed in the local implementation environment. GitHub Actions 
 - `backend/app/forecasting/engine.py`: the sole forecast/evaluation implementation.
 - `frontend/src/`: four-screen shell, live Demand Review and Plan Review.
 
-Calculations process inputs on the server. This is not a browser-only application. There are no user uploads, accounts or persistent user datasets in Passes 1–2, and no claim about a future host's retention policies.
+Calculations process inputs on the server after consent. There are no accounts, database, persistent history or automatic purchasing. Pass 5 is not implemented.

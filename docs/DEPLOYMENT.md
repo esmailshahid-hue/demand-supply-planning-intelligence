@@ -1,3 +1,15 @@
+# Pass 4 upload and accepted-file readiness
+
+The new workflow is verified locally only. No authorized object-storage resource was configured, and none was provisioned. The provider-neutral storage/reference contracts and tested temporary-file driver support the documented 16 MiB local workbook limit without browser Dataset JSON. **Hosted uploads and accepted files remain blocked pending an authorized private storage adapter and lifecycle verification.** `VERCEL` disables the local driver even if `PLANNING_UPLOAD_STORAGE=local`; unknown/unimplemented configurations also fail closed. Bundled sample calculations and template downloads remain available.
+
+Local operation uses one production Uvicorn worker, HttpOnly SameSite session capability cookies, random owner/type-checked references, isolated request files and bounded temporary storage. Original workbook bytes are removed after parsing. Data/drafts/accepted objects expire after one hour, swept every 30 seconds while running, on access/reset/normal exit; crashed directories are cleaned after expiry by a subsequent running process. This is temporary storage, not authentication or durable history. Download portable files before expiry/reset/restart. See [WORKBOOK.md](WORKBOOK.md) for exact file, row, expanded-archive and snapshot bounds.
+
+A hosted adapter must implement direct private browser-to-storage upload with short-lived narrow authorization, ownership, object/content/size validation, no browser credentials, no permanent public URLs and deletion/abandonment lifecycle tests. The browser should send only the small reference to the Function. Snapshot/export downloads must use the same private object path when exceeding Function payload limits. Existing same-domain sample routes, Vercel entrypoint/60-second ceiling and Docker startup are preserved; no settings were changed. The local raw-upload route is deliberately unavailable on Vercel and is not a production storage substitute.
+
+Pass 3 closure is based on **user-confirmed** GitHub Actions **35308623547** for **259ddab**: 108 backend tests, 10 browser tests, build/contracts/Docker/solver, planning and scenario smoke passed; both Vercel build checks succeeded. Fixture planning **3.331 / 3.323 s**, full **8.278 / 8.128 s**, full comparisons **11.666 / 11.472 s**, future-path comparison **17.699 s**. Hosted calculation execution was not independently verified. The cold profiler measured **10.658 s**, including **2.456 s** sample construction; planning smoke followed a sample-warming forecast smoke. Sub-10-second warm results are not Vercel cold-start proof.
+
+No Docker/Podman/Colima/Lima runtime is installed here. Exact-commit Linux CI, container checks and hosted/storage execution for Pass 4 remain outstanding. CI retains existing gates and now includes the production upload/review/accept/export smoke. No new CI or host success is claimed. Historical sections below retain the evidence for earlier commits and are superseded by this readiness boundary.
+
 # Pass 3 sample scenario transport — 17 September 2026
 
 ## Focused Pass 3 correction — 18 September 2026

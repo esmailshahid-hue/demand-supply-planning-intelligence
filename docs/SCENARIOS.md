@@ -1,5 +1,13 @@
 # Sample scenarios — Pass 3
 
+## Pass 4 integration
+
+User-confirmed run `35308623547` for `259ddab` closes Pass 3 (108 backend/10 browser tests and production planning/scenario/Docker checks). Its hosted Vercel calculations were not independently verified. Historical pending statements below refer to their earlier commits.
+
+The same original/frozen/replanned transforms now operate on a validated private `X-Dataset-Ref`; history is never posted back as browser JSON. Sample selection is unavailable while uploaded data is active. Promotion defaults use that dataset's first product/store; all existing shock families and single-supplier disruption behavior remain unchanged.
+
+“Review replanned actions” explicitly calculates a review draft under the normalized scenario definition. Later regeneration and final acceptance use the same Pass 3 forecast preparation: reuse original forecast inputs except when future-path delays change the required protection envelope, then apply adjustments only to future demand. Action locks/rejections and imported execution remainders are retained. Reviewed evidence reconstructs the current full-network replay before returning scoped detail. Accepted snapshots remain separate immutable portable versions; they are not the internal Pass 3 baseline transport. See [WORKBOOK.md](WORKBOOK.md).
+
 Pass 2 is closed under the independently validated fallback policy. User-supplied evidence identifies successful Ubuntu GitHub Actions run **35228781514** for commit **47dc0217df22d8f31eed2a534e7d279e597861bd**: 82 backend tests, eight browser tests, generated contracts/build, Docker build/start, forecast and container solver smoke, and fixture **2.865 / 2.851 s** and full **7.604 / 7.496 s** planning first/repeat. This is not CI or hosted verification of Pass 3.
 
 The focused 18 September correction keeps these semantics and fixes two presentation relationships. Supplier disruption selects one supplier that has both an existing receipt and applicable future paths; the sample uses **SUP08** for both `PO-LATE-001` and the availability reduction, and shows its identifier/name. Purchase evidence no longer substitutes S1 for a pooled-DC destination. Each feasible original, frozen or replanned outcome carries compact replay-derived targets for its own actions: earliest reachable shortage, then largest same-date shortage and location ID; otherwise greatest positive replenishment need and location ID. If replay cannot establish a store relationship, or the policy is infeasible, the link is unavailable. Detail explicitly describes the selected store as demand context for pooled DC stock, which other stores may compete for.

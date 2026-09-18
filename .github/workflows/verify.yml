@@ -63,3 +63,6 @@ jobs:
       - name: Profile planning components inside container
         if: ${{ !cancelled() && (steps.planning_smoke.outcome == 'success' || steps.planning_smoke.outcome == 'failure') }}
         run: docker exec planning-pass1 python -m scripts.planning_profile
+      - name: Run production upload review acceptance and export smoke
+        if: ${{ !cancelled() }}
+        run: .venv/bin/python -m scripts.workflow_smoke

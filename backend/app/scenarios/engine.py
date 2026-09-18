@@ -170,9 +170,9 @@ def capture(data,request):
     return baseline_result(request.size,data,result,started)
 
 
-def baseline_result(size,data,result=None,started=None,validated_issues=None):
+def baseline_result(size,data,result=None,started=None,validated_issues=None,review=None):
     started=perf_counter() if started is None else started
-    result=plan(data,validated_issues=validated_issues) if result is None else result
+    result=plan(data,validated_issues=validated_issues,review=review) if result is None else result
     if not result.proposed or not result.proposed.replay.feasible:raise ValueError('Sample baseline is not independently feasible.')
     base=snapshot(size,data,actions_of(result.proposed))
     # Baseline identifier is the immutable original assumption/action version.
@@ -226,14 +226,14 @@ def forecast_versions(prepared):
     return {f'{t.sku}/{t.location_id}':digest({'input':t.input_hash,'method':t.method,'buffer':t.buffer.model_dump(mode='json'),'demand':demand[t.sku,t.location_id]}) for t in traces}
 
 
-def compare(data,request):
+def compare(data,request,review=None):
     start=perf_counter();changed,definition,changes,base_forecasts,scenario_forecasts,hash_=prepare(data,request)
     original_actions=Actions(purchases=request.baseline.purchases,movements=request.baseline.movements)
     original_replay=replay(data,*base_forecasts[:2],original_actions.purchases,original_actions.movements)
     if not original_replay.feasible:raise ValueError('Baseline actions fail independent replay under original assumptions. Reload baseline.')
     frozen=frozen_actions(changed,definition,original_actions)
     frozen_replay=replay(changed,*scenario_forecasts[:2],frozen.purchases,frozen.movements)
-    planned=plan(changed,runtime_seconds=max(.01,30-(perf_counter()-start)),prepared_forecasts=scenario_forecasts)
+    planned=plan(changed,runtime_seconds=max(.01,30-(perf_counter()-start)),prepared_forecasts=scenario_forecasts,review=review)
     new=actions_of(planned.proposed) if planned.proposed else Actions()
     new_replay=planned.proposed.replay if planned.proposed else replay(changed,*scenario_forecasts[:2],include_stock=False)
     original=outcome('original',request.baseline.dataset_hash,original_actions,original_replay,'validated_snapshot',data)

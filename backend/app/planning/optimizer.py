@@ -11,6 +11,7 @@ from scipy.optimize import milp, Bounds, LinearConstraint
 from scipy.sparse import coo_matrix
 from backend.app.planning.contracts import SolverStage
 from backend.app.simulation.replay import cents, week
+from backend.app.planning.constraints import business_key
 
 
 class Model:
@@ -66,6 +67,8 @@ def _optimize(ctx, deadline):
     move_flags=defaultdict(list)
     donor_flags=defaultdict(list)
     cost={};ties={}
+    locks=ctx.review.locks()
+    represented=set()
     for i in range(56):
         if perf_counter()>=deadline: return [],[],[SolverStage(name='model_build',status='time_limit',elapsed_ms=0)]
         day=ctx.day(i);w=week(day)
@@ -77,6 +80,11 @@ def _optimize(ctx, deadline):
             if maximum<=0:continue
             pack=o.case_size
             q=model.var(maximum,True);active=model.var(1,True)
+            key=business_key(ctx.purchase(o,i,pack))
+            if key in ctx.review.rejected: model.row({q:1},lo=0,hi=0)
+            if key in locks:
+                quantity=locks[key].units/pack
+                model.row({q:1},lo=quantity,hi=quantity);represented.add(key)
             model.row({q:1,active:-maximum},hi=0)
             model.row({q:1,active:-max(1,ceil(o.moq_units/pack))},lo=0)
             group=o.supplier_id,i
@@ -113,6 +121,11 @@ def _optimize(ctx, deadline):
                 model.row({active:1,fg:-1},hi=0)
                 fee_groups[group][1].append(active)
                 pack=lane.pack_units
+                key=business_key(ctx.movement(lane,sku,i,pack))
+                if key in ctx.review.rejected: model.row({q:1},lo=0,hi=0)
+                if key in locks:
+                    quantity=locks[key].units/pack
+                    model.row({q:1},lo=quantity,hi=quantity);represented.add(key)
                 outgoing[sku,lane.source,i][q]=pack
                 arriving[sku,lane.destination,arrival][q]=pack
                 lane_rows[group][q]=pack
@@ -120,6 +133,8 @@ def _optimize(ctx, deadline):
                 donor_flags[sku,lane.source,i].append(active)
                 ties[q]=len(movement_vars)+1
                 movement_vars.append((q,lane,sku,i))
+    if set(locks)-represented:
+        return [],[],[SolverStage(name='review_locks',status='infeasible',elapsed_ms=0)]
     for (sid,i),(flag,values) in order_groups.items():
         minimum=cents(ctx.suppliers[sid].minimum_order_value)
         model.row({**values,flag:-minimum},lo=0)

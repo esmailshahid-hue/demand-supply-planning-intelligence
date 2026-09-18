@@ -15,6 +15,7 @@ from backend.app.data.validation import validate_dataset
 from backend.app.forecasting.engine import forecast
 from backend.app.planning.contracts import PlanRequest, PlanResult, PlanSampleRequest
 from backend.app.planning.engine import plan
+from backend.app.data.workflow_api import dataset_for, attach_draft, imported_constraints, install as install_workflow
 
 MAX_BODY_BYTES = 32 * 1024 * 1024
 calculation_slot = BoundedSemaphore(1)
@@ -94,8 +95,9 @@ def health():
 
 
 @app.get("/api/sample", response_model=SampleCatalog)
-def catalog(size: Literal["fixture", "full"] = "fixture"):
-    data, issues = sample(size)
+def catalog(request: Request, size: Literal["fixture", "full"] = "fixture"):
+    data, issues = dataset_for(request,size)
+    issues = validate_dataset(data) if issues is None else issues
     return SampleCatalog(dataset_id=data.dataset_id, as_of=data.settings.as_of, products=data.products,
                          locations=[l for l in data.locations if l.kind == "store"], history_rows=len(data.demand_history), warnings=issues)
 
@@ -104,8 +106,8 @@ ERRORS = {422: {"model": APIError}, 429: {"model": APIError}, 503: {"model": API
 
 
 @app.post("/api/forecast/sample", response_model=ForecastResult, responses=ERRORS)
-def sample_forecast(request: SampleRequest):
-    data, issues = sample(request.size)
+def sample_forecast(request: SampleRequest, http: Request):
+    data, issues = dataset_for(http,request.size)
     return calculate(data, request.sku, request.location_id, issues)
 
 
@@ -114,19 +116,20 @@ def custom_forecast(request: ForecastRequest):
     return calculate(request.dataset, request.sku, request.location_id)
 
 
-def calculate_plan(data, issues=None):
+def calculate_plan(data, issues=None, review=None):
     if not calculation_slot.acquire(blocking=False):
         return JSONResponse(status_code=429, headers={'Retry-After': '2'}, content=APIError(code='busy', message='A calculation is running. Please retry shortly.').model_dump())
     try:
-        return plan(data,validated_issues=issues)
+        return plan(data,validated_issues=issues,review=review)
     finally:
         calculation_slot.release()
 
 
 @app.post('/api/plan/sample', response_model=PlanResult, responses=ERRORS)
-def sample_plan(request: PlanSampleRequest):
-    data, issues = sample(request.size)
-    return calculate_plan(data,issues)
+def sample_plan(request: PlanSampleRequest, http: Request):
+    data, issues = dataset_for(http,request.size)
+    result=calculate_plan(data,issues,imported_constraints(http))
+    return attach_draft(http,data,result) if isinstance(result,PlanResult) else result
 
 
 @app.post('/api/plan', response_model=PlanResult, responses=ERRORS)
@@ -139,13 +142,15 @@ from backend.app.scenarios.contracts import BaselineResult, ScenarioRequest, Sce
 from backend.app.scenarios.engine import baseline_result, compare, detail, capture
 
 
-def scenario_call(fn, request):
+def scenario_call(fn, request, http=None):
     if not calculation_slot.acquire(blocking=False):
         return JSONResponse(status_code=429, headers={'Retry-After':'2'}, content={'message':'A calculation is running. Please retry shortly.'})
     try:
         size=request.size if isinstance(request, (PlanSampleRequest,CaptureRequest)) else request.baseline.size
-        data,issues=sample(size)
-        return fn(size,data,validated_issues=issues) if isinstance(request, PlanSampleRequest) else fn(data,request)
+        data,issues=dataset_for(http,size) if http is not None else sample(size)
+        review=imported_constraints(http) if http is not None else None
+        if isinstance(request, PlanSampleRequest): return fn(size,data,validated_issues=issues,review=review)
+        return fn(data,request,review=review) if fn is compare else fn(data,request)
     except ValueError as error:
         return JSONResponse(status_code=422,content={'code':'invalid_scenario','message':str(error)})
     except TimeoutError:
@@ -155,24 +160,26 @@ def scenario_call(fn, request):
 
 
 @app.post('/api/scenarios/baseline',response_model=BaselineResult,responses=ERRORS)
-def scenario_baseline(request: PlanSampleRequest):
-    return scenario_call(baseline_result,request)
+def scenario_baseline(request: PlanSampleRequest, http: Request):
+    return scenario_call(baseline_result,request,http)
 
 
 @app.post('/api/scenarios/capture',response_model=BaselineResult,responses=ERRORS)
-def scenario_capture(request: CaptureRequest):
-    return scenario_call(capture,request)
+def scenario_capture(request: CaptureRequest, http: Request):
+    return scenario_call(capture,request,http)
 
 
 @app.post('/api/scenarios/compare',response_model=ScenarioResult,responses=ERRORS)
-def scenario_compare(request: ScenarioRequest):
-    return scenario_call(compare,request)
+def scenario_compare(request: ScenarioRequest, http: Request):
+    return scenario_call(compare,request,http)
 
 
 @app.post('/api/scenarios/detail',response_model=ScenarioDetail,responses=ERRORS)
-def scenario_detail(request: DetailRequest):
-    return scenario_call(detail,request)
+def scenario_detail(request: DetailRequest, http: Request):
+    return scenario_call(detail,request,http)
 
+
+install_workflow(app)
 
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 # backend/app -> repository root is parents[2].

@@ -35,7 +35,7 @@ def joint_budget_seconds(series_count):
     return JOINT_BUDGET_SECONDS if series_count <= 40 else FULL_SAMPLE_JOINT_BUDGET_SECONDS
 
 
-def plan(data, runtime_seconds=30, *, prepared_forecasts=None, validated_issues=None):
+def plan(data, runtime_seconds=30, *, prepared_forecasts=None, validated_issues=None, review=None):
     start=perf_counter(); deadline=start+runtime_seconds
     kwargs=dict(run_id=str(uuid4()),input_hash=sha256(data.model_dump_json().encode()).hexdigest(),dataset_id=data.dataset_id,
         synthetic=data.synthetic,as_of=data.settings.as_of,payment_through=max([data.settings.as_of+timedelta(days=89)]+[p.due_date for p in data.payables]),assumptions=ASSUMPTIONS)
@@ -51,14 +51,18 @@ def plan(data, runtime_seconds=30, *, prepared_forecasts=None, validated_issues=
         trace=[]
     if failures:
         return PlanResult(**kwargs,status='invalid_inputs',forecasts=trace,issues=issues,failures=failures,elapsed_ms=(perf_counter()-start)*1000)
-    ctx=Inputs(data,demand,buffers)
+    ctx=Inputs(data,demand,buffers,review)
+    def check_review(ledger,purchases,movements):
+        ledger.failures.extend(ctx.review.failures(purchases,movements))
+        ledger.feasible=not ledger.failures
+        return ledger
     no=replay(data,demand,buffers,include_stock=False)
     try:
         bp,bm=benchmark(ctx,deadline-1)
     except TimeoutError:
         bp,bm=[],[]
         ctx.explain('BENCHMARK_TIME_LIMIT','Benchmark exhausted the shared runtime budget; no partial recommendation is accepted.')
-    br=replay(data,demand,buffers,bp,bm,include_stock=False)
+    br=check_review(replay(data,demand,buffers,bp,bm,include_stock=False),bp,bm)
     stages=[]
     solver_failure=None
     # Leave time for independent replay, serialization and safe fallback after solver termination.
@@ -86,22 +90,22 @@ def plan(data, runtime_seconds=30, *, prepared_forecasts=None, validated_issues=
     if not complete and all(s.status=='optimal' for s in stages):
         stages.append(SolverStage(name='joint_completion_check',status='incomplete',elapsed_ms=0))
     if complete:
-        candidate=replay(data,demand,buffers,p,m,include_stock=False)
+        candidate=check_review(replay(data,demand,buffers,p,m,include_stock=False),p,m)
     # An incomplete incumbent is deliberately not selected: its actions can
     # depend on solver timing. The benchmark is calculated before the challenger.
     if not complete or not candidate.feasible:
         complete=False
-        if br.feasible and (not no.feasible or _score(br,ctx)[:8]<=_score(no,ctx)[:8]):
+        if br.feasible and (review is not None or not no.feasible or _score(br,ctx)[:8]<=_score(no,ctx)[:8]):
             p,m,candidate=bp,bm,br
             fallback='benchmark'
-        elif no.feasible:
+        elif no.feasible and not ctx.review.failures([],[]):
             p,m,candidate=[],[],no
             fallback='no_new_actions'
         else:
-            p,m,candidate=[],[],no
+            p,m,candidate=bp,bm,br
             fallback='invalid'
         stages.append(SolverStage(name='independent_fallback',status=fallback,elapsed_ms=0))
-    verified=replay(data,demand,buffers,p,m)
+    verified=check_review(replay(data,demand,buffers,p,m),p,m)
     exceptions=_explanations(ctx,verified,p,m,complete,solver_failure,bp,bm)
     # Compact ledgers: retain the proposed daily series; comparisons retain totals and service detail.
     status=('feasible' if complete else 'feasible_fallback') if verified.feasible else 'invalid_plan'

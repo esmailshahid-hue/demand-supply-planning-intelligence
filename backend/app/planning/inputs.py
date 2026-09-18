@@ -8,7 +8,9 @@ from backend.app.simulation.replay import cents, week
 
 
 class Inputs:
-    def __init__(self, data, demand, buffers):
+    def __init__(self, data, demand, buffers, review=None):
+        from backend.app.planning.constraints import ReviewConstraints
+        self.review = review or ReviewConstraints()
         self.data, self.demand, self.buffers = data, demand, buffers
         self.exceptions = {}
         self.start = data.settings.as_of

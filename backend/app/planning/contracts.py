@@ -177,6 +177,7 @@ class SolverStage(Contract):
 
 
 class PlanResult(Contract):
+    review_id: str | None = None
     run_id: str
     input_hash: str
     dataset_id: str

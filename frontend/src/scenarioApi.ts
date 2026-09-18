@@ -1,4 +1,5 @@
 import type { components } from './contracts.generated';
+import { sourceHeaders } from './api';
 export type Baseline = components['schemas']['BaselineResult'];
 export type Definition = components['schemas']['ScenarioDefinition'];
 export type Comparison = components['schemas']['ScenarioResult'];
@@ -11,7 +12,7 @@ export const emptyScenario = (): Definition => ({ uplifts: [], delays: [], avail
 // guidance while that calculation finishes, and abort the retry on a new draft.
 export async function scenarioApi<T>(path: string, signal: AbortSignal, body: unknown): Promise<T> {
   for (let attempt = 0; ; attempt++) {
-    const response = await fetch(path, { method: 'POST', signal, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const response = await fetch(path, { method: 'POST', signal, headers: {...sourceHeaders(),'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const value = await response.json();
     if (response.status === 429 && attempt < 20) {
       await new Promise<void>((resolve,reject) => {
@@ -21,7 +22,7 @@ export async function scenarioApi<T>(path: string, signal: AbortSignal, body: un
       });
       continue;
     }
-    if (!response.ok) throw new Error(value.message || 'Scenario request failed. Check the controls and retry.');
+    if (!response.ok) throw new Error([value.message || value.detail || 'Request failed. Check the controls and retry.', ...(value.failures||[]).map((f:{code:string;message:string})=>`${f.code}: ${f.message}`)].join(' '));
     return value;
   }
 }

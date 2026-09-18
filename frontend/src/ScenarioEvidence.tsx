@@ -3,14 +3,15 @@ import { number, fixedNumber } from './api';
 import { scenarioApi, type Detail, type DetailRequest } from './scenarioApi';
 import Demand from './Demand';
 
-export default function ScenarioEvidence({ request, onForecast, onClose }: {request: DetailRequest; onForecast?: (d: Detail) => void; onClose: () => void}) {
+export type EvidenceSelection={sku:string;location_id:string;action_id?:string};
+export default function ScenarioEvidence({ request, onForecast, onClose, reviewReference }: {request: DetailRequest|EvidenceSelection; onForecast?: (d: Detail) => void; onClose: () => void;reviewReference?:string|null}) {
   const root=useRef<HTMLElement>(null);
   useEffect(()=>{root.current?.focus();root.current?.scrollIntoView({block:'start'});},[request]);
   const [data,setData]=useState<Detail|null>(null);const [error,setError]=useState('');
   useEffect(() => { const c=new AbortController();setData(null);setError('');
-    scenarioApi<Detail>('/api/scenarios/detail',c.signal,request).then(d=>{if(!c.signal.aborted)setData(d);}).catch(e=>{if(!c.signal.aborted)setError(e.message);});
+    scenarioApi<Detail>(reviewReference?`/api/workflow/review/${reviewReference}/detail`:'/api/scenarios/detail',c.signal,reviewReference?{sku:request.sku,location_id:request.location_id,action_id:request.action_id}:request).then(d=>{if(!c.signal.aborted)setData(d);}).catch(e=>{if(!c.signal.aborted)setError(e.message);});
     return ()=>c.abort();
-  },[request]);
+  },[request,reviewReference]);
   return <section ref={root} tabIndex={-1} className="panel" aria-label="Action evidence" data-testid="action-evidence"><div className="section-heading"><h2>Action and forecast evidence · {request.sku}</h2><button onClick={onClose}>Close evidence</button></div>
     {!data&&!error&&<p role="status">Reconstructing scoped stock, cash and forecast evidence…</p>}{error&&<p role="alert">{error}</p>}
     {data&&<><p>{data.policy} · {data.feasible?'Independently feasible':'Infeasible — stock and service metrics unavailable'}</p><p>{data.note}</p>

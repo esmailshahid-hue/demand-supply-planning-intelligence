@@ -1,32 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { components } from './contracts.generated';
-import ScenarioEvidence from './ScenarioEvidence';
+import ScenarioEvidence, { type EvidenceSelection } from './ScenarioEvidence';
 import { scenarioApi, emptyScenario, type Baseline, type DetailRequest, type Detail } from './scenarioApi';
-import { api, fixedNumber, number, percent, type Size } from './api';
+import { fixedNumber, number, percent, type Size } from './api';
 import { evidenceTargetSummary, purchaseEvidenceTarget } from './evidenceTarget';
+import ReviewControls from './ReviewControls';
 
 type Plan = components['schemas']['PlanResult'];
 const sar = (n: number | null) => n == null ? 'Unknown' : `SAR ${fixedNumber(n, 2)}`;
 
-export default function PlanReview({onReady,onForecast,onScenarios}:{onReady:(p:Plan,size:Size)=>void;onForecast:(d:Detail)=>void;onScenarios:()=>void}) {
+export default function PlanReview({onReady,onForecast,onScenarios,initialPlan,uploaded=false,onReviewed}:{onReady:(p:Plan,size:Size)=>void;onForecast:(d:Detail)=>void;onScenarios:()=>void;initialPlan?:Plan|null;uploaded?:boolean;onReviewed?:(p:Plan)=>void}) {
+  const [reviewProtected,setReviewProtected]=useState(false);
   const [size, setSize] = useState<Size>('fixture');
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [series, setSeries] = useState('');
-  const [evidence,setEvidence]=useState<DetailRequest|null>(null);
+  const [evidence,setEvidence]=useState<DetailRequest|EvidenceSelection|null>(null);
   const [captured,setCaptured]=useState<Baseline|null>(null);
   const [inspectRequest,setInspectRequest]=useState<{sku:string;loc:string;id?:string}|null>(null);
   const [inspectError,setInspectError]=useState('');
   useEffect(()=>{if(!inspectRequest||!result?.proposed)return;const c=new AbortController();setInspectError('');
+    if(initialPlan&&result.review_id){setEvidence({sku:inspectRequest.sku,location_id:inspectRequest.loc,action_id:inspectRequest.id});return()=>c.abort();}
     const load=captured?Promise.resolve(captured):scenarioApi<Baseline>('/api/scenarios/capture',c.signal,{size,dataset_hash:result.input_hash,purchases:result.proposed.purchases,movements:result.proposed.movements});
     load.then(b=>{if(!c.signal.aborted){setCaptured(b);setEvidence({baseline:b.baseline,scenario:emptyScenario(),policy:'original',sku:inspectRequest.sku,location_id:inspectRequest.loc,action_id:inspectRequest.id,expected_action_hash:b.original.action_hash});}}).catch(e=>{if(!c.signal.aborted)setInspectError(e.message);});return()=>c.abort();
   },[inspectRequest,result,size]);
   useEffect(() => {
+    if(initialPlan&&refresh===0){setResult(initialPlan);setBusy(false);onReady(initialPlan,size);return;}
     const controller = new AbortController();
     setResult(null); setError(null); setBusy(true); setSeries('');setEvidence(null);setCaptured(null);setInspectRequest(null);
-    api<Plan>('/api/plan/sample', controller.signal, { size })
+    scenarioApi<Plan>('/api/plan/sample', controller.signal, { size })
       .then(next => { if (!controller.signal.aborted) { setResult(next); onReady(next,size); setSeries(next.forecasts[0] ? `${next.forecasts[0].sku}/${next.forecasts[0].location_id}` : ''); } })
       .catch((e: Error) => { if (!controller.signal.aborted) setError(e.message); })
       .finally(() => { if (!controller.signal.aborted) setBusy(false); });
@@ -42,8 +46,8 @@ export default function PlanReview({onReady,onForecast,onScenarios}:{onReady:(p:
   };
   const [sku, loc] = series.split('/');
   return <>
-    <section className="filters" aria-label="Planning controls"><label>Planning dataset<select value={size} disabled={busy} onChange={e => setSize(e.target.value as Size)}><option value="fixture">Small fixture · 10 SKUs</option><option value="full">Full sample · 60 SKUs</option></select></label>
-      <button className="primary-button" disabled={busy} onClick={() => setRefresh(v => v + 1)}>{busy ? 'Calculating plan…' : 'Recalculate plan'}</button></section>
+    <section className="filters" aria-label="Planning controls"><label>Planning dataset<select value={size} disabled={busy||uploaded||!!initialPlan} onChange={e => setSize(e.target.value as Size)}><option value="fixture">{uploaded?'Validated uploaded workbook':'Small fixture · 10 SKUs'}</option><option value="full">Full sample · 60 SKUs</option></select></label>
+      <button className="primary-button" disabled={busy||reviewProtected} onClick={() => setRefresh(v => v + 1)}>{busy ? 'Calculating plan…' : 'Recalculate plan'}</button>{reviewProtected&&<p>Use reviewed regeneration or explicitly create a new draft below.</p>}</section>
     <div role="status" aria-live="polite">{busy && <div className="loading"><span className="spinner"/>Evaluating network demand, purchasing, allocation and dated payments…</div>}</div>
     {error && <div role="alert" className="error"><strong>Plan unavailable</strong><p>{error}</p><button onClick={() => setRefresh(v => v + 1)}>Retry plan</button></div>}
     {result && !busy && <div className="result-content" data-testid="plan-result" data-run-id={result.run_id}>
@@ -51,10 +55,11 @@ export default function PlanReview({onReady,onForecast,onScenarios}:{onReady:(p:
         <p>{result.status === 'feasible_fallback' && proposed?.name === 'Validated constrained plan' ? 'The joint optimizer did not complete within the live calculation budget. These recommendations come from the deterministic constrained planner and passed independent feasibility checks. This is a validated fallback, with no claim of optimality.' : valid ? 'Daily stock and dated funding checks passed. Uncovered demand remains visible below.' : 'Incomplete inputs or a hard constraint failure prevents a funded plan.'}</p></div>
         <div className="as-of"><span>PLAN FROM</span><strong>{result.as_of}</strong><small>28-day review · 56-day model</small></div></section>
       {result.failures.length > 0 && <section className="panel error" role="alert"><h2>Planning failures</h2>{result.failures.map((f, i) => <p key={i}><strong>{f.code}</strong> · {[f.sku, f.location_id, f.supplier_id, f.day].filter(Boolean).join(' / ')} · {f.message}</p>)}</section>}
+      <ReviewControls plan={result} onProtected={setReviewProtected} onPlan={next=>{setResult(next);setEvidence(null);setCaptured(null);setInspectRequest(null);onReady(next,size);onReviewed?.(next);}}/>
       {valid && proposed && s && <>
         <button className="primary-button" onClick={onScenarios}>Test disruptions with this baseline</button>
         {inspectRequest&&!evidence&&!inspectError&&<p role="status">Preparing action evidence…</p>}{inspectError&&<p role="alert">{inspectError}</p>}
-        {evidence&&<ScenarioEvidence request={evidence} onForecast={onForecast} onClose={()=>{setEvidence(null);setInspectRequest(null);}}/>}
+        {evidence&&<ScenarioEvidence request={evidence} reviewReference={initialPlan?result.review_id:null} onForecast={onForecast} onClose={()=>{setEvidence(null);setInspectRequest(null);}}/>}
         {result.stages.some(x=>x.name==='independent_fallback'&&x.status==='benchmark')&&<p className="notice">The proposed actions equal the constrained benchmark. No improvement over that benchmark is claimed.</p>}
         <div className="metric-grid"><section className="metric"><p>New purchase commitment</p><strong data-testid="plan-commitment">{sar(s.commitments)}</strong><small>{sar(s.visible_commitments)} visible · {sar(s.tail_commitments)} provisional tail</small></section>
           <section className="metric"><p>Scheduled payments</p><strong data-testid="plan-payments">{sar(s.payments)}</strong><small>Existing obligations + new purchases + movement fees</small></section>

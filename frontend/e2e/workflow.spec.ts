@@ -1,0 +1,64 @@
+import {test,expect,type Page} from '@playwright/test';
+const wait=(page:Page,path:string)=>page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(path)&&r.ok(),{timeout:60_000});
+
+test('fixture workbook reaches reviewed regeneration, final acceptance, exact downloads and read-only reopen',async({page,request})=>{
+  test.setTimeout(180_000);
+  const workbook=await(await request.get('/api/workflow/template/fixture')).body();
+  await page.goto('/');await expect(page.getByTestId('forecast-result')).toBeVisible();
+  await page.getByRole('button',{name:/Data and Assumptions/}).click();
+  const blank=page.waitForEvent('download');await page.getByRole('link',{name:'Download blank XLSX template'}).click();expect((await blank).suggestedFilename()).toBe('planning-blank.xlsx');
+  await page.getByLabel('I confirm server processing of this file').check();
+  await page.getByLabel('Select XLSX or portable snapshot').setInputFiles({name:'fixture.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:workbook});
+  const upload=wait(page,'/api/workflow/import');await page.getByRole('button',{name:'Upload workbook',exact:true}).click();const imported=await(await upload).json();expect(imported.reference).toBeTruthy();
+  await expect(page.getByRole('heading',{name:'Validation passed'})).toBeVisible();
+  const calculation=wait(page,'/api/plan/sample');await page.getByRole('button',{name:'Use validated data and calculate plan'}).click();const plan=await(await calculation).json();
+  expect(plan.proposed.replay.feasible).toBe(true);expect(plan.review_id).toBeTruthy();
+  const controls=page.getByRole('region',{name:'Reviewed actions'});
+  await expect(controls.getByRole('button',{name:'Accept action',exact:true})).toBeEnabled();
+  await controls.getByLabel('Reviewed quantity').fill('1');await controls.getByRole('button',{name:'Apply quantity edit'}).click();await expect(controls.getByRole('alert')).toContainText('purchase_pack_moq');
+  await controls.getByRole('button',{name:'Accept action',exact:true}).click();await expect(controls.getByRole('status').filter({hasText:'Plan state:'})).toContainText('stale');await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeDisabled();await expect(controls.getByRole('button',{name:'Download reviewed workbook'})).toBeDisabled();
+  const regenerated=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();expect((await(await regenerated).json()).state).toBe('draft');
+  await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeEnabled();
+  await controls.getByLabel('Reviewed quantity').fill(String(plan.proposed.purchases[0].units-10));await controls.getByRole('button',{name:'Apply quantity edit'}).click();await expect(controls.getByRole('status').filter({hasText:'Plan state:'})).toContainText('stale');
+  const editedRun=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();const editedReview=await(await editedRun).json();expect(editedReview.failures).toEqual([]);expect(editedReview.state).toBe('draft');await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeEnabled({timeout:15000});
+  await controls.getByLabel('I acknowledge the displayed remaining service and buffer shortfalls').check();
+  const acceptance=wait(page,'/accept');await controls.getByRole('button',{name:'Finally accept plan'}).click();const accepted=await(await acceptance).json();expect(accepted.state).toBe('accepted');
+  const download=page.waitForEvent('download');await controls.getByRole('link',{name:'Download reviewed workbook'}).click();expect((await download).suggestedFilename()).toContain('.xlsx');
+  const snapshot=await(await page.request.get(`/api/workflow/review/${accepted.reference}/download/snapshot`)).body();
+  const portable=page.waitForEvent('download');await controls.getByRole('link',{name:'Download portable snapshot'}).click();expect((await portable).suggestedFilename()).toContain('.plan.json.gz');
+  await page.getByRole('button',{name:/Data and Assumptions/}).click();await page.getByLabel('I confirm server processing of this file').check();
+  await page.getByLabel('Select XLSX or portable snapshot').setInputFiles({name:'accepted.plan.json.gz',mimeType:'application/gzip',buffer:snapshot});
+  await page.getByRole('button',{name:'Reopen portable snapshot'}).click();await expect(page.getByRole('region',{name:'Reviewed actions'}).getByRole('status').filter({hasText:'Plan state:'})).toContainText('read_only',{timeout:15000});
+  await page.getByRole('button',{name:/Data and Assumptions/}).click();await page.getByRole('button',{name:'Reset to bundled sample'}).click();await expect(page.getByTestId('forecast-result')).toBeVisible();
+});
+
+test('rejecting a purchase regenerates independently feasible dependent actions',async({page})=>{
+  test.setTimeout(90_000);
+  await page.goto('/');await expect(page.getByTestId('forecast-result')).toBeVisible();
+  const first=wait(page,'/api/plan/sample');await page.getByRole('button',{name:/Plan Review/}).click();const before=await(await first).json();
+  const controls=page.getByRole('region',{name:'Reviewed actions'});
+  await controls.getByRole('button',{name:'Reject action',exact:true}).click();
+  await expect(controls.getByRole('status').filter({hasText:'Plan state:'})).toContainText('stale');
+  const rerun=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();const reviewed=await(await rerun).json();
+  expect(reviewed.state).toBe('draft');expect(reviewed.decisions[0].status).toBe('rejected');expect(reviewed.decisions[0].disposition).toBe('retained');
+  const after=await(await page.request.get(`/api/workflow/review/${reviewed.reference}/plan`)).json();
+  expect(after.proposed.replay.feasible).toBe(true);expect(after.proposed.replay.failures).toEqual([]);
+  const rejected=before.proposed.purchases[0];
+  expect(after.proposed.purchases.some((p:typeof rejected)=>p.offer_id===rejected.offer_id&&p.order_date===rejected.order_date&&p.destination===rejected.destination)).toBe(false);
+  expect(after.proposed.movements).not.toEqual(before.proposed.movements);
+  await expect(controls.getByRole('button',{name:'Return action to draft'})).toBeEnabled();
+  await controls.getByLabel('Action to review').selectOption(rejected.action_id);
+  await controls.getByRole('button',{name:'Return action to draft'}).click();
+  await expect(controls.getByRole('status').filter({hasText:'Plan state:'})).toContainText('stale');
+});
+
+test('invalid workbook messages are grouped and obsolete upload responses cannot replace a new file',async({page,request})=>{
+  test.setTimeout(60_000);const workbook=await(await request.get('/api/workflow/template/fixture')).body();
+  await page.goto('/');await expect(page.getByTestId('forecast-result')).toBeVisible();await page.getByRole('button',{name:/Data and Assumptions/}).click();await page.getByLabel('I confirm server processing of this file').check();
+  const file=page.getByLabel('Select XLSX or portable snapshot');await file.setInputFiles({name:'invalid.xlsx',mimeType:'application/octet-stream',buffer:Buffer.from('not a workbook')});
+  await page.getByRole('button',{name:'Upload workbook',exact:true}).click();await expect(page.getByRole('heading',{name:'Workbook',exact:true})).toBeVisible();await expect(page.getByText(/malformed_xlsx/)).toBeVisible();await expect(page.getByRole('button',{name:'Use validated data and calculate plan'})).toHaveCount(0);
+  let release!:()=>void;const gate=new Promise<void>(r=>release=r);let arrived!:()=>void;const ready=new Promise<void>(r=>arrived=r);
+  await page.route('**/api/workflow/import',async route=>{const response=await route.fetch();arrived();await gate;try{await route.fulfill({response});}catch{}});
+  await file.setInputFiles({name:'old.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:workbook});await page.getByRole('button',{name:'Upload workbook',exact:true}).click();await ready;
+  await file.setInputFiles({name:'new.xlsx',mimeType:'application/octet-stream',buffer:Buffer.from('new invalid')});release();await expect(page.getByText('new.xlsx',{exact:false})).toBeVisible();await expect(page.getByRole('heading',{name:'Validation passed'})).toHaveCount(0);
+});

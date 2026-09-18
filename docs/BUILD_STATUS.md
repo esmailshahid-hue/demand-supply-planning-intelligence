@@ -1,5 +1,78 @@
 # Build status
 
+## Pass 4 — workbook, reviewed actions and portable acceptance
+
+Implementation starts from `259ddabcae407a84c3ea3b707d850182ee8f0b87`. This section supersedes historical statements below that uploads, action review and exports are unavailable locally. No Pass 5, push, merge, deployment, paid storage or external project setting change is included.
+
+### Pass 3 closure (user-confirmed evidence)
+
+GitHub Actions **35308623547**, commit **259ddab**, passed **108 backend tests**, **10 browser tests**, frontend build, contracts, Docker and solver checks, production planning smoke and production scenario smoke. Fixture planning: **3.331 / 3.323 s**; full planning: **8.278 / 8.128 s**; full scenario comparisons: **11.666 / 11.472 s**; full future-path-delay comparison: **17.699 s**. Both Vercel build checks succeeded. Hosted Vercel calculation execution was **not independently verified**.
+
+The profiler measured a cold full route at **10.658 s**, including **2.456 s** sample construction. Planning smoke followed forecast smoke, which warmed the cached sample. Its sub-10-second measurements are not proof of Vercel cold-start performance. This closes the historical Pass 3 CI blocker only; it does not verify these new Pass 4 changes on Linux or a host.
+
+### Architecture and scope
+
+- The 15-sheet input workbook normalizes to the existing Dataset, with separate Instructions/Examples and optional explicit Reconciliation rows. Fixture/full round trips are exact; offline future truth is excluded. Bounded ZIP/XML preflight and read-only openpyxl parsing reject unsafe, ambiguous or incompatible input with grouped errors and distinct warnings. Request files are cleaned on success/failure/exception.
+- Actual workbook/multipart measurement preceded transport selection. No authorized storage resource was configured. A provider-neutral interface and random, purpose/owner-bound local temporary references support local raw-XLSX upload. Calculations send references, never the full normalized JSON from the browser. Vercel fails closed for upload/review-file storage; sample calculations continue. Hosted upload gate remains **blocked** pending an authorized adapter/lifecycle verification. See [WORKBOOK.md](WORKBOOK.md).
+- Reviewed accept/reject/exact quantity requirements constrain both benchmark and joint construction; each regeneration rebuilds dependent actions and independently replays the network. Full sample retains its zero joint sub-budget and honest benchmark fallback. No objective, forecast method or tolerance changes. Clearing a review cannot restore confirmed quantities or increase an explicit unconfirmed remainder.
+- Final acceptance checks current versions, exact decisions and independent ledger equality, then creates immutable accepted files. Shortfalls require acknowledgement; hard constraints cannot be waived. Engine-valued XLSX and checksummed lossless gzip snapshots have explicit size bounds. Reopen is read-only; creating a new draft requires regeneration. Checksums are corruption detection, not authenticated provenance.
+- Confirmed external IDs replace exported candidates, with explicit partial/executed/open quantities. Replay retains existing stock/transit/payable semantics. No durable execution history or automatic ordering is introduced. Uploaded data also uses existing scenario and scoped evidence endpoints.
+- CI retains every existing gate and adds production upload/review/accept/export smoke; Docker includes that smoke script. No new Docker/Ubuntu/Vercel result is claimed for this working tree.
+
+### Verification record
+
+Final expanded backend suite: **156 passed in 187.55 s**, with two existing TestClient deprecation warnings. Initial targeted review/API suite: **20 passed in 45.36 s**. Earlier complete runs passed 150 and then 153 tests as coverage expanded. New browser workflows: **3 passed in 32.8 s**. The valid browser edit was corrected to 120 units: the attempted 140-unit fixture purchase rightly exceeded its SAR 1,500 commitment cap. A backend collection attempt overlapped Vite's replacement of dist/assets; it was rerun after the build completed and passed. No acceptance constraint was weakened.
+
+### Remaining boundary
+
+Local temporary storage requires one worker and is not durable or suitable as Vercel object storage. Accepted files survive only until expiry/reset/restart unless downloaded. Exact reviewed locks can cause an honest conflict under the bounded heuristic even if a different feasible policy exists. Hosted storage integration, lifecycle/security testing, exact-commit CI/Docker and hosted execution remain outstanding. Pass 5 is not started.
+
+### Local production measurements (Pass 4)
+
+macOS arm64, Python 3.14.4, one Uvicorn worker, built frontend, port 8011. Forecast smoke preceded planning smoke; these are warm sample/live calculations, not Vercel cold starts. All four plans independently replayed and reconciled; repeated actions, totals, explanations and ledgers matched. Fixture challenger stayed 2 seconds; full stayed `joint_model:not_attempted` with 0 seconds. The unchanged 10-second/4,500,000-byte planning gates passed.
+
+| Planning run | HTTP s | Engine ms | Response bytes | Purchases / movements |
+|---|---:|---:|---:|---:|
+| Fixture first | 2.565 | 2,551.1 | 786,380 | 24 / 311 |
+| Fixture repeat | 2.564 | 2,560.0 | 786,380 | 24 / 311 |
+| Full first | 3.197 | 3,179.9 | 3,752,788 | 31 / 607 |
+| Full repeat | 3.209 | 3,191.3 | 3,752,788 | 31 / 607 |
+
+Fixture commitments/payments were SAR **91,606 / 97,746**; full **92,550 / 99,050**. Line/payment sums matched exactly and minimum cash headrooms were nonnegative. Forecast fixture HTTP **0.025 / 0.022 s**, full **0.885 / 0.093 s**. Scenario comparison fixture **2.696 / 2.696 s**, full **4.355 / 4.478 s**; future-path fixture/full **3.075 / 6.530 s**. Scenario repeat determinism, invalid frozen suppression, independently feasible replans, financial reconciliation, scoped evidence and existing 30-second/4.5 MB gates passed. Full comparison response **921,311–921,312 bytes**, detail **113,299 bytes**, future-path **1,034,943 bytes**.
+
+| Workbook workflow | Blank | Fixture | Full |
+|---|---:|---:|---:|
+| XLSX bytes | 18,696 | 445,292 | 2,775,270 |
+| Measured multipart bytes (local transport sends raw XLSX) | 18,923 | 445,521 | 2,775,496 |
+| Expanded XML/ZIP bytes | 73,462 | 5,814,190 | 37,978,053 |
+| Operational rows incl. Settings | 18 empty keys | 15,891 | 103,241 |
+| DemandHistory rows | 0 | 15,160 | 99,160 |
+| Parse/validation ms | intentionally incomplete | 1,281.33 | 8,359.61 |
+| Upload HTTP s | — | 1.378 | 8.671 |
+| Uploaded plan HTTP s | — | 2.914 | 4.350 |
+| Reviewed regeneration HTTP s | — | 2.743 | 4.865 |
+| Final acceptance HTTP s | — | 0.938 | 5.222 |
+| Export HTTP s | — | 0.097 | 0.534 |
+| Reviewed XLSX bytes | — | 53,076 | 125,215 |
+| Snapshot compressed bytes | — | 172,618 | 932,770 |
+| Snapshot expanded bytes | — | 3,498,063 | 21,292,162 |
+
+These workbook measurements are from the final production recheck after parser row attribution, review metadata and reconciliation-error reporting changes. Each generated workbook has 18 physical sheets: 15 required inputs, optional Reconciliation, Instructions and Examples. Parser reports 16 input/reconciliation sheets. Counts are unchanged: 10/60 products, five locations, 40/240 assortment series, 12 suppliers, 50/300 inventory rows, 560/3,360 supplier-capacity rows, five lanes, two open orders, two payables, 14 budgets, three events and empty OpenTransfers/Reconciliation. Exact fixture/full Dataset round trips, replay, purchase/payment reconciliation, unique external IDs and read-only snapshot reopening passed. Request temporary directories were removed and final private-session reset passed. File byte counts vary slightly with ZIP timestamps and accepted UUIDs; normalized contents are checked losslessly.
+
+### Commands and results
+
+- `.venv/bin/python -m pytest -q`: **156 passed in 187.55 s** (all 108 prior tests plus 48 Pass 4 cases). Focused `test_review.py`: **19 passed in 39.26 s**, including received-purchase stock/unpaid-balance reconciliation. Joint exact lock/prohibition plus parser success/error cleanup selection: **3 passed in 9.34 s**. Workbook/parser coverage includes full round trip, physical row attribution and warning-overflow blocking.
+- `scripts.export_contracts` + `npm --prefix frontend run generate:types`, twice; OpenAPI and generated TypeScript compared with `cmp`: byte-identical.
+- `npm --prefix frontend run build`: TypeScript/Vite passed; JS **294.85 kB / 88.67 kB gzip**, CSS **11.60 kB / 3.45 kB gzip**.
+- `PORT=8011 CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm --prefix frontend run test:e2e`: **13 passed in 1.6 min**; preceding complete run also passed 13 in 1.3 min. New upload/review/export tests plus all 10 prior browser regressions retained. New rejection test also verifies the rejected action remains available for explicitly returning it to draft.
+- `.venv/bin/python -m scripts.smoke`, `scripts.planning_smoke`, `scripts.scenario_smoke`, `scripts.workflow_smoke`, each with `--url http://127.0.0.1:8011`: passed; measurements above. The workflow smoke generates and round-trips both fixture/full files before actual HTTP upload/review/accept/export/reopen.
+- `scripts.workbook --size blank --output artifacts/blank.xlsx`: passed; actual multipart measured with httpx. Blank is a template, correctly rejected as incomplete operational input.
+- `scripts.solver_smoke`: SciPy 1.18.1 import **0.288 s**, expected integer solution/status, cold **0.001 s**, warm <0.001 s.
+- `.venv/bin/python -m pip check`: no broken requirements; `npm --prefix frontend ls --depth=0`: resolved installed tree; `npm --prefix frontend audit --omit=dev`: **0 vulnerabilities**. Only XLSX/XML runtime dependencies were added (openpyxl 3.1.5, et_xmlfile 2.0.0, defusedxml 0.7.1).
+- `compileall -q backend scripts`, Ruby YAML parse with smoke presence/nonzero-gate checks, and `git diff --check`: passed. Docker/Podman/Colima/Lima commands unavailable. Docker build/container smoke, exact-commit GitHub Actions and hosted/Vercel/storage execution were **not run**.
+
+Local Pass 4 functionality is ready for review. Hosted upload/storage readiness is explicitly not complete. The next step is review of these changes and authorized exact-commit CI; no push/deploy is performed here. No Pass 5 scope is included.
+
 ## Focused Pass 3 runtime, supplier-preset and evidence correction — 18 September 2026
 
 Started from clean Pass 3 commit `bfce1ded9de5e74c2b9c0d49e9b6b9b2d1825b0a`. The local correction gates pass, but **Pass 3 is not formally closed** because the exact corrected commit has not yet completed a green GitHub Actions run. No push, merge, deployment or Pass 4 work occurred.
