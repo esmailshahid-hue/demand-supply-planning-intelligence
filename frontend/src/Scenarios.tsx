@@ -6,14 +6,16 @@ import { evidenceTargetSummary, purchaseEvidenceTarget } from './evidenceTarget'
 const plus=(day:string,n:number)=>new Date(Date.parse(day)+n*86400000).toISOString().slice(0,10);
 
 export default function Scenarios({initial,onForecast,onReview,uploaded=false,firstSku='SKU001',firstStore='S1'}:{uploaded?:boolean;firstSku?:string;firstStore?:string;initial?:{plan:Plan;size:Size}|null;onForecast:(d:Detail)=>void;onReview?:(p:Plan)=>void}) {
-  const [size,setSize]=useState<Size>(initial?.size||'fixture');const [base,setBase]=useState<Baseline|null>(null);
+  const initialSize=initial?.plan.provenance?.sample_size||initial?.size||'fixture';
+  const [size,setSize]=useState<Size>(initialSize);const [base,setBase]=useState<Baseline|null>(null);
   const [draft,setDraft]=useState<Definition>(emptyScenario);const [result,setResult]=useState<Comparison|null>(null);
   const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [edited,setEdited]=useState(false);const [retry,setRetry]=useState(0);
   const [evidence,setEvidence]=useState<DetailRequest|null>(null);const active=useRef<AbortController|null>(null);
   const stop=()=>{active.current?.abort();setBusy(false);setEvidence(null);};
   useEffect(()=>{const c=new AbortController();active.current?.abort();active.current=c;setBusy(true);setError('');setBase(null);setResult(null);setDraft(emptyScenario());setEdited(false);setEvidence(null);
-    const captured=initial?.size===size&&initial.plan.proposed?.replay.feasible;
-    const body=captured?{size:uploaded?null:size,dataset_hash:initial!.plan.input_hash,purchases:initial!.plan.proposed!.purchases,movements:initial!.plan.proposed!.movements}:{size};
+    const captured=initialSize===size&&initial?.plan.proposed?.replay.feasible&&initial.plan.input_hash===initial.plan.provenance?.dataset_hash;
+    if(initial&&!captured){setBusy(false);setError('This plan cannot be captured as a new baseline because its assumptions or independent result are not the original current dataset. Return to the original baseline first.');return()=>c.abort();}
+    const body=captured?{size:initial!.plan.provenance?.sample_size??null,dataset_hash:initial!.plan.input_hash,purchases:initial!.plan.proposed!.purchases,movements:initial!.plan.proposed!.movements}:{size};
     scenarioApi<Baseline>(captured?'/api/scenarios/capture':'/api/scenarios/baseline',c.signal,body).then(b=>{if(!c.signal.aborted)setBase(b);}).catch(e=>{if(!c.signal.aborted)setError(e.message);}).finally(()=>{if(!c.signal.aborted)setBusy(false);});
     return ()=>c.abort();
   },[size,retry,initial,uploaded]);

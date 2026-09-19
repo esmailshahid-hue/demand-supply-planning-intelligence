@@ -1,5 +1,41 @@
 # Build status
 
+## Focused Pass 5 reviewed-baseline and recovery correction — 19 September 2026
+
+Started from reviewed commit **4b7e53024f9f938aa90130c35831a923f31d8b10** and preserved the completed Pass 5 UI, accessibility, provenance, financial labeling and failure handling. No forecasting, optimizer, replay, horizon, sample dimension, API contract, dependency, infrastructure or deployment behavior changed. No Pass 6 work began.
+
+### Reproduction and root cause
+
+The reviewed-plan handoff was reproduced in the live application: after a full-sample plan was reviewed and regenerated, opening scenarios issued `POST /api/scenarios/baseline` with `{"size":"fixture"}`. `App.tsx` passed `initial={openedPlan ? null : planContext}`, so the presence of the reviewed plan deliberately removed the exact plan from the scenario capture path. The scenario screen then initialized its own fixture default. This could silently discard reviewed actions and authoritative bundled size.
+
+The recovery gap came from keeping the replacement review reference only in `ReviewControls.pendingPlan`. A successful `regenerate` or `new-draft` mutation invalidates the previous reference before the follow-up result GET. If delivery failed and navigation unmounted the component, the only valid reference disappeared while the parent retained the invalid prior plan. During the correction, a second race was exposed by the new full-sample regression: publishing parent recovery state reran the review-loader effect, whose shared abort controller cancelled its own follow-up result GET. Review metadata loading and mutation/result delivery now have separate controllers.
+
+### Corrected state transitions
+
+- `App.tsx` owns the current exact plan context, review gate and replacement recovery record. A successful mutation publishes the new reference, revision and review state before result delivery. Navigation is disabled only while the mutation response itself is unresolved; once its reference is recorded, users may leave and return safely.
+- Until the matching result loads, displayed quantities remain explicitly previous/stale. Acceptance, exports, direct scenario handoff and sidebar scenario entry remain blocked. Returning to Plan Review restores the replacement metadata and **Load regenerated result** fetches the saved calculation without another mutation. The same transition applies to explicit new-draft creation.
+- Dataset replacement/reset clears plan, scenario and recovery state. Component aborts and generation boundaries prevent a late result from restoring abandoned state. Data reconciliation uses the replacement reference while recovery is pending.
+- Scenario capture receives the exact independently replayed current plan and uses canonical `provenance.sample_size`: `full` remains full; uploaded and portable data send `size: null` and retain their private dataset reference, hash and dimensions. Capture payload purchases/movements are the displayed reviewed actions, and scenario exploration does not mutate the source plan.
+- Stale, loading and failed-delivery plans cannot enter scenarios through either button. The capture component also rejects a supplied plan whose input hash is not the canonical dataset hash or whose replay is invalid.
+- Scenario-derived reviewed plans are explicit. The existing capture contract cannot encode their scenario definition, so both handoff routes are disabled with an explanation and a **Return to original scenario baseline** action. Returning recaptures the untouched original actions; assumptions are neither dropped nor applied twice.
+
+Changed files: `frontend/src/{App,PlanReview,ReviewControls,Scenarios}.tsx`, new `frontend/src/reviewState.ts`, `frontend/e2e/{product-finish,workflow}.spec.ts`, new `frontend/e2e/pass5-state.spec.ts`, and this status file. No backend, generated contract, lockfile, deployment or workflow file changed.
+
+### Local verification
+
+Local verification used macOS arm64, the existing Python 3.14 environment, the compiled frontend and one production Uvicorn worker. Exact-commit CI, Docker and hosted verification remain outstanding.
+
+- Pre-fix production build passed while reproducing the defect. Final `npm --prefix frontend run build`: passed, **41 modules**, JS **305.42 kB / 91.75 kB gzip**, CSS **13.52 kB / 3.85 kB gzip**.
+- Targeted Playwright: the three new plan-state regressions passed in **36.6 s**; regeneration and new-draft recovery tests passed **2 tests in 30.7 s**. The complete suite passed **23 tests in 2.7 min**.
+- Browser regressions assert the actual capture payload and response actions for a reviewed full sample, a material valid quantity edit, uploaded and portable provenance/hash/dimensions, stale direct/sidebar blocking, scenario-derived return, failed result delivery across navigation, no duplicate regeneration/new-draft, current review locks, and dataset reset during a delayed obsolete delivery.
+- Installed `agent-browser` opened the compiled application successfully; the interactive snapshot showed the API-backed demand result and all navigation, and page/console error checks were empty.
+- Contract export and TypeScript generation ran twice. Both runs were byte-identical: OpenAPI SHA-256 `75cc199a8b3be096053a57878249e06ba2713f984b1b938dd6b2f8179bb018d5`; generated TypeScript `543eab94db5801ed2f23f3c29cba86a55e87ce71a3dbee66843332986f779616`. There is no generated-contract diff.
+- Production scenario smoke passed independent feasibility, financial reconciliation, scoped evidence and repeat determinism. Fixture comparison first/repeat: **2.697 / 2.671 s**, **366,155 / 366,157 bytes**. Full: **4.325 / 4.364 s**, **921,567 bytes**. Future-path comparison: fixture **3.006 s / 362,703 bytes**, full **6.540 s / 1,035,199 bytes**.
+- Production workflow smoke passed fixture and full upload, review, regeneration, acceptance, export and portable reopen with independent replay, financial reconciliation, unique external IDs, deterministic snapshot downloads and final private-session reset. Fixture upload/plan/regenerate/accept/export: **1.453 / 2.752 / 2.803 / 0.837 / 0.122 s**; full: **9.039 / 4.496 / 4.800 / 5.149 / 0.616 s**. Provenance remained uploaded through acceptance/export and portable after reopen, with exact hashes and dimensions.
+- `git diff --check` passed before documentation and is rerun as the final worktree check. Backend source did not change, so the complete backend suite was not rerun for this frontend state correction, as directed by the correction scope.
+
+**Pass 5 is ready for review locally.** The remaining limits are unchanged: recovery is intentionally in-memory and bound to the existing private session lifetime; scenario-derived plans must return to the original baseline because the current contract does not preserve a scenario definition in baseline capture; and no exact-commit CI/container or hosted success is claimed. No push, merge or deployment occurred.
+
 ## Pass 5 — product finish and scope freeze — 19 September 2026
 
 Started from clean reviewed baseline **218db764b9e6addb8e87da9b8d829e584796b19f**; no reset or unrelated changes. User-confirmed GitHub Actions **35364586310** succeeded for that Pass 4 commit, including backend/browser tests, contracts/build, Docker verification, forecast/planning/scenario smoke, container profiling and upload/review/accept/export/reopen. This supersedes the historical pending-CI statements for that baseline only. No GitHub Actions run or hosted success is claimed for Pass 5.

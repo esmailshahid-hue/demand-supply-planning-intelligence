@@ -2,32 +2,37 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { scenarioApi, type Plan } from './scenarioApi';
 import type { components } from './contracts.generated';
-type Review=components['schemas']['ReviewView'];
+import type { Review, ReviewGate, ReviewRecovery } from './reviewState';
 
-export default function ReviewControls({plan,onPlan,onProtected,onStale}:{plan:Plan;onPlan:(p:Plan)=>void;onProtected:(v:boolean)=>void;onStale:(v:boolean)=>void}) {
+export default function ReviewControls({plan,recovery,onPlan,onProtected,onGate,onRecovery,onRecoveryClear,onMutation}:{plan:Plan;recovery:ReviewRecovery|null;onPlan:(p:Plan)=>void;onProtected:(v:boolean)=>void;onGate:(v:ReviewGate)=>void;onRecovery:(v:ReviewRecovery)=>void;onRecoveryClear:(reference:string)=>void;onMutation:(v:boolean)=>void}) {
   const [review,setReview]=useState<Review|null>(null);
   const [action,setAction]=useState('');const [quantity,setQuantity]=useState('');const [note,setNote]=useState('');
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [ack,setAck]=useState(false);
   const submitting=useRef(false);
-  const [pendingPlan,setPendingPlan]=useState<string|null>(null);
   const [retry,setRetry]=useState(0);
-  const active=useRef<AbortController|null>(null);
-  useEffect(()=>{onStale(review?.state==='stale'||!!pendingPlan);},[review?.state,pendingPlan,onStale]);
+  const reviewLoad=useRef<AbortController|null>(null);
+  const operation=useRef<AbortController|null>(null);
+  const pendingPlan=recovery&&recovery.previousReference===plan.review_id?recovery.review.reference:null;
+  useEffect(()=>{const blocked=!!pendingPlan||(!review&&!!plan.review_id)||review?.state==='stale';onGate({blocked:!!blocked,reason:pendingPlan?'The replacement calculation is saved, but its result has not loaded.':!review&&plan.review_id?'Review state is still loading or unavailable.':review?.state==='stale'?'Review changes require regeneration before this plan can be used.':''});},[review,plan.review_id,pendingPlan,onGate]);
   useEffect(()=>{onProtected(review?(review.decisions.length>0||review.state==='accepted'||review.state==='read_only'||review.state==='stale'):!!plan.review_id);},[review?.state,review?.decisions.length,plan.review_id]);
-  useEffect(()=>{active.current?.abort();const c=new AbortController();active.current=c;setReview(null);setError('');setAck(false);
+  useEffect(()=>{reviewLoad.current?.abort();const c=new AbortController();reviewLoad.current=c;setReview(null);setError('');setAck(false);
+    const savedRecovery=recovery;
+    if(savedRecovery&&savedRecovery.previousReference===plan.review_id){setReview(savedRecovery.review);return()=>c.abort();}
     if(plan.review_id)api<Review>(`/api/workflow/review/${plan.review_id}`,c.signal).then(r=>{if(!c.signal.aborted)setReview(r);}).catch(e=>{if(!c.signal.aborted)setError(e.message);});
-    return()=>{c.abort();active.current?.abort();};
-  },[plan.review_id,retry]);
+    return()=>c.abort();
+  },[plan.review_id,retry,recovery]);
+  useEffect(()=>()=>{reviewLoad.current?.abort();operation.current?.abort();},[]);
   const current=[...(plan.proposed?.purchases||[]),...(plan.proposed?.movements||[])];
   const previous=(review?.decisions||[]).map(d=>d.original as components['schemas']['Purchase']|components['schemas']['Movement']);
   const actions=[...current,...previous.filter(a=>!current.some(p=>p.action_id===a.action_id))];
   const selected=actions.find(a=>a.action_id===action)||actions[0];
-  const submit=async(operation:string,extra:object={},reload=false)=>{if(!review||submitting.current)return;submitting.current=true;active.current?.abort();const c=new AbortController();active.current=c;setBusy(true);setError('');
-    try {const next=await scenarioApi<Review>(`/api/workflow/review/${review.reference}/${operation}`,c.signal,{revision:review.revision,...extra});if(c.signal.aborted)return;setReview(next);
-      if(reload){setPendingPlan(next.reference);const p=await api<Plan>(`/api/workflow/review/${next.reference}/plan`,c.signal);if(!c.signal.aborted){setPendingPlan(null);onPlan(p);}}else onPlan({...plan,review_id:next.reference});
-    } catch(e){if(!c.signal.aborted)setError((e as Error).message);}finally{submitting.current=false;if(!c.signal.aborted)setBusy(false);}
+  const submit=async(action:string,extra:object={},reload=false)=>{if(!review||submitting.current)return;submitting.current=true;operation.current?.abort();const c=new AbortController();operation.current=c;setBusy(true);setError('');onMutation(true);let mutationPending=true;
+    try {const previousReference=review.reference;const next=await scenarioApi<Review>(`/api/workflow/review/${previousReference}/${action}`,c.signal,{revision:review.revision,...extra});if(c.signal.aborted)return;setReview(next);
+      if(reload){onRecovery({previousReference,operation:action==='new-draft'?'new-draft':'regenerate',review:next});onMutation(false);mutationPending=false;const p=await api<Plan>(`/api/workflow/review/${next.reference}/plan`,c.signal);if(!c.signal.aborted){setBusy(false);submitting.current=false;onPlan(p);onRecoveryClear(next.reference);}}
+      else {onMutation(false);mutationPending=false;setBusy(false);submitting.current=false;onPlan({...plan,review_id:next.reference});}
+    } catch(e){if(!c.signal.aborted)setError((e as Error).message);}finally{if(mutationPending)onMutation(false);submitting.current=false;if(!c.signal.aborted)setBusy(false);}
   };
-  const reloadPlan=async()=>{if(!pendingPlan||submitting.current)return;submitting.current=true;const c=new AbortController();active.current?.abort();active.current=c;setBusy(true);try{const p=await api<Plan>(`/api/workflow/review/${pendingPlan}/plan`,c.signal);if(!c.signal.aborted){setPendingPlan(null);setError('');onPlan(p);}}catch(e){if(!c.signal.aborted)setError((e as Error).message);}finally{submitting.current=false;if(!c.signal.aborted)setBusy(false);}};
+  const reloadPlan=async()=>{if(!pendingPlan||submitting.current)return;submitting.current=true;const c=new AbortController();operation.current?.abort();operation.current=c;setBusy(true);try{const p=await api<Plan>(`/api/workflow/review/${pendingPlan}/plan`,c.signal);if(!c.signal.aborted){setError('');setBusy(false);submitting.current=false;onPlan(p);onRecoveryClear(pendingPlan);}}catch(e){if(!c.signal.aborted)setError((e as Error).message);}finally{submitting.current=false;if(!c.signal.aborted)setBusy(false);}};
   const immutable=review?.state==='accepted'||review?.state==='read_only';
   return <section className="panel review-controls" aria-label="Reviewed actions" aria-busy={busy}><h2>Review and final acceptance</h2>
     {plan.review_id&&!review&&!error&&<p role="status">Loading reviewed action state…</p>}{!plan.review_id&&<p className="notice">Review files require private session storage. Open Data and Assumptions to check availability, then recalculate. Hosted storage is not configured.</p>}

@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { components } from './contracts.generated';
 import ScenarioEvidence, { type EvidenceSelection } from './ScenarioEvidence';
 import { scenarioApi, emptyScenario, type Baseline, type DetailRequest, type Detail } from './scenarioApi';
 import { fixedNumber, number, percent, type Size } from './api';
 import { evidenceTargetSummary, purchaseEvidenceTarget } from './evidenceTarget';
 import ReviewControls from './ReviewControls';
+import type { ReviewGate, ReviewRecovery } from './reviewState';
 
 type Plan = components['schemas']['PlanResult'];
 const sar = (n: number | null) => n == null ? 'Unknown' : `SAR ${fixedNumber(n, 2)}`;
 
-export default function PlanReview({onReady,onForecast,onScenarios,initialPlan,uploaded=false,onReviewed}:{onReady:(p:Plan,size:Size)=>void;onForecast:(d:Detail)=>void;onScenarios:()=>void;initialPlan?:Plan|null;uploaded?:boolean;onReviewed?:(p:Plan)=>void}) {
-  const [reviewStale,setReviewStale]=useState(false);
+export default function PlanReview({onReady,onForecast,onScenarios,onReturnToOriginalScenario,onScenarioState,initialPlan,recovery,scenarioDerived=false,mutationPending=false,uploaded=false,onReviewed,onRecovery,onRecoveryClear,onMutation}:{onReady:(p:Plan,size:Size)=>void;onForecast:(d:Detail)=>void;onScenarios:(p:Plan,size:Size)=>void;onReturnToOriginalScenario:()=>void;onScenarioState:(p:Plan,gate:ReviewGate)=>void;initialPlan?:Plan|null;recovery:ReviewRecovery|null;scenarioDerived?:boolean;mutationPending?:boolean;uploaded?:boolean;onReviewed?:(p:Plan)=>void;onRecovery:(v:ReviewRecovery)=>void;onRecoveryClear:(reference:string)=>void;onMutation:(v:boolean)=>void}) {
+  const [reviewGate,setReviewGate]=useState<ReviewGate>({blocked:!!initialPlan?.review_id,reason:initialPlan?.review_id?'Review state is loading.':''});
   const [reviewProtected,setReviewProtected]=useState(false);
   const [size, setSize] = useState<Size>(initialPlan?.provenance?.sample_size||'fixture');
   const [refresh, setRefresh] = useState(0);
@@ -22,6 +23,7 @@ export default function PlanReview({onReady,onForecast,onScenarios,initialPlan,u
   const [captured,setCaptured]=useState<Baseline|null>(null);
   const [inspectRequest,setInspectRequest]=useState<{sku:string;loc:string;id?:string}|null>(null);
   const [inspectError,setInspectError]=useState('');
+  const updateReviewGate=useCallback((gate:ReviewGate)=>{setReviewGate(gate);if(result)onScenarioState(result,gate);},[result,onScenarioState]);
   useEffect(()=>{if(!inspectRequest||!result?.proposed)return;const c=new AbortController();setInspectError('');
     if(initialPlan&&result.review_id){setEvidence({sku:inspectRequest.sku,location_id:inspectRequest.loc,action_id:inspectRequest.id});return()=>c.abort();}
     const load=captured?Promise.resolve(captured):scenarioApi<Baseline>('/api/scenarios/capture',c.signal,{size:uploaded?null:size,dataset_hash:result.input_hash,purchases:result.proposed.purchases,movements:result.proposed.movements});
@@ -30,7 +32,7 @@ export default function PlanReview({onReady,onForecast,onScenarios,initialPlan,u
   useEffect(() => {
     if(initialPlan&&refresh===0){setResult(initialPlan);setSeries(initialPlan.forecasts[0]?`${initialPlan.forecasts[0].sku}/${initialPlan.forecasts[0].location_id}`:'');setBusy(false);onReady(initialPlan,size);return;}
     const controller = new AbortController();
-    setReviewStale(false);setResult(null); setError(null); setBusy(true); setSeries('');setEvidence(null);setCaptured(null);setInspectRequest(null);
+    setReviewGate({blocked:false,reason:''});setResult(null); setError(null); setBusy(true); setSeries('');setEvidence(null);setCaptured(null);setInspectRequest(null);
     scenarioApi<Plan>('/api/plan/sample', controller.signal, { size })
       .then(next => { if (!controller.signal.aborted) { setResult(next); onReady(next,size); setSeries(next.forecasts[0] ? `${next.forecasts[0].sku}/${next.forecasts[0].location_id}` : ''); } })
       .catch((e: Error) => { if (!controller.signal.aborted) setError(e.message); })
@@ -52,14 +54,14 @@ export default function PlanReview({onReady,onForecast,onScenarios,initialPlan,u
     <div role="status" aria-live="polite">{busy && <div className="loading"><span className="spinner"/>Evaluating network demand, purchasing, allocation and dated payments…</div>}</div>
     {error && <div role="alert" className="error"><strong>Plan unavailable</strong><p>{error}</p><button onClick={() => setRefresh(v => v + 1)}>Retry plan</button></div>}
     {result && !busy && <div className="result-content" data-testid="plan-result" data-run-id={result.run_id}>
-      <section className="decision-banner"><div><span className="status-tag">{reviewStale ? 'Stale — regeneration required' : valid ? 'Independently checked' : 'Not executable'}</span><h2>{reviewStale ? 'Previous calculation — review changes are not applied' : valid ? proposed?.name || 'Validated constrained plan' : 'Resolve planning failures before using recommendations'}</h2>
+      <section className="decision-banner"><div><span className="status-tag">{reviewGate.blocked ? 'Unresolved — current result required' : valid ? 'Independently checked' : 'Not executable'}</span><h2>{reviewGate.blocked ? 'Previous calculation — review changes are not applied' : valid ? proposed?.name || 'Validated constrained plan' : 'Resolve planning failures before using recommendations'}</h2>
         <p>{result.status === 'feasible_fallback' && proposed?.name === 'Validated constrained plan' ? 'The joint optimizer did not complete within the live calculation budget. These recommendations come from the deterministic constrained planner and passed independent feasibility checks. This is a validated fallback, with no claim of optimality.' : valid ? 'Daily stock and dated funding checks passed. Uncovered demand remains visible below.' : 'Incomplete inputs or a hard constraint failure prevents a funded plan.'}</p></div>
         <div className="as-of"><span>PLAN FROM</span><strong>{result.as_of}</strong><small>28-day review · 56-day model</small></div></section>
       {result.failures.length > 0 && <section className="panel error" role="alert"><h2>Planning failures</h2>{result.failures.map((f, i) => <p key={i}><strong>{f.code}</strong> · {[f.sku, f.location_id, f.supplier_id, f.day].filter(Boolean).join(' / ')} · {f.message}</p>)}</section>}
       <p className="dataset-context">{result.provenance?.source==='portable'?'Portable snapshot source':uploaded?'Uploaded workbook':result.provenance?.sample_size==='full'?'Bundled full sample':'Bundled fixture'} · {result.dataset_id} · planning date {result.as_of}. Proposed actions are not placed orders.</p>
-      <ReviewControls onStale={setReviewStale} plan={result} onProtected={setReviewProtected} onPlan={next=>{setResult(next);setEvidence(null);setCaptured(null);setInspectRequest(null);onReady(next,size);onReviewed?.(next);}}/>
+      <ReviewControls recovery={recovery} onGate={updateReviewGate} onRecovery={onRecovery} onRecoveryClear={onRecoveryClear} onMutation={onMutation} plan={result} onProtected={setReviewProtected} onPlan={next=>{const gate={blocked:!!next.review_id,reason:next.review_id?'Checking the replacement review state.':''};setReviewGate(gate);setResult(next);setEvidence(null);setCaptured(null);setInspectRequest(null);onReady(next,size);onReviewed?.(next);}}/>
       {valid && proposed && s && <>
-        <button className="primary-button" disabled={reviewStale} onClick={onScenarios}>Test disruptions with this baseline</button>
+        {scenarioDerived?<p className="notice">This reviewed plan already includes scenario assumptions. The current baseline-capture contract cannot preserve those assumptions as a new baseline without dropping or applying them twice. <button onClick={onReturnToOriginalScenario}>Return to original scenario baseline</button></p>:<><button className="primary-button" disabled={reviewGate.blocked||mutationPending} onClick={()=>onScenarios(result,size)}>Test disruptions with this baseline</button>{(reviewGate.blocked||mutationPending)&&<p className="notice">{mutationPending?'The review mutation is still being saved.':reviewGate.reason} Scenario handoff remains blocked.</p>}</>}
         {inspectRequest&&!evidence&&!inspectError&&<p role="status">Preparing action evidence…</p>}{inspectError&&<p role="alert">{inspectError}</p>}
         {evidence&&<ScenarioEvidence request={evidence} reviewReference={initialPlan?result.review_id:null} onForecast={onForecast} onClose={()=>{setEvidence(null);setInspectRequest(null);}}/>}
         {result.stages.some(x=>x.name==='independent_fallback'&&x.status==='benchmark')&&<p className="notice">The proposed actions equal the constrained benchmark. No improvement over that benchmark is claimed.</p>}

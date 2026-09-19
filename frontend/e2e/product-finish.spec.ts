@@ -64,15 +64,18 @@ for(const width of [1440,768,390])test(`layout and live scenarios at ${width}px 
 
 test('failed regenerated-result delivery stays stale until explicit reload succeeds',async({page})=>{
   test.setTimeout(90_000);await page.goto('/');await expect(page.getByTestId('forecast-result')).toBeVisible();
-  const calculation=wait(page,'/api/plan/sample');await page.getByRole('button',{name:'Plan Review',exact:true}).click();await calculation;
+  const calculation=wait(page,'/api/plan/sample');await page.getByRole('button',{name:'Plan Review',exact:true}).click();const previous=await(await calculation).json();const rejected=previous.proposed.purchases[0];
   const controls=page.getByRole('region',{name:'Reviewed actions'});await controls.getByRole('button',{name:'Reject action',exact:true}).click();
   await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeDisabled();
   let calls=0;await page.route('**/api/workflow/review/*/plan',r=>{calls++;return r.fulfill({status:503,json:{message:'Result delivery failed. Retry loading the saved calculation.'}});});
-  await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();await expect(controls.getByRole('alert')).toContainText('Result delivery failed');expect(calls).toBe(1);
+  let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);let arrived!:()=>void;const pendingMutation=new Promise<void>(resolve=>arrived=resolve);await page.route('**/api/workflow/review/*/regenerate',async route=>{const response=await route.fetch();arrived();await gate;await route.fulfill({response});});
+  const regeneration=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();await pendingMutation;for(const name of ['Demand Review','Scenarios','Data and Assumptions','Test disruptions with this baseline'])await expect(page.getByRole('button',{name,exact:true})).toBeDisabled();release();const savedReview=await(await regeneration).json();await page.unroute('**/api/workflow/review/*/regenerate');
+  await expect(controls.getByRole('alert')).toContainText('Result delivery failed');expect(calls).toBe(1);
   await expect(page.getByRole('heading',{name:'Previous calculation — review changes are not applied'})).toBeVisible();
   for(const name of ['Accept action','Finally accept plan','Regenerate reviewed plan','Download reviewed workbook'])await expect(controls.getByRole('button',{name,exact:true})).toBeDisabled();
-  await page.unroute('**/api/workflow/review/*/plan');const result=wait(page,'/plan');await controls.getByRole('button',{name:'Load regenerated result'}).click();const plan=await(await result).json();expect(plan.proposed.replay.feasible).toBe(true);
-  await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeEnabled();await expect(controls.getByRole('alert')).toHaveCount(0);await expect(controls.getByRole('button',{name:'Load regenerated result'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Scenarios',exact:true})).toBeDisabled();await page.getByRole('button',{name:'Demand Review',exact:true}).click();await page.getByRole('button',{name:'Plan Review',exact:true}).click();await expect(controls.getByRole('button',{name:'Load regenerated result'})).toBeVisible();await expect(page.getByRole('heading',{name:'Previous calculation — review changes are not applied'})).toBeVisible();
+  await page.unroute('**/api/workflow/review/*/plan');const result=wait(page,'/plan');await controls.getByRole('button',{name:'Load regenerated result'}).click();const plan=await(await result).json();expect(plan.proposed.replay.feasible).toBe(true);expect(plan.review_id).toBe(savedReview.reference);expect(plan.provenance).toEqual(savedReview.provenance);expect(plan.proposed.purchases.some((p:{action_id:string})=>p.action_id===rejected.action_id)).toBe(false);
+  await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeEnabled();await expect(controls.getByRole('alert')).toHaveCount(0);await expect(controls.getByRole('button',{name:'Load regenerated result'})).toHaveCount(0);expect(calls).toBe(1);
 });
 
 test('unavailable private storage keeps the public sample usable and uploads disabled',async({page})=>{
