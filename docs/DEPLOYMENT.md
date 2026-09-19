@@ -1,3 +1,26 @@
+# Pass 6 hosted verification and release blockers — 19–20 September 2026
+
+Canonical sample URL: **https://demand-supply-planning-intelligence.vercel.app**. Vercel metadata confirms production deployment `dpl_FDjfTcpkSijxKDgpnJRHf5owkojH`, project `prj_9wUSzLP3zKbvVinWCeNvmyDelVh5`, region `iad1`, commit **599554c3ad4e44c47b0461eff3fac921318ea606**. This is a verified existing deployment; no new deployment or settings change occurred. The local Pass 6 evidence-format correction is not deployed.
+
+[GitHub Actions 35461717511](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35461717511), job `105946650205`, **succeeded** for that exact commit, including 168 backend tests, 26 browser tests, reproducible contracts/build, Docker build/start, both solver smokes, forecast/planning/scenario smokes, component profiling and upload/review/accept/export/reopen. Pass 5 is closed for this baseline. New Pass 6 commit CI remains outstanding.
+
+Actual hosted HTTP planning measurements:
+
+| Sample | First / repeat HTTP | First / repeat engine | Largest response |
+|---|---:|---:|---:|
+| Fixture | 8.230 / 5.473 s | 3,998.0 / 4,096.9 ms | 786,643 bytes |
+| Full | **17.022 / 14.929 s** | 11,775.5 / 11,949.9 ms | 3,753,044 bytes |
+
+All four responses passed independent replay, finance, dimensions, payload and repeat-action/summary/explanation checks. Full requests **failed the unchanged 10-second smoke threshold**; the script exited nonzero. Full uses no joint challenger, so solving is not its bottleneck. Exact-commit container profiling measured ~6.27 s forecasting and 2.15 s benchmark work on a warm 9.21 s route; a fresh-process full route took 11.65 s including input generation. Hosted per-stage timing, true instance-cold latency and peak memory still need measurement. Do not raise the existing assertion or claim the warm container pass proves host readiness.
+
+Hosted forecast smoke passed fixture/full. Serial scenario smoke passed original/frozen/replanned correctness, all unchanged size/runtime checks and repeat determinism: full combined comparison **20.283 / 18.141 s**, largest **921,568 bytes**; full future-path change **27.489 s / 1,035,200 bytes**. A separate funding trace verified both commitment and payment-ceiling controls and exact deltas. An overlapping calculation produced explicit 429; its failed smoke was preserved and then rerun serially. See [RELEASE_AUDIT.md](RELEASE_AUDIT.md) for calculation traces, browser evidence, timings, simulation assumptions and demo copy.
+
+**Hosted own-data remains blocked.** The actual session endpoint returns `enabled: false`. Only the local temporary driver exists, and Vercel deliberately disables it. Missing work is an authorized private object-storage adapter with direct upload/finalization and download transport, server-side ownership/type/hash/size checks, atomic review revisions across instances, expiry/deletion and abandoned-upload cleanup. The existing provider-neutral interfaces and a bounded implementation checklist are documented in the audit. No provider credentials, public-object workaround, browser Dataset JSON, serverless-temp-file workaround or infrastructure was introduced. Complete the real-provider lifecycle/isolation and full hosted workflow tests before enabling these features.
+
+Local production own-data workflow and corrected UI are verified separately in BUILD_STATUS. Docker is unavailable locally; container evidence above belongs to baseline CI only. The public sample works but is **not ready against its documented latency gate**. The complete hosted own-data release is **blocked**. Outstanding release actions: resolve and remeasure full-sample latency without weakening gates; authorize/implement/verify private hosted storage; commit the reviewed corrections and obtain exact-commit CI; only with separate authorization deploy, verify the deployed SHA, and repeat hosted browser/API/own-data/cold-memory checks. No push, merge or deployment has been performed.
+
+The following sections are historical and are superseded by this Pass 6 evidence where they describe earlier readiness or pending verification.
+
 # Pass 5 scope freeze and release boundary — 19 September 2026
 
 Pass 5 changes frontend presentation, request-state handling, browser regressions and operator documentation only. No deployment settings, infrastructure, storage adapter, runtime dependencies or calculation contracts changed. Local verification is recorded in [BUILD_STATUS.md](BUILD_STATUS.md); it is not hosted verification.

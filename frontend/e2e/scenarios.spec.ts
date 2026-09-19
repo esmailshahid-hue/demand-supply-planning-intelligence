@@ -9,6 +9,9 @@ test('sample action evidence, actual forecast, three presets, combined scenario 
   const nonS1=plan.proposed.evidence_targets.find((target:{location_id:string|null})=>target.location_id&&target.location_id!=='S1');expect(nonS1).toBeTruthy();
   const purchaseIndex=plan.proposed.purchases.findIndex((purchase:{action_id:string})=>purchase.action_id===nonS1.action_id);expect(purchaseIndex).toBeGreaterThanOrEqual(0);
   const purchaseRow=page.getByTestId('purchase-table').locator('tbody tr').nth(purchaseIndex);await purchaseRow.locator('summary').click();
+  // The real fixture exposes 20.400000000000006; evidence must use the same
+  // one-decimal quantity precision as the ledger, without changing API values.
+  await expect(purchaseRow).toContainText(`${nonS1.affected_units.toLocaleString('en-GB',{maximumFractionDigits:1})} units.`);
   const inspectPurchase=purchaseRow.getByRole('button',{name:'Inspect purchase and forecast'});await expect(inspectPurchase).toHaveAttribute('data-evidence-location',nonS1.location_id);
   const detailResponse=wait(page,'/api/scenarios/detail');await inspectPurchase.click();const detail=await(await detailResponse).json();expect(detail.forecast.location_id).toBe(nonS1.location_id);
   await expect(page.getByRole('heading',{name:'SKU payments and grouped movement fees'})).toBeVisible();

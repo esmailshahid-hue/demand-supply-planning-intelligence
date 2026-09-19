@@ -1,6 +1,8 @@
 # Demand and Supply Planning Intelligence
 
-An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–4 provide live forecasts, feasible planning, original/frozen/replanned scenarios, local XLSX inputs, exact action review, final acceptance and portable exports. **Pass 5 finishes responsive navigation, keyboard evidence, financial explanations and recoverable review/error states. Feature scope is frozen for audit. Hosted uploads remain blocked pending authorized private storage.** No orders are sent.
+An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–4 provide live forecasts, feasible planning, original/frozen/replanned scenarios, local XLSX inputs, exact action review, final acceptance and portable exports. Pass 5 adds responsive navigation, keyboard evidence and recoverable review/error states; exact-commit CI has closed that pass. **Pass 6 audit evidence is available, but release remains blocked by hosted full-sample latency and private storage. Feature scope is frozen.** No orders are sent.
+
+[Public sample application](https://demand-supply-planning-intelligence.vercel.app) · [Pass 6 audit, measured policy trade-offs and demo script](docs/RELEASE_AUDIT.md). The verified host runs `599554c`; it does not yet include the Pass 6 presentation correction. Full hosted planning took 17.022 / 14.929 seconds against the retained 10-second gate. Local own-data review/export works; hosted own-data remains disabled.
 
 The app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review evaluates three weekday forecasting methods on a 10-SKU fixture or 60-SKU sample. Plan Review exposes dated stock/cash evidence and exact accept/reject/edit decisions. Scenarios compares unchanged actions with a fresh constrained plan. Data and Assumptions validates a documented workbook before calculation. Baseline smoke retains its 10-second warm live target; fallback status is explicit and does not claim global optimality. See [BUILD_STATUS](docs/BUILD_STATUS.md) for measured results and cold-start qualifications.
 
@@ -74,12 +76,13 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is unavailable in the current local workspace. User-confirmed GitHub Actions `35364586310` passed for Pass 4 baseline `218db764b9e6addb8e87da9b8d829e584796b19f`, including Docker, profiling and upload/review/export checks. That evidence does not verify the Pass 5 worktree. Exact-commit CI/container and hosted execution remain outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted storage blocker.
+Docker is unavailable in the current local workspace. GitHub Actions `35461717511` succeeded for Pass 5 baseline `599554c3ad4e44c47b0461eff3fac921318ea606`, including Docker, profiling and upload/review/export checks. New Pass 6 commit/container verification remains outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted latency and storage blockers.
 
 ## Project guide
 
 - [Build specification](docs/DEMAND_SUPPLY_MVP_BUILD_PLAN.md): source of truth and six-pass scope.
 - [Build status](docs/BUILD_STATUS.md): executed checks and remaining verification boundaries.
+- [Release audit](docs/RELEASE_AUDIT.md): traced calculations, offline realized policy evaluation, verified hosted revision and release blockers.
 - [Workbook workflow](docs/WORKBOOK.md): sheets, validation, review, exports and reconciliation.
 - [Forecast methodology and contracts](docs/FORECASTING.md): cutoff rules, fallback policy and metric definitions.
 - [Planning methodology](docs/PLANNING.md): staged model, benchmark, independent replay and cash semantics.
@@ -89,6 +92,18 @@ Docker is unavailable in the current local workspace. User-confirmed GitHub Acti
 - `frontend/src/`: four-screen shell, live Demand Review and Plan Review.
 
 Calculations process inputs on the server after consent. There are no accounts, database, persistent history or automatic purchasing. Pass 6 is bounded to specification audit and hosted release verification; private hosted storage requires separate authorization and lifecycle verification. No new scenario types, dashboards, AI narration or integrations are planned in this scope freeze.
+
+Offline release evidence (truth stays outside API inputs):
+
+```sh
+.venv/bin/python -m scripts.policy_replay --size fixture --output artifacts/policy-fixture.json
+.venv/bin/python -m scripts.policy_replay --size full --output artifacts/policy-full.json
+.venv/bin/python -m scripts.release_trace --output artifacts/calculation-trace.json
+# Explicit existing-host browser verification; never deploys:
+node scripts/hosted_browser.mjs https://demand-supply-planning-intelligence.vercel.app
+```
+
+The weekly evaluation executes only seven-day releases and reports withheld realized demand, dated payments, future obligations and average stock. In the tested four-week period, proposed and benchmark releases were identical. See the audit for the ex ante calendar extension, execution guard and precise simulation limitations.
 
 
 ## Own-data review and recovery
