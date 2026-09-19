@@ -1,5 +1,32 @@
 # Build status
 
+## Final Pass 5 mutation-transaction correction — 19 September 2026
+
+Started from clean GitHub main commit **8e8f8973c03a6005ced05a2ab0fd33ac5e5eb366**. This correction changes frontend transaction state and browser regressions only. Forecasting, planning, replay, scenarios, storage, API contracts, dependencies, deployment configuration and Pass 6 scope are unchanged.
+
+### Root cause and corrected lifecycle
+
+The previous correction locked sidebar and brand navigation while a review mutation POST was unresolved, but several controls inside Plan Review were outside that lock: scenario-derived return, evidence-to-Demand navigation, the planning dataset selector and plan recalculation. `ReviewControls` aborts its active operation when Plan Review unmounts. Those controls could therefore remove the component after the server saved a replacement but before the browser received and recorded its new reference.
+
+One App-owned `ReviewMutationPhase` now represents the protected transaction: `idle` or `awaiting-response`. `ReviewControls` enters `awaiting-response` before every mutation POST. For regeneration/new-draft it publishes the replacement reference, operation and complete review metadata to App recovery before returning to `idle`; for other mutations it publishes the returned plan reference before returning to `idle`. The subsequent replacement-plan GET is deliberately outside the global lock. If it fails or is interrupted, old quantities stay blocked and the saved replacement remains available through **Load regenerated result**.
+
+The shared phase now guards both rendering and handlers for sidebar navigation, brand navigation, direct scenario handoff, scenario-derived return, evidence forecast navigation, planning dataset changes, plan recalculation/retry, sample dataset replacement/reset/reopen, linked-forecast navigation and scenario-to-review entry. The scenario-derived marker also follows the saved recovery reference while the displayed old plan still has its previous reference, so explicit abandon remains available after the POST is safely recorded. The existing **Saving review mutation…** status is shown in Review Controls and the sidebar until that boundary.
+
+### Regression and verification results
+
+- New delayed-response Playwright regressions hold real mutation responses after the server has completed them. They force-enable disabled controls and invoke their handlers, then assert that Plan Review remains mounted, the request is not aborted, no replacement calculation starts and the returned reference becomes authoritative.
+- Scenario-derived regeneration: return remained blocked through the POST, the displayed run stayed mounted, the replacement GET used the returned reference, failed delivery remained recoverable, and explicit return worked after the reference was recorded.
+- Evidence navigation: Demand Review navigation was blocked through the POST and worked after recovery was recorded; returning to Plan Review exposed the saved result loader.
+- First review mutation: the initially enabled planning dataset and recalculation controls became locked; forced change/click callbacks produced no second `/api/plan/sample` request, and review metadata reloaded from the returned reference.
+- Focused new regressions: **3 passed in 25.2 s**. Existing failed-delivery recovery regression: **1 passed in 8.0 s**. Complete Playwright suite: **26 passed in 3.1 min**.
+- Final `npm --prefix frontend run build`: passed TypeScript and Vite production compilation, **41 modules**, JS **305.83 kB / 91.84 kB gzip**, CSS **13.52 kB / 3.85 kB gzip**.
+- `.venv/bin/python -m scripts.export_contracts` and `npm --prefix frontend run generate:types` passed; `git diff --exit-code -- artifacts/openapi.json frontend/src/contracts.generated.ts` confirmed both committed contracts are unchanged.
+- Final callback audit used repository-wide searches for screen, dataset, refresh, evidence and workflow callbacks. `git diff --check` passed. No backend or shared contract source changed, so backend tests were not rerun for this frontend-only correction.
+
+Changed files: `frontend/src/{App,PlanReview,ReviewControls,ScenarioEvidence}.tsx`, `frontend/src/reviewState.ts`, `frontend/e2e/pass5-state.spec.ts`, and this status file.
+
+Local implementation and verification are complete. **Pass 5 is not yet formally closed** because the exact corrected worktree has not been committed and therefore has no exact-commit GitHub Actions run. CI/container and hosted evidence remain pending. No push, merge, deployment or Pass 6 work occurred.
+
 ## Focused Pass 5 reviewed-baseline and recovery correction — 19 September 2026
 
 Started from reviewed commit **4b7e53024f9f938aa90130c35831a923f31d8b10** and preserved the completed Pass 5 UI, accessibility, provenance, financial labeling and failure handling. No forecasting, optimizer, replay, horizon, sample dimension, API contract, dependency, infrastructure or deployment behavior changed. No Pass 6 work began.

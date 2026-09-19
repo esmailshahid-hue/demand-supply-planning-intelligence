@@ -12,3 +12,5 @@ export type ReviewGate = {
   blocked: boolean;
   reason: string;
 };
+
+export type ReviewMutationPhase = 'idle' | 'awaiting-response';

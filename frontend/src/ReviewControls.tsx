@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { scenarioApi, type Plan } from './scenarioApi';
 import type { components } from './contracts.generated';
-import type { Review, ReviewGate, ReviewRecovery } from './reviewState';
+import type { Review, ReviewGate, ReviewMutationPhase, ReviewRecovery } from './reviewState';
 
-export default function ReviewControls({plan,recovery,onPlan,onProtected,onGate,onRecovery,onRecoveryClear,onMutation}:{plan:Plan;recovery:ReviewRecovery|null;onPlan:(p:Plan)=>void;onProtected:(v:boolean)=>void;onGate:(v:ReviewGate)=>void;onRecovery:(v:ReviewRecovery)=>void;onRecoveryClear:(reference:string)=>void;onMutation:(v:boolean)=>void}) {
+export default function ReviewControls({plan,recovery,mutationPhase,onPlan,onProtected,onGate,onRecovery,onRecoveryClear,onMutation}:{plan:Plan;recovery:ReviewRecovery|null;mutationPhase:ReviewMutationPhase;onPlan:(p:Plan)=>void;onProtected:(v:boolean)=>void;onGate:(v:ReviewGate)=>void;onRecovery:(v:ReviewRecovery)=>void;onRecoveryClear:(reference:string)=>void;onMutation:(v:ReviewMutationPhase)=>void}) {
   const [review,setReview]=useState<Review|null>(null);
   const [action,setAction]=useState('');const [quantity,setQuantity]=useState('');const [note,setNote]=useState('');
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [ack,setAck]=useState(false);
@@ -26,11 +26,11 @@ export default function ReviewControls({plan,recovery,onPlan,onProtected,onGate,
   const previous=(review?.decisions||[]).map(d=>d.original as components['schemas']['Purchase']|components['schemas']['Movement']);
   const actions=[...current,...previous.filter(a=>!current.some(p=>p.action_id===a.action_id))];
   const selected=actions.find(a=>a.action_id===action)||actions[0];
-  const submit=async(action:string,extra:object={},reload=false)=>{if(!review||submitting.current)return;submitting.current=true;operation.current?.abort();const c=new AbortController();operation.current=c;setBusy(true);setError('');onMutation(true);let mutationPending=true;
+  const submit=async(action:string,extra:object={},reload=false)=>{if(!review||submitting.current)return;submitting.current=true;operation.current?.abort();const c=new AbortController();operation.current=c;setBusy(true);setError('');onMutation('awaiting-response');let awaitingResponse=true;
     try {const previousReference=review.reference;const next=await scenarioApi<Review>(`/api/workflow/review/${previousReference}/${action}`,c.signal,{revision:review.revision,...extra});if(c.signal.aborted)return;setReview(next);
-      if(reload){onRecovery({previousReference,operation:action==='new-draft'?'new-draft':'regenerate',review:next});onMutation(false);mutationPending=false;const p=await api<Plan>(`/api/workflow/review/${next.reference}/plan`,c.signal);if(!c.signal.aborted){setBusy(false);submitting.current=false;onPlan(p);onRecoveryClear(next.reference);}}
-      else {onMutation(false);mutationPending=false;setBusy(false);submitting.current=false;onPlan({...plan,review_id:next.reference});}
-    } catch(e){if(!c.signal.aborted)setError((e as Error).message);}finally{if(mutationPending)onMutation(false);submitting.current=false;if(!c.signal.aborted)setBusy(false);}
+      if(reload){onRecovery({previousReference,operation:action==='new-draft'?'new-draft':'regenerate',review:next});onMutation('idle');awaitingResponse=false;const p=await api<Plan>(`/api/workflow/review/${next.reference}/plan`,c.signal);if(!c.signal.aborted){setBusy(false);submitting.current=false;onPlan(p);onRecoveryClear(next.reference);}}
+      else {setBusy(false);submitting.current=false;onPlan({...plan,review_id:next.reference});onMutation('idle');awaitingResponse=false;}
+    } catch(e){if(!c.signal.aborted)setError((e as Error).message);}finally{if(awaitingResponse)onMutation('idle');submitting.current=false;if(!c.signal.aborted)setBusy(false);}
   };
   const reloadPlan=async()=>{if(!pendingPlan||submitting.current)return;submitting.current=true;const c=new AbortController();operation.current?.abort();operation.current=c;setBusy(true);try{const p=await api<Plan>(`/api/workflow/review/${pendingPlan}/plan`,c.signal);if(!c.signal.aborted){setError('');setBusy(false);submitting.current=false;onPlan(p);onRecoveryClear(pendingPlan);}}catch(e){if(!c.signal.aborted)setError((e as Error).message);}finally{submitting.current=false;if(!c.signal.aborted)setBusy(false);}};
   const immutable=review?.state==='accepted'||review?.state==='read_only';
@@ -48,6 +48,6 @@ export default function ReviewControls({plan,recovery,onPlan,onProtected,onGate,
       <p>Exports become available only after the current plan is finally accepted. Acceptance does not place orders or execute transfers.</p><p className="download-actions">{immutable?<><a href={`/api/workflow/review/${review.reference}/download/workbook`}>Download reviewed workbook</a> · <a href={`/api/workflow/review/${review.reference}/download/snapshot`}>Download portable snapshot</a></>:<><button disabled>Download reviewed workbook</button> <button disabled>Download portable snapshot</button></>}</p>
       <details><summary>Review decisions · {review.decisions.length}</summary>{review.decisions.map((d,i)=><p key={i}>{String(d.action_type)} · {String(d.business_key).slice(0,12)} · {String(d.status)} · {String(d.original_quantity)} → {String(d.reviewed_quantity??'prohibited')} · {String(d.disposition)}</p>)}</details>
       {review.failures.map((f,i)=><p className="error" key={i}>{String(f.code)} · {String(f.message)}</p>)}
-    </>}{busy&&<p role="status">Checking review dependencies and independent stock/cash replay…</p>}{error&&<div className="error" role="alert"><p>{error}</p>{!review&&<button disabled={busy} onClick={()=>setRetry(v=>v+1)}>Retry review</button>}</div>}
+    </>}{mutationPhase==='awaiting-response'?<p role="status">Saving review mutation…</p>:busy&&<p role="status">Checking review dependencies and independent stock/cash replay…</p>}{error&&<div className="error" role="alert"><p>{error}</p>{!review&&<button disabled={busy} onClick={()=>setRetry(v=>v+1)}>Retry review</button>}</div>}
   </section>;
 }
