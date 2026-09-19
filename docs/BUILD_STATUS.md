@@ -1,5 +1,82 @@
 # Build status
 
+## Pass 5 — product finish and scope freeze — 19 September 2026
+
+Started from clean reviewed baseline **218db764b9e6addb8e87da9b8d829e584796b19f**; no reset or unrelated changes. User-confirmed GitHub Actions **35364586310** succeeded for that Pass 4 commit, including backend/browser tests, contracts/build, Docker verification, forecast/planning/scenario smoke, container profiling and upload/review/accept/export/reopen. This supersedes the historical pending-CI statements for that baseline only. No GitHub Actions run or hosted success is claimed for Pass 5.
+
+### Observed gaps and corrections
+
+Real browser inspection at **1440, 768 and 390 px** found a clipped fourth navigation item on mobile, hidden planning dates, raw/cramped review fields, missing evidence focus entry/return, no clear stale banner after review edits, and limited network/session-error recovery. Long-name screenshot inspection also found desktop Product collapse despite no document overflow. Corrections use the existing colors, typography, panels and dependencies:
+
+- Responsive two-column navigation keeps all screens visible; decorative numbers no longer pollute accessible button names. Planning dates remain visible. Bounded selectors tolerate long names, review fields adapt to one column, amounts align right, long evidence wraps, and dense tables remain keyboard-focusable local scroll regions.
+- Evidence panels take focus, close with Escape and return focus to the opener. They are inline regions, not modal dialogs. Retry is available for failed evidence and review loads. Inputs have visible focus; busy review/upload/calculation states use status announcements.
+- Current dataset, source and planning date are explicit, including portable sources. Financial copy distinguishes commitment authority, payments, existing obligations, movement funding, inventory cost and visible/provisional windows. Scenarios describe original/frozen/replanned policies and identical changed assumptions; supplier selections include names. Fallbacks remain **Validated constrained plan**, with shortages and technical stage evidence retained.
+- Review mutation visibly marks prior quantities stale and blocks scenario handoff/acceptance/export. A successful regeneration whose result GET fails remains stale and offers **Load regenerated result**; acceptance stays blocked until that result loads. Duplicate review/upload submits are guarded. Review requests abort on unmount; retry loops retain their original dataset reference. Portable reopening loads its catalog and plan before committing the active source, and cancels on replacement/navigation. Obsolete reset/upload responses cannot replace current state.
+- Shared API errors retain stable codes, review conflicts and FastAPI field details, with network/expiry recovery instructions. Workbook sheet errors remain grouped without duplicate alert text. Failed acceptance never exposes new download links. Hosted storage remains disabled, with local/Docker and session-recovery instructions.
+
+Changed files: `frontend/src/{App,DataWorkspace,Demand,Evaluation,PlanReview,ReviewControls,ScenarioEvidence,Scenarios}.tsx`, `frontend/src/{api,scenarioApi,errors}.ts`, `frontend/src/styles.css`, `frontend/e2e/{product-finish,workflow}.spec.ts`, `README.md`, `docs/DEPLOYMENT.md`, and this status file. No backend, generated contract, lockfile, infrastructure or deployment configuration changed.
+
+### Verification
+
+Local verification uses macOS arm64, the existing Python 3.14 environment and one production Uvicorn worker (`./scripts/start.sh`) serving the compiled frontend. Measurements below are local; sample input caches can be warm. No plan responses are cached.
+
+- `.venv/bin/python -m pytest -q > artifacts/pass5-backend.log 2>&1`: **168 passed, 2 existing TestClient deprecation warnings, 274.36 s**.
+- `.venv/bin/python -m scripts.solver_smoke`: SciPy 1.18.1 import **0.339 s**, HiGHS status 0 / integer x=2; cold **0.001 s**, warm **<0.001 s**.
+- `.venv/bin/python -m scripts.export_contracts` and `npm --prefix frontend run generate:types` ran twice. SHA-256 comparisons matched both OpenAPI and TypeScript byte-for-byte. `git diff --exit-code -- frontend/src/contracts.generated.ts` passed.
+- `npm --prefix frontend run build`: passed, **41 modules**, JS **301.85 kB / 90.44 kB gzip**, CSS **13.52 kB / 3.85 kB gzip**.
+- `.venv/bin/python -m pip check`: no broken requirements; `npm --prefix frontend ls --depth=0`: installed tree resolved. No dependency upgrades or external vulnerability-audit claim. `.venv/bin/python -m compileall -q backend scripts` and `git diff --check` passed.
+
+- Production commands ran sequentially with output retained in ignored `artifacts/pass5-*.log`: `.venv/bin/python -m scripts.smoke`, `.venv/bin/python -m scripts.planning_smoke`, `.venv/bin/python -m scripts.scenario_smoke`, `.venv/bin/python -m scripts.planning_profile`, and `.venv/bin/python -m scripts.workflow_smoke`.
+- Forecast smoke passed: fixture **0.041 / 0.033 s**, full **0.178 / 0.166 s**. Its historical “cold” labels identify first requests in that smoke, not a cold application process here.
+
+| Planning request | HTTP seconds | Engine ms | Response bytes | Purchases / movements |
+|---|---:|---:|---:|---:|
+| Fixture first | 2.541 | 2515.5 | 786,641 | 24 / 311 |
+| Fixture repeat | 2.598 | 2580.1 | 786,644 | 24 / 311 |
+| Full first | 3.437 | 3329.1 | 3,753,043 | 31 / 607 |
+| Full repeat | 3.349 | 3251.1 | 3,753,044 | 31 / 607 |
+
+All four planning requests passed: `feasible_fallback`, independent replay true/no failures, repeat actions/totals/ledgers/explanations matched. Fixture retained 40 series / 2,800 stock rows and the two-second `visible_must_stock:time_limit` challenger; full retained 240 series / 16,800 rows and `joint_model:not_attempted` with zero joint sub-budget. Both used `independent_fallback:benchmark`. Fixture commitment/payment lines reconcile exactly to **SAR 91,606 / 97,746**; full to **SAR 92,550 / 99,050**. Minimum commitment/payment/transfer headroom: fixture **0 / 14 / 120 SAR**, full **40 / 5 / 120 SAR**. The **10-second** planning and **4,500,000-byte** response gates remain unchanged.
+
+Scenario smoke passed with independent feasibility, financial reconciliation, scoped evidence and repeat determinism. Fixture combined comparison first/repeat **2.753 / 2.682 s**, **366,155 / 366,157 bytes**; full **4.542 / 4.562 s**, **921,567 bytes**. Scoped detail: fixture **0.483 s / 114,868 bytes**, full **3.012 s / 113,556 bytes**. Future-path comparison: fixture **3.753 s / 362,703 bytes**, full **6.574 s / 1,035,199 bytes**. The 30-second scenario and payload gates are unchanged.
+
+Profiler passed the production-route validation/determinism gates. Fixture route first/repeat **2.632 / 2.512 s**, serialization **0.0023 / 0.0023 s**, **786,641 / 786,644 bytes**. Full route **4.006 / 3.183 s**, serialization **0.0114 / 0.0111 s**, **3,753,044 bytes**. Full first/repeat phase seconds: sample input **0.802 / <0.001**, forecast **2.148 / 2.165**, benchmark **0.704 / 0.689**, replay **0.127 / 0.104**, explanations **0.034 / 0.033**; no joint model was attempted. Fixture joint total **2.036 / 2.037 s**, construction **0.039 / 0.051 s**, matrix preparation **0.013 / 0.013 s**, SciPy solve **1.984 / 1.973 s**. These retain existing instrumentation and overlap conventions; no performance policy changed.
+
+Upload/review/regenerate/accept/export/reopen smoke passed for both dimensions, including deliberately wrong client sample labels. Provenance remained uploaded through regeneration/evidence/acceptance/download, then portable on reopen, retaining each exact dataset hash/dimensions. Independent replay, reconciliation, unique external IDs, deterministic repeated snapshot bytes and private-session reset passed.
+
+| Workflow measure | Fixture | Full |
+|---|---:|---:|
+| XLSX / expanded bytes | 445,292 / 5,814,190 | 2,775,269 / 37,978,053 |
+| Parse/validate ms | 1,267.52 | 8,483.84 |
+| Upload HTTP s | 1.410 | 9.086 |
+| Plan / regenerate HTTP s | 2.704 / 2.748 | 4.424 / 4.732 |
+| Accept / export HTTP s | 0.829 / 0.111 | 5.074 / 0.602 |
+| Reviewed XLSX bytes | 53,038 | 125,271 |
+| Snapshot compressed / expanded bytes | 172,709 / 3,498,313 | 932,837 / 21,292,412 |
+
+Browser verification:
+
+- Focused `npm --prefix frontend run test:e2e -- product-finish.spec.ts`: **7 passed in 48.8 s** after fixing test selectors. Full final command: `CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' caffeinate -i npm --prefix frontend run test:e2e > artifacts/pass5-browser.log 2>&1`: **20 passed in 2.2 min**. `caffeinate` only prevented idle sleep for that local command; it changed no app/test/runtime setting.
+- Coverage includes mobile API-backed sample review, keyboard action/evidence entry and Escape/focus return, arrow-key table scrolling, all three responsive widths with long names and usable selector widths, structured runtime/solver/field/expiry/network errors followed by retry, 429 admission retry, failed result delivery after successful regeneration, stale/export blocking, failed shortage acknowledgement and provenance acceptance, hosted-storage-disabled capability injection, and portable reopen → immutable view → explicit new draft → regeneration. Existing in-flight scenario/dataset/upload cancellation, forecast rounding and exact action-lock/provenance cases remain.
+- Early test runs identified and corrected a strict date locator, decorative navigation-number naming, an exact-label selector that included option text, and duplicated workbook-error text. Subsequent bundled headless Chromium runs had intermittent response-event/transport waits in different tests. In the retained scenario trace, the UI had rendered the new comparison but Playwright recorded the request with no response event; another upload timeout snapshot already showed Validation passed. Idle-sleep prevention alone did not resolve this. No application cause was established, and no timeout/assertion was weakened. The repository-documented installed Chrome option passed the complete unchanged suite. Retained local trace: ignored `artifacts/pass5-browser-event-failure.zip`; confirm the default Linux browser in exact-commit CI.
+- Inspected before/after desktop, tablet and mobile screenshots. Final screenshots in ignored `artifacts/pass5-{demand,scenarios,data}-{1440,768,390}.png` and `pass5-mobile-review.png` show readable active navigation/context and locally scrolling tables. Normal responsive workflows asserted no page/console errors or HTTP error responses. Deliberately injected failures are separate negative checks. The initial agent-browser console/page-error checks were empty; a later CLI selector attempt failed to navigate, so final review-control screenshots used Playwright with installed Chrome instead. Inspected `artifacts/pass5-review-{1440,768,390}.png`; the additional live browser check passed with no document overflow, page/console errors or HTTP errors.
+
+**Pass 5 is ready for review locally, with feature scope frozen.** Exact-commit CI/container and hosted release verification remain outstanding; the bundled local browser event issue is recorded above rather than presented as a clean default-browser run.
+
+### Operator demo
+
+The approximately three-minute sequence is in [README.md](../README.md#three-minute-operator-demo). Live sample fixture `sample-v1-fixture-97`, as-of **2026-09-14**, produced SKU001/S1 **281.1** visible units, displayed MAE **10.4 → 7.5 / 28%**, **<0.1%** pooled signed bias and **223/224** scored observations. Purchase `P-OFFER008-0` proposes **130 SKU008 units / SAR 1,430**, ordered/dispatched 14 September, arriving 28 September, with **SAR 715** deposit 14 September and **SAR 715** balance 28 October. Visible fill **52.7%**, unmet **7,567.4**, inventory value **SAR 18,303.42**; SKU008/DC→S1 on 14 September has a shared-stock limit of **10** pack-rounded units against **150** requested.
+
+The live Promotion preset (+30% SKU001, all stores, 14–27 September) made frozen actions infeasible; its metrics/deltas correctly remained unavailable. Replanning passed at **52.2% fill**, **7,742.8 unmet**, **SAR 91,726 commitments / 97,746 payments**. The demo makes no savings comparison against the infeasible frozen policy. It concludes with a valid quantity edit, stale-state/regeneration, shortage acknowledgement, acceptance, both downloads, read-only portable reopen and explicit new draft in the supported local environment. Actual data is retained in ignored `artifacts/pass5-demo.json`; no outcome was embedded into application code.
+
+### Scope freeze and bounded Pass 6 handoff
+
+Feature scope is frozen around the four existing screens and the required local sample/upload/review/scenario/accept/export/reopen workflow. Forecast selection/rounding, service priorities, constraints, independent replay, exact review decisions, provenance, snapshot integrity, execution reconciliation, dimensions/horizons, solver budgets and payload/runtime gates are unchanged. No model correction was needed.
+
+No Docker, Podman, Colima or Lima executable is installed here: new container build/start, container solver/profile and workflow checks remain for exact-commit CI. Hosted private storage is a **Pass 6 release dependency**, not a completed feature. No storage was provisioned, Vercel setting changed, project removed, push/merge/deployment made, or Pass 6 implemented.
+
+Pass 6 starts with specification and input-to-result/export audit, withheld synthetic policy replay and honest benchmark trade-offs, then exact-commit Linux/container and authorized hosted cold/warm runtime/payload/memory verification. Hosted own-data release also requires an authorized private storage adapter and isolation/expiry/deletion verification. Accounts, integrations, new scenario types, dashboards, AI narration, durable history and exact-optimizer research remain deferred. This is an independent synthetic portfolio project; no customer use or verified real-world savings is claimed.
+
 ## Narrow Pass 4 regeneration-provenance correction — 18 September 2026
 
 Started from clean commit `e5abf21aba8f80424942ccd9815cd808d0e0eebd`. The defect was reproduced before modification: an uploaded fixture plan initially returned canonical `uploaded` provenance, but the regenerated review view and regenerated `PlanResult` both returned `null`. `rerun()` discarded the authoritative context returned by `draft_for()`, while `planning.review.regenerate()` replaced the prior result with a fresh provenance-free engine result. Final acceptance checked input/replay/forecast versions but did not compare plan provenance with the authoritative stored dataset.

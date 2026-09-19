@@ -1,3 +1,4 @@
+import { apiError, responseValue, requestError } from './errors';
 import type { components } from './contracts.generated';
 import { sourceHeaders } from './api';
 export type Baseline = components['schemas']['BaselineResult'];
@@ -11,9 +12,12 @@ export const emptyScenario = (): Definition => ({ uplifts: [], delays: [], avail
 // Aborting a browser request cannot cancel Python. Honour admission-control retry
 // guidance while that calculation finishes, and abort the retry on a new draft.
 export async function scenarioApi<T>(path: string, signal: AbortSignal, body: unknown): Promise<T> {
+  const headers = {...sourceHeaders(),'Content-Type':'application/json'};
   for (let attempt = 0; ; attempt++) {
-    const response = await fetch(path, { method: 'POST', signal, headers: {...sourceHeaders(),'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const value = await response.json();
+    let response: Response;
+    try { response = await fetch(path, { method: 'POST', signal, headers, body: JSON.stringify(body) }); }
+    catch(e) { if(signal.aborted) throw e; throw new Error(requestError(e)); }
+    const value = await responseValue(response);
     if (response.status === 429 && attempt < 20) {
       await new Promise<void>((resolve,reject) => {
         const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted','AbortError')); };
@@ -22,7 +26,7 @@ export async function scenarioApi<T>(path: string, signal: AbortSignal, body: un
       });
       continue;
     }
-    if (!response.ok) throw new Error([value.message || value.detail || 'Request failed. Check the controls and retry.', ...(value.failures||[]).map((f:{code:string;message:string})=>`${f.code}: ${f.message}`)].join(' '));
+    if (!response.ok) throw new Error(apiError(value,response.status));
     return value;
   }
 }

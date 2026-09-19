@@ -1,3 +1,15 @@
+# Pass 5 scope freeze and release boundary — 19 September 2026
+
+Pass 5 changes frontend presentation, request-state handling, browser regressions and operator documentation only. No deployment settings, infrastructure, storage adapter, runtime dependencies or calculation contracts changed. Local verification is recorded in [BUILD_STATUS.md](BUILD_STATUS.md); it is not hosted verification.
+
+The user confirmed successful GitHub Actions **35364586310** for reviewed Pass 4 baseline **218db764b9e6addb8e87da9b8d829e584796b19f**, including backend/browser tests, contracts/build, Docker startup/solver, forecast/planning/scenario smoke, container profiling and upload/review/accept/export/reopen. This supersedes the pending-CI statements for that baseline in the historical sections below. It does **not** verify the new Pass 5 worktree or a public host.
+
+Feature scope is frozen for Pass 6: audit input-to-forecast/action/cash/scenario/export traces and withheld policy trade-offs, run exact-commit Ubuntu/container verification, then verify authorized hosted cold/warm latency, payloads, memory, logs and same-domain behavior. Hosted own-data release remains blocked by an authorized private object-storage adapter plus isolation, direct upload/download, expiry and deletion tests. Public sample calculations remain available; hosted upload/review-file/export claims must wait for that work. No browser storage, public files or serverless temporary-file workaround is permitted. Do not modify either Vercel project or provision resources as part of this pass.
+
+No Docker-compatible executable is installed here, so new container build/start/profile and container workflow checks remain for CI. No Pass 5 GitHub Actions success, Vercel build/runtime or hosted upload verification is claimed. Use the local/Docker commands and recovery workflow in [README.md](../README.md).
+
+---
+
 # Pass 4 upload and accepted-file readiness
 
 The correction based on `e5abf21` preserves canonical stored-dataset provenance through reviewed regeneration and requires exact provenance agreement before final acceptance/snapshot creation. Local HTTP verification covered uploaded fixture/full inputs with deliberately wrong client size labels, bundled regeneration, accepted snapshot download and portable reopen. The exact corrected commit has not run in GitHub Actions or Vercel, and no hosted runtime success is claimed. Docker and compatible local runtimes remain unavailable. Hosted uploads continue to fail closed pending an authorized private storage adapter.

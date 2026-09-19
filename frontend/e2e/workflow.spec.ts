@@ -29,6 +29,13 @@ test('fixture workbook reaches reviewed regeneration, final acceptance, exact do
   await page.getByRole('button',{name:/Data and Assumptions/}).click();await page.getByLabel('I confirm server processing of this file').check();
   await page.getByLabel('Select XLSX or portable snapshot').setInputFiles({name:'accepted.plan.json.gz',mimeType:'application/gzip',buffer:snapshot});
   await page.getByRole('button',{name:'Reopen portable snapshot'}).click();await expect(page.getByRole('region',{name:'Reviewed actions'}).getByRole('status').filter({hasText:'Plan state:'})).toContainText('read_only',{timeout:15000});
+  await expect(controls.getByLabel('Reviewed quantity')).toHaveCount(0);
+  const draftResponse=wait(page,'/new-draft');await controls.getByRole('button',{name:'Create new draft'}).click();const draft=await(await draftResponse).json();
+  expect(draft.provenance.source).toBe('portable');expect(draft.provenance.dataset_hash).toBe(accepted.provenance.dataset_hash);
+  await expect(controls.getByRole('button',{name:'Download portable snapshot'})).toBeDisabled();
+  await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeDisabled();
+  const draftRegen=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();const regeneratedDraft=await(await draftRegen).json();expect(regeneratedDraft.provenance).toEqual(draft.provenance);
+  await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeEnabled({timeout:15000});
   await page.getByRole('button',{name:/Data and Assumptions/}).click();await page.getByRole('button',{name:'Reset to bundled sample'}).click();await expect(page.getByTestId('forecast-result')).toBeVisible();
 });
 

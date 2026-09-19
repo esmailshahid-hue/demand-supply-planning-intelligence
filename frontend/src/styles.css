@@ -177,3 +177,36 @@ footer{flex-direction:column;gap:8px}
 .scenario-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .scenario-controls input:not([type="checkbox"]), .scenario-controls select { padding: 9px; border: 1px solid #cbd1c5; border-radius: 6px; background: white; color: #243325; max-width: 220px; }
 .scenario-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+
+/* Pass 5: retain dense evidence locally while keeping controls and context readable. */
+input,textarea{font:inherit;max-width:100%;color:inherit}
+input:focus-visible,[tabindex]:focus-visible{outline:3px solid #ac792f;outline-offset:3px}
+input:not([type=checkbox]):not([type=file]){padding:10px;border:1px solid #cbd1c5;border-radius:5px;min-height:40px;background:white}
+input[type=checkbox]{width:18px;height:18px;vertical-align:middle;margin-right:8px;accent-color:var(--green)}
+input[type=file]{display:block;margin:12px 0;width:100%;font-size:13px}
+.panel,.result-content,.decision-banner>div{min-width:0}
+.panel p,.dataset-context,li{overflow-wrap:anywhere}
+.dataset-context{font-size:12px;color:var(--muted);margin:0 0 18px}
+.review-fields{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,2fr);gap:16px;margin:20px 0}
+.review-fields label{display:flex;flex-direction:column;gap:8px;font-size:12px;min-width:0}
+.review-fields input,.review-fields select{width:100%;min-width:0}
+.filters label,.filters label:nth-child(2){flex:1 1 180px;min-width:0}
+.filters select{width:100%;min-width:0}
+.filters .primary-button{flex-shrink:0}
+.review-controls .download-actions{display:flex;gap:14px;flex-wrap:wrap}
+.table-scroll{max-width:100%;overscroll-behavior-inline:contain}
+.table-scroll th,.table-scroll td{text-align:right}
+.table-scroll th:first-child,.table-scroll td:first-child{text-align:left}
+.table-scroll details{text-align:left;white-space:normal;min-width:210px;max-width:400px}
+pre{overflow:auto;max-width:100%;font-size:12px}
+.scenario-controls label{min-width:0;max-width:100%}
+@media(max-width:850px){
+  .sidebar nav{display:grid;grid-template-columns:1fr 1fr;overflow:visible}
+  .nav-item{white-space:normal;min-height:44px}
+  .decision-banner{flex-wrap:wrap}
+  .as-of{display:flex;border-left:0;border-top:1px solid #cedac4;padding:14px 0 0;width:100%;gap:6px}
+  .review-fields{grid-template-columns:1fr}
+  .filters label{flex-basis:100%}
+  .primary-button{white-space:normal}
+  .review-controls button{min-height:44px}
+}

@@ -1,6 +1,6 @@
 # Demand and Supply Planning Intelligence
 
-An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–3 provide live sample forecasts, feasible planning and original/frozen/replanned scenarios. **Pass 4 adds local XLSX inputs, exact action review, final acceptance, reviewed exports and portable snapshots. Hosted uploads remain blocked pending authorized private storage.** No orders are sent.
+An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–4 provide live forecasts, feasible planning, original/frozen/replanned scenarios, local XLSX inputs, exact action review, final acceptance and portable exports. **Pass 5 finishes responsive navigation, keyboard evidence, financial explanations and recoverable review/error states. Feature scope is frozen for audit. Hosted uploads remain blocked pending authorized private storage.** No orders are sent.
 
 The app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review evaluates three weekday forecasting methods on a 10-SKU fixture or 60-SKU sample. Plan Review exposes dated stock/cash evidence and exact accept/reject/edit decisions. Scenarios compares unchanged actions with a fresh constrained plan. Data and Assumptions validates a documented workbook before calculation. Baseline smoke retains its 10-second warm live target; fallback status is explicit and does not claim global optimality. See [BUILD_STATUS](docs/BUILD_STATUS.md) for measured results and cold-start qualifications.
 
@@ -74,7 +74,7 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is unavailable locally. User-confirmed GitHub Actions `35308623547` passed for Pass 3 commit `259ddab`, including Docker and production planning/scenario checks. That evidence does not verify these Pass 4 changes. Exact-commit CI/container and hosted execution remain outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted storage blocker.
+Docker is unavailable in the current local workspace. User-confirmed GitHub Actions `35364586310` passed for Pass 4 baseline `218db764b9e6addb8e87da9b8d829e584796b19f`, including Docker, profiling and upload/review/export checks. That evidence does not verify the Pass 5 worktree. Exact-commit CI/container and hosted execution remain outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted storage blocker.
 
 ## Project guide
 
@@ -88,4 +88,32 @@ Docker is unavailable locally. User-confirmed GitHub Actions `35308623547` passe
 - `backend/app/forecasting/engine.py`: the sole forecast/evaluation implementation.
 - `frontend/src/`: four-screen shell, live Demand Review and Plan Review.
 
-Calculations process inputs on the server after consent. There are no accounts, database, persistent history or automatic purchasing. Pass 5 is not implemented.
+Calculations process inputs on the server after consent. There are no accounts, database, persistent history or automatic purchasing. Pass 6 is bounded to specification audit and hosted release verification; private hosted storage requires separate authorization and lifecycle verification. No new scenario types, dashboards, AI narration or integrations are planned in this scope freeze.
+
+
+## Own-data review and recovery
+
+Start the local process or Docker container above with one worker. In **Data and Assumptions**, download the blank template or populated fixture. Follow the workbook’s Instructions and [sheet contract](docs/WORKBOOK.md): all named sheets/columns are required, quantities are base units, money is SAR, and blank demand is different from zero. Confirm server processing, upload the XLSX, correct the reported sheet/field errors, then select **Use validated data and calculate plan**. Incomplete funding does not produce an accepted funded plan.
+
+In **Plan Review**, inspect action dates, payments, stock and shortages. Choose an action and accept its exact terms, reject it or enter a valid case quantity. The displayed plan becomes stale: regenerate before final acceptance. Resolve exact-lock conflicts rather than bypassing them. If regeneration succeeds but its result cannot load, select **Load regenerated result**; acceptance stays blocked until the current result is displayed. Acknowledge remaining service/buffer shortfalls when required, then **Finally accept plan**. Acceptance creates immutable planning files; it sends no orders.
+
+Download both the reviewed XLSX and portable snapshot. Reopen the `.plan.json.gz` through Data and Assumptions; it opens read-only. **Create new draft** explicitly, then regenerate before accepting/exporting a changed version. Reconciliation of confirmed/executed actions uses stable external IDs as described in [WORKBOOK.md](docs/WORKBOOK.md). Save files before the one-hour object expiry, reset or process restart. After expiry, reimport your workbook or reopen your downloaded snapshot; unsaved decisions cannot be recovered. Network, runtime and provenance errors do not enable downloads.
+
+## Calculation and operating limits
+
+The synthetic fixture has 10 SKUs and 40 store series; the full sample has 60 SKUs and 240 store series across one DC/four stores. Both use a 28-day visible window, 56-day model and seven-day release window. Days 29–56 are provisional; expected demand and scenario comparisons are estimates, not guaranteed service or savings.
+
+No sample outcome is precomputed, and complete plan responses are not cached. Generated immutable sample inputs and their validation can be reused per process; forecast preparation is memoized within a calculation. Each live plan calculates actions and independently replays stock/cash. First/warm smoke runs may share sample inputs; they are not proof of Vercel cold-start performance. The fixture keeps its two-second best-effort joint challenger; the full sample explicitly skips that challenger. A **Validated constrained plan** passed independent feasibility checks but is not globally optimal and can retain shortages.
+
+The unchanged gates are 10 seconds for warm fixture/full planning HTTP requests, a 30-second calculation/scenario ceiling and a 4,500,000-byte sample-response guard. See [PLANNING.md](docs/PLANNING.md) and [SCENARIOS.md](docs/SCENARIOS.md) for the exact budget and fallback policies. Local workbook limits are 16 MiB compressed, 160 MiB expanded, 170,000 operational rows, 60 products, five locations, 12 suppliers and 420 history days. Portable snapshots have separate 16 MiB compressed/64 MiB expanded bounds. Full local file and session limits are in [WORKBOOK.md](docs/WORKBOOK.md). Hosted uploads, stored review files and accepted downloads are disabled until private storage is authorized and verified; public sample calculation remains available.
+
+## Three-minute operator demo
+
+Use the **local or Docker** app for this sequence. Dataset: `sample-v1-fixture-97`, seed 97, planning date **2026-09-14**, 10 SKUs/one DC/four stores. Values below were observed through the live API during Pass 5; they are demo checkpoints, not constants in the UI or business guarantees.
+
+1. **0:00–0:25 — Demand Review.** Select the small fixture, SKU001 / Al Olaya (S1), and Recalculate live. The recency-weighted weekday mean gives **281.1 expected units** over 28 days. Historical displayed MAE is **10.4 → 7.5**, a displayed **28%** improvement; pooled signed bias is **<0.1%**, with **223/224** scored observations. Explain the provisional tail and that this is synthetic demand.
+2. **0:25–1:05 — Plan Review.** Inspect `P-OFFER008-0`: **130 SKU008 units**, SUP08 → DC, order/dispatch **14 September**, receipt **28 September**, purchase commitment **SAR 1,430**. Open its evidence: **SAR 715** deposit on 14 September and **SAR 715** balance on 28 October. Total plan commitments are **SAR 91,606**, payments **SAR 97,746**. Projected visible fill is **52.7%**, leaving **7,567.4 units** uncovered; day-56 inventory value is **SAR 18,303.42**. Show the SKU008/DC→S1 shared-stock exception on 14 September: requested 150 units, only 10 pack-rounded units available. Feasible does not mean all demand is covered.
+3. **1:05–1:50 — Scenarios.** Use this baseline, choose **Promotion**: SKU001, **+30%**, **14–27 September**, all ranged stores. Run live. Original keeps its original assumptions; frozen retains actions under the uplift; replanned calculates new actions under that same uplift. In this observed case frozen actions fail independent feasibility, so its service metrics and comparison deltas correctly remain unavailable. The validated replan shows **52.2% fill**, **7,742.8 unmet units**, **SAR 91,726 commitments** and **SAR 97,746 payments**. Open failure/action evidence; do not describe this as a quantified saving against an infeasible frozen plan. Reset returns to the original baseline.
+4. **1:50–3:00 — Review and export locally.** Return to Plan Review, select `P-OFFER008-0`, change quantity from 130 to **120**, and Apply quantity edit. Show the stale banner and blocked acceptance/export. Regenerate, inspect the validated revised actions and any remaining shortfalls, acknowledge those shortfalls, then Finally accept. Download the reviewed workbook and portable snapshot. In Data and Assumptions, confirm processing and reopen the snapshot: it is read-only. Create new draft and regenerate before another acceptance. No order or transfer was executed.
+
+For an own-data demonstration, replace the bundled start with the populated fixture XLSX upload described above. Hosted storage is still a release dependency: demonstrate sample calculation there only, and do not imply hosted review/export has been verified.
