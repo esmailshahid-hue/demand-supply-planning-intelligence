@@ -31,7 +31,7 @@ def initial_state(data):
     return data
 
 
-def execute_week(data, policy, demand, buffers, truth):
+def execute_week(data, policy, demand, buffers, truth, transit_values=None):
     """Realize releases without oracle dispatch decisions or negative stock.
 
     Check the complete selected policy using the independent production replay
@@ -53,6 +53,7 @@ def execute_week(data, policy, demand, buffers, truth):
     lanes = {(l.source, l.destination): l for l in data.transfer_lanes}
     stock = dict(ctx.initial)
     values = {(r.sku, r.location_id): stock[r.sku, r.location_id]*r.book_unit_cost for r in data.inventory}
+    unavailable_values = {(r.sku,r.location_id):ctx.unavailable[r.sku,r.location_id]*r.book_unit_cost for r in data.inventory}
     orders = [o for o in data.open_orders if o.status != 'received']
     orders += [OpenOrder(external_id=f'{start}-{p.action_id}', sku=p.sku, supplier_id=p.supplier_id,
         destination=p.destination, remaining_units=p.units, order_date=p.order_date,
@@ -60,12 +61,19 @@ def execute_week(data, policy, demand, buffers, truth):
         cost_per_base_unit=offers[p.offer_id].price_per_base_unit) for p in purchases]
     transfers = [t for t in data.open_transfers if t.status != 'received']
     assert all(t.status == 'dispatched' for t in transfers), 'Evaluation requires already-dispatched carry-in transfers'
+    # Carry the actual dispatch acquisition value across origins. Revaluing a
+    # pending transfer at next week's donor average invents value after receipts.
+    carried_values = dict(transit_values) if transit_values is not None else {
+        t.external_id:t.remaining_units*next(r.book_unit_cost for r in data.inventory
+            if (r.sku,r.location_id)==(t.sku,t.source)) for t in transfers}
     receipts = defaultdict(list)
     for o in orders:
         receipts[o.arrival_date].append((o.sku, o.destination, o.remaining_units, o.remaining_units*o.cost_per_base_unit))
     for t in transfers:
         receipts[t.arrival_date].append((t.sku, t.destination, t.remaining_units,
-            t.remaining_units*next(r.book_unit_cost for r in data.inventory if (r.sku,r.location_id)==(t.sku,t.source))))
+            carried_values[t.external_id]))
+    initial_value = sum(values.values())+sum(unavailable_values.values())+sum(carried_values.values())
+    served_value = external_value = 0.
     initial = sum(stock.values()) + sum(t.remaining_units for t in transfers)
     transit = sum(t.remaining_units for t in transfers)
     external = served = total = inventory_days = 0
@@ -77,16 +85,18 @@ def execute_week(data, policy, demand, buffers, truth):
         for sku, loc, units, value in receipts[day]:
             stock[sku,loc] += units; values[sku,loc] += value
         external += sum(o.remaining_units for o in orders if o.arrival_date == day)
+        external_value += sum(o.remaining_units*o.cost_per_base_unit for o in orders if o.arrival_date == day)
         transit -= transfer_arrivals[day]
         for loc in locations:
             assert sum((stock[sku,loc]+ctx.unavailable[sku,loc])*products[sku].volume_per_unit for sku in products) <= locations[loc].storage_volume+1e-5, 'Realized receiving capacity exceeded'
         for a in data.assortment:
             key = a.sku, a.location_id
             qty = truth[a.sku,a.location_id,day.isoformat()]
-            is_open = day.weekday() in locations[a.location_id].open_weekdays and a.ranged_from <= day and (a.ranged_to is None or day <= a.ranged_to)
+            is_open = day.weekday() in locations[a.location_id].open_weekdays and a.ranged_from <= day and (a.ranged_to is None or day <= a.ranged_to) and products[a.sku].active_from <= day and (products[a.sku].active_to is None or day <= products[a.sku].active_to)
             if not is_open: qty = 0
             filled = min(qty, stock[key]); cost = values[key]/stock[key] if stock[key] else 0
             values[key] -= cost*filled; stock[key] -= filled
+            served_value += cost*filled
             total += qty; served += filled
             event = next((e.event_id for e in data.events if e.start <= day <= e.end and
                 ((e.scope=='sku' and e.scope_id==a.sku) or (e.scope=='store' and e.scope_id==a.location_id) or
@@ -104,10 +114,14 @@ def execute_week(data, policy, demand, buffers, truth):
             receipts[m.arrival_date].append((m.sku,m.destination,m.units,value))
             transfer_arrivals[m.arrival_date] += m.units
             executed.append(m)
+            carried_values[f'{start}-{m.action_id}'] = value
             transfers.append(OpenTransfer(external_id=f'{start}-{m.action_id}',sku=m.sku,source=m.source,
                 destination=m.destination,remaining_units=m.units,dispatch_date=m.dispatch_date,arrival_date=m.arrival_date,status='dispatched'))
         assert min(stock.values()) >= 0
         assert abs(sum(stock.values())+transit-(initial+external-served)) < 1e-5
+        closing_value = sum(values.values())+sum(unavailable_values.values())+sum(
+            carried_values[t.external_id] for t in transfers if t.arrival_date>day)
+        assert abs(closing_value-(initial_value+external_value-served_value)) < 1e-5
         inventory_days += sum(stock.values())+transit+sum(ctx.unavailable.values())
     ids = {p.action_id for p in purchases}
     flows = [p for p in verified.payments if p.kind in ('deposit','balance') and p.reference in ids]
@@ -128,20 +142,25 @@ def execute_week(data, policy, demand, buffers, truth):
     result = data.model_copy(deep=True)
     result.settings = data.settings.model_copy(update={'as_of':stop})
     result.inventory = [r.model_copy(update={'as_of':stop,'on_hand':int(stock[r.sku,r.location_id])+r.blocked+r.reserved,
-        'book_unit_cost':values[r.sku,r.location_id]/stock[r.sku,r.location_id] if stock[r.sku,r.location_id] else r.book_unit_cost}) for r in data.inventory]
+        'book_unit_cost':(values[r.sku,r.location_id]+unavailable_values[r.sku,r.location_id])/(stock[r.sku,r.location_id]+ctx.unavailable[r.sku,r.location_id]) if stock[r.sku,r.location_id]+ctx.unavailable[r.sku,r.location_id] else r.book_unit_cost}) for r in data.inventory]
     result.demand_history = [r for r in data.demand_history+observations if r.day >= stop-timedelta(days=420)]
     # Retain received IDs: an arrived purchase may still have an unpaid balance.
     result.open_orders = [o for o in data.open_orders if o.status == 'received'] + [o.model_copy(update={
         'status':'received' if o.arrival_date < stop else 'dispatched' if o.dispatch_date < stop else 'confirmed',
         'remaining_units':0 if o.arrival_date < stop else o.remaining_units}) for o in orders]
-    result.open_transfers = [t for t in transfers if t.arrival_date >= stop]
+    # Received movement identities can still be linked to unpaid obligations.
+    result.open_transfers = [t for t in data.open_transfers if t.status=='received'] + [
+        t.model_copy(update={'status':'received','remaining_units':0}) if t.arrival_date<stop else t
+        for t in transfers]
+    pending_values = {t.external_id:carried_values[t.external_id] for t in transfers if t.arrival_date>=stop}
+    assert abs(sum(r.on_hand*r.book_unit_cost for r in result.inventory)+sum(pending_values.values())-closing_value)<1e-5
     result.payables = pending
     result.declared_empty = [name for name in ('open_orders','open_transfers','payables') if not getattr(result,name)]
     return result, {'origin':str(start),'demand_units':total,'fulfilled_units':served,'unmet_units':total-served,
         'fill_pct':100*served/total if total else None,'average_inventory_units':inventory_days/7,
         'commitments_sar':committed/100,'payments_in_week_sar':due[week(start)]/100,
         'movement_expense_sar':sum(fees.values())/100,'future_payables_sar':sum(cents(p.amount) for p in pending)/100,
-        'dated_funding_feasible':True,'independent_origin_replay':verified.feasible,'stock_conservation':True,
+        'closing_inventory_value_sar':closing_value,'inventory_value_conservation':True,'pending_transfer_values_sar':pending_values,'dated_funding_feasible':True,'independent_origin_replay':verified.feasible,'stock_conservation':True,
         'cash_weeks':[{'week_start':str(w),'payments_sar':amount/100,
             'payment_headroom_sar':(cents(budgets[w].payment_ceiling)-amount)/100} for w,amount in sorted(due.items())],
         'released_purchases':[p.model_dump(mode='json') for p in purchases],
@@ -154,13 +173,15 @@ def evaluate(size='fixture', seed=97, weeks=4):
     truth = {(r['sku'],r['location_id'],r['day']):r['true_demand'] for r in bundle.truth}
     states = {name:initial_state(bundle.inputs) for name in ('proposed','benchmark')}
     records = {name:[] for name in states}
+    valuations = {name:None for name in states}
     for _ in range(weeks):
         for name,data in states.items():
             prepared = network_forecasts(data,perf_counter()+30)
             result = plan(data,prepared_forecasts=prepared)
             assert result.status in ('feasible','feasible_fallback'), (name,result.status,result.failures,result.issues)
             policy = getattr(result,name)
-            states[name], record = execute_week(data,policy,prepared[0],prepared[1],truth)
+            states[name], record = execute_week(data,policy,prepared[0],prepared[1],truth,valuations[name])
+            valuations[name] = record['pending_transfer_values_sar']
             record.update(input_hash=result.input_hash,status=result.status,
                 origin_actions_equal_benchmark=result.proposed.purchases==result.benchmark.purchases and result.proposed.movements==result.benchmark.movements)
             records[name].append(record)

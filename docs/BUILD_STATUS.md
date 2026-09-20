@@ -1,3 +1,80 @@
+# Pass 6 focused release correction — 20 September 2026
+
+Started from clean `e51af6fc1dc5338e4f9d54380fe7acceca55edd1`. This section supersedes older release-readiness statements; historical evidence below is retained.
+
+**Exact baseline CI is green:** [GitHub Actions 35464690297](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35464690297), job `105954779663`, completed successfully for `e51af6f`. It passed 173 backend tests (655.28 s), 26 browser tests (5.8 min), solver smoke, reproducible contracts, production build, Docker build/start, container solver, forecast/planning/scenario smokes, container component profiling and upload/review/accept/export/reopen. Fixture planning HTTP was 3.506 / 3.564 s; full was 9.162 / 9.304 s (engine 8,946.4 / 9,085.4 ms), with deterministic, financially reconciled, independently replayed fallback results. This is baseline evidence, **not CI for these uncommitted changes**.
+
+The canonical Vercel deployment was confirmed at **e51af6f**, deployment `dpl_EjnDRZ4PWPW9qu3HvjctMyHpBvLM`, project `prj_9wUSzLP3zKbvVinWCeNvmyDelVh5`, `iad1`, immutable alias `demand-supply-planning-intelligence-f7633owp1.vercel.app`, production alias `demand-supply-planning-intelligence.vercel.app`. A serial baseline full request in this correction took **19.567 s HTTP / 11,446.3 ms engine / 3,753,044 bytes**, with first byte at 17.997 s. Independent replay passed and status remained `feasible_fallback`. This is another failed baseline runtime observation, not a cold-start claim. The host still reports storage `enabled: false`, `driver: disabled`. No corrected deployment exists and no Vercel settings were changed.
+
+The focused implementation and measured bottlenecks are detailed in [RELEASE_AUDIT.md](RELEASE_AUDIT.md); storage integration and the conformance boundary are detailed in [PRIVATE_STORAGE.md](PRIVATE_STORAGE.md). Final local verification is recorded below. No push, merge, deployment, infrastructure provisioning or project-setting change was performed. Public sample release and full hosted own-data release remain separate gates, both awaiting the required external verification.
+
+## Correction scope and actual local evidence
+
+Calculation-path changes preserve forecast values, selection rules, horizons, constraints, benchmark ordering and the accepted fallback policy: request-local fixed-origin weekday reuse and byte-equivalent unchanged-field input serialization, bounded pure date conversion, and indexed opposing-transfer lookup. Full independent replay remains separate. Default plan/review responses now project only the full stock table out of the initial payload; typed selected-SKU evidence validates current plan/review identities and matches full replay. Accepted snapshots/workbooks keep complete authoritative results. Optional bounded diagnostics and an additional compact/detail CI smoke complement the unchanged full-ledger assertions.
+
+The provider-neutral private-storage composition adds sealed upload/finalization, integrity/ownership/expiry, quota reservations, atomic review replacement and durable cleanup metadata interfaces. Conformance doubles cover two-instance conflicts and the actual parser/planning/scenario/review/export/reopen flow. No authorized provider exists here; production factory, concrete blob/transaction providers, signed transport endpoints and real-provider conformance remain prerequisites. Hosted workflows stay disabled. Exact capabilities and configuration roles are in [PRIVATE_STORAGE.md](PRIVATE_STORAGE.md).
+
+The offline evaluator now carries acquisition values for in-transit units and aggregates usable/blocked/reserved stock valuation correctly at the next origin, with daily value-conservation assertions. It retains received transfer IDs for pending payments and active-product dates. These evaluator fixes do not change runtime planning calculations. Repeated fixture/full evaluation still yields identical proposed and benchmark policies; no improvement or savings is claimed.
+
+Changed file groups:
+
+- `backend/app/forecasting/{engine,identity}.py`, `planning/{inputs,benchmark,engine,contracts,presentation}.py`, `simulation/replay.py`, `data/{sample,validation}.py`, `main.py`, new `diagnostics.py`: equivalent calculation optimization, timings and typed projection.
+- `backend/app/data/{storage,private_storage,workflow_api}.py`, `backend/app/scenarios/contracts.py`: provider boundary, atomic replacement and exact evidence identity.
+- `frontend/src/{PlanReview,ScenarioEvidence}.tsx`, generated contracts, `frontend/e2e/{planning,scenarios,pass5-state}.spec.ts`: live lazy evidence and preserved review/navigation regressions.
+- New backend tests for diagnostics, equivalence, presentation and private storage plus provider harness; extended policy replay tests.
+- `scripts/{planning_profile,planning_smoke,planning_transport_smoke,policy_replay,release_trace}.py`, `.github/workflows/verify.yml`: expanded measurements and verification while retaining existing gates.
+- README, BUILD_STATUS, DEPLOYMENT, PLANNING, RELEASE_AUDIT and new PRIVATE_STORAGE documentation.
+
+Environment: **macOS arm64, Python 3.14.4, temporary Node 24.21.0**, single-worker production Uvicorn on port **8020**, diagnostics enabled locally. Application Node 24 / Python 3.14 and dependencies are unchanged. Timing runs were serial. Ignored `artifacts/correction-final-*` logs, policy JSON and trace/browser artifacts hold local evidence. No Docker-compatible executable is installed; these results are not Linux/container results.
+
+| Dataset / run | HTTP | Engine | Full response | Replay / finance / repeat |
+|---|---:|---:|---:|---|
+| Fixture first | 2.431 s | 2,405.5 ms | 786,692 bytes | Passed; reference |
+| Fixture repeat | 2.397 s | 2,380.7 ms | 786,692 bytes | Passed; matched |
+| Full first | 2.193 s | 2,094.2 ms | 3,753,093 bytes | Passed; reference |
+| Full repeat | 2.104 s | 2,005.8 ms | 3,753,092 bytes | Passed; matched |
+
+All four full-ledger requests pass the **unchanged 10-second gate**. Fixture retains 24 purchases / 311 movements and SAR 91,606 commitments / 97,746 payments; full retains 31 / 607 and SAR 92,550 / 99,050. All report honest `feasible_fallback`; fixture's two-second challenger times out, full's zero-budget challenger is not attempted, and validated benchmark actions are deterministic. Full retains 240 series / 16,800 stock rows. Default compact full HTTP is **2.102 / 2.042 s**, **1,022,713 / 1,022,712 bytes**, **72.75% less** than the approximately 3.75 MB baseline. Scoped detail is deterministic and exactly reconciles to full replay. These first/repeat labels follow forecast smoke and do not establish cold starts.
+
+Local full profile route improved **3.994 / 3.257 → 2.824 / 2.042 s**; forecast **2.168 / 2.200 → 1.321 / 1.325 s**; benchmark **0.721 / 0.720 → 0.394 / 0.392 s**. Replay remains three independent calls. Sample construction/validation, buffer/protection, contract conversion, JSON, process imports and transfer timing are broken out in [RELEASE_AUDIT.md](RELEASE_AUDIT.md). Baseline Ubuntu and hosted measurements there are explicitly separated from corrected local results.
+
+### Commands and results for this correction
+
+The production commands below used `--url http://127.0.0.1:8020`; profiling and offline evaluation run in separate processes. All listed final HTTP/evaluation commands exited zero.
+
+| Executed command | Actual result |
+|---|---|
+| `PLANNING_DIAGNOSTICS=1 PORT=8020 ./scripts/start.sh`; agent-browser verification | Production startup, real forecast, four navigation items, screenshot and error checks passed. |
+| `.venv/bin/python -m scripts.smoke` | Built page/health and actual fixture/full forecasts passed. Fixture HTTP 0.039 / 0.031 s; full 0.193 / 0.169 s. Historical script “cold/warm” labels are not instance-cold evidence. |
+| `.venv/bin/python -m scripts.planning_smoke` | All four complete-ledger requests above passed dimensions, replay, finances, determinism, 4.5 MB and 10-second gates. Only its endpoint query changed to `include_stock=true`; assertions are retained. |
+| `.venv/bin/python -m scripts.planning_transport_smoke` | Fixture/full compact first/repeat matched complete policy actions/totals/explanations; scoped detail matched authoritative stock/cash/provenance and repeat content. Added alongside existing CI gates. |
+| `.venv/bin/python -m scripts.planning_profile` | Fixture/full first/repeat passed; exact local components and response sizes in RELEASE_AUDIT. Fresh-process API import 0.212 s, optimizer import 0.232 s. |
+| `.venv/bin/python -m scripts.scenario_smoke` | Fixture comparisons 2.651 / 2.527 s, full 3.244 / 3.117 s; full detail 1.993 s, future-path comparison 4.520 s. Independent feasibility, unavailable invalid-policy metrics, cash, hashes, determinism and existing 30-second / 4.5 MB gates passed. |
+| `.venv/bin/python -m scripts.workflow_smoke` | Fixture/full real workbook upload, validation, provenance, review/regenerate/accept, complete XLSX/snapshot reconciliation, deterministic downloads, portable reopen and reset passed. Full HTTP and source/expanded-byte evidence retained in the log. |
+| `.venv/bin/python -m scripts.release_trace --output artifacts/correction-trace-final.json` | Forecast/action/dated cash/scenario/review/export trace passed. Initial harness mismatch compared compact revised response against the complete accepted snapshot; explicitly requesting the complete revised ledger preserves the original equality assertion. |
+| `.venv/bin/python -m scripts.policy_replay --size fixture --output ...` and `--size full`, each twice; byte comparison | All four passed, each size byte-identical. Proposed and benchmark actions identical; fixture fill 48.0418%, full 39.8934%. Unit/transit/acquisition-value and dated funding reconciliation passed. |
+
+| Executed command | Actual result |
+|---|---|
+| `PORT=8020 CHROME_PATH=... npm --prefix frontend run test:e2e` with Node 24.21.0 | **26 passed in 2.9 min** in the final complete serial run. The focused evidence/recovery regression also passed (11.1 s including startup). |
+| `.venv/bin/python -m scripts.export_contracts`; `npm --prefix frontend run generate:types` | Passed; re-export/regeneration preserves SHA-256 exactly: OpenAPI `99245e855a4a04635abb9fc939d258173811208e8522302b13815a7733d960e3`, TypeScript `59ad465e0ddc981284e1b08044476a69e03fe304ed8cfbfbc90388d06f6316df`. Generated types intentionally differ from baseline for the new typed projection/evidence fields and query parameters. |
+| `npm --prefix frontend run build` under Node 24.21.0 | TypeScript and production Vite build passed; 41 modules, JS 304.94 kB / 91.82 kB gzip, CSS 13.52 kB / 3.84 kB gzip, Vite 396 ms. |
+| `.venv/bin/python -m pip check`; `npm --prefix frontend ls --depth=0` | No broken Python requirements; installed frontend dependency tree passed. No dependency upgrades. |
+| `.venv/bin/python -m compileall -q backend scripts`; `git diff --check` | Passed. |
+| Ruby YAML parse plus required planning/compact smoke and no failure-suppression assertions | Passed. Docker/Podman/Colima/Lima absent; corrected container build/start/smokes could not run locally. |
+
+Earlier browser runs exposed two outdated harness assumptions: initial sample evidence now follows the exact private review reference locally, and stale review details are rejected until regeneration. The tests now wait for that authoritative endpoint and establish a current draft before exercising the existing held-response navigation guard. No assertion or timeout was relaxed. Intermediate suites were 24 passed / 2 failed; a subsequent interrupted focused run and retry against its long-lived server were not accepted as verification. The server log showed its temporary session directory was missing after the interruption; a fresh server rendered correctly, the focused regression passed, and all 26 tests then passed. A transient scenario baseline wait also passed on recheck and in the final suite without weakening its assertions.
+
+Final `.venv/bin/python -m pytest -q`: **197 passed in 329.24 s**, with two existing Starlette/httpx/AnyIO deprecation warnings and no failures. This includes the complete original suite plus full-precision equivalence, input-identity mutation isolation, compact/detail equivalence, stale-reference rejection, diagnostics and private-provider conformance. Earlier complete suite was 194 passed (336.98 s); added cases are included in the final 197-test run.
+
+The final explicit `.venv/bin/python -m pytest -q backend/tests/test_policy_replay.py` passed **7 tests**. `.venv/bin/python -m scripts.solver_smoke` passed SciPy 1.18.1 import and both cold/warm HiGHS checks with status 0 and expected x=2. These local checks do not substitute for the required container solver gate.
+
+### Release verdict
+
+**Local sample runtime passes. Pass 6 cannot close.** Corrected-commit GitHub Actions including Docker has not run, and corrected canonical hosted runtime/browser verification has not occurred. A separately authorized deployment must pass two serial full requests under ten seconds and the preserved sample gates. Full hosted own-data additionally requires authorized private persistent objects and transactional metadata, concrete integration and real-provider lifecycle/isolation/upload-through-reopen verification. No provider, credentials, paid resource, deployment or project configuration was created or modified.
+
+---
+
 # Build status
 
 ## Pass 6 final audit and release boundary — 19–20 September 2026

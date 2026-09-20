@@ -76,3 +76,31 @@ def test_realized_stock_guard_cancels_whole_movement_without_future_borrowing():
 def test_missing_oracle_fails_instead_of_substituting_forecast():
     data=initial_state(hand_data())
     with pytest.raises(KeyError): execute_week(data,policy(),hand_demand(56),{}, {})
+
+
+def test_transit_carries_dispatch_value_not_next_origin_donor_average():
+    data=initial_state(hand_data());demand={k:[0]*56 for k in hand_demand(56)}
+    next(r for r in data.inventory if r.location_id=='DC').on_hand=40
+    ctx=Inputs(data,demand,{})
+    movement=ctx.movement(data.transfer_lanes[0],'X',6,10)
+    state,row=execute_week(data,policy(movements=[movement]),demand,{},truth_for(data,a=0,b=0))
+    receiver=next(r for r in state.inventory if r.location_id==movement.destination)
+    origin_cost=next(r.book_unit_cost for r in data.inventory if r.location_id==movement.source)
+    expected=(receiver.on_hand*receiver.book_unit_cost+10*origin_cost)/(receiver.on_hand+10)
+    next(r for r in state.inventory if r.location_id==movement.source).book_unit_cost=999
+    after,_=execute_week(state,policy(),demand,{},truth_for(state,a=0,b=0),row['pending_transfer_values_sar'])
+    assert next(r.book_unit_cost for r in after.inventory if r.location_id==movement.destination)==pytest.approx(expected)
+    with pytest.raises(KeyError):execute_week(state,policy(),demand,{},truth_for(state,a=0,b=0),{})
+
+
+def test_blocked_stock_value_is_preserved_in_next_origin_book_cost():
+    data=initial_state(hand_data());demand={k:[0]*56 for k in hand_demand(56)}
+    dc=next(r for r in data.inventory if r.location_id=='DC')
+    dc.on_hand=40;dc.blocked=20;dc.book_unit_cost=5
+    ctx=Inputs(data,demand,{})
+    purchase=ctx.purchase(data.supplier_offers[0],0,40)
+    state,row=execute_week(data,policy(purchases=[purchase]),demand,{},truth_for(data,a=0,b=0))
+    closing=next(r for r in state.inventory if r.location_id=='DC')
+    assert closing.on_hand==80 and closing.book_unit_cost==7.5  # 40×5 + 40×10
+    assert row['inventory_value_conservation']
+    assert row['closing_inventory_value_sar']==sum(r.on_hand*r.book_unit_cost for r in state.inventory)

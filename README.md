@@ -2,7 +2,9 @@
 
 An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–4 provide live forecasts, feasible planning, original/frozen/replanned scenarios, local XLSX inputs, exact action review, final acceptance and portable exports. Pass 5 adds responsive navigation, keyboard evidence and recoverable review/error states; exact-commit CI has closed that pass. **Pass 6 audit evidence is available, but release remains blocked by hosted full-sample latency and private storage. Feature scope is frozen.** No orders are sent.
 
-[Public sample application](https://demand-supply-planning-intelligence.vercel.app) · [Pass 6 audit, measured policy trade-offs and demo script](docs/RELEASE_AUDIT.md). The verified host runs `599554c`; it does not yet include the Pass 6 presentation correction. Full hosted planning took 17.022 / 14.929 seconds against the retained 10-second gate. Local own-data review/export works; hosted own-data remains disabled.
+[Public sample application](https://demand-supply-planning-intelligence.vercel.app) · [Pass 6 audit, measured policy trade-offs and demo script](docs/RELEASE_AUDIT.md). The verified host runs `e51af6f`; it does not include the focused release correction in this worktree. Its latest measured full request took 19.567 seconds against the retained 10-second gate. Local own-data review/export works; hosted own-data remains disabled.
+
+The default plan response loads daily stock evidence on demand from authoritative replay; accepted files retain the complete calculation. The provider-independent private storage boundary is tested, but no hosted provider is configured. See [private storage integration](docs/PRIVATE_STORAGE.md).
 
 The app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review evaluates three weekday forecasting methods on a 10-SKU fixture or 60-SKU sample. Plan Review exposes dated stock/cash evidence and exact accept/reject/edit decisions. Scenarios compares unchanged actions with a fresh constrained plan. Data and Assumptions validates a documented workbook before calculation. Baseline smoke retains its 10-second warm live target; fallback status is explicit and does not claim global optimality. See [BUILD_STATUS](docs/BUILD_STATUS.md) for measured results and cold-start qualifications.
 
@@ -76,7 +78,7 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is unavailable in the current local workspace. GitHub Actions `35461717511` succeeded for Pass 5 baseline `599554c3ad4e44c47b0461eff3fac921318ea606`, including Docker, profiling and upload/review/export checks. New Pass 6 commit/container verification remains outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted latency and storage blockers.
+Docker is unavailable in the current local workspace. GitHub Actions `35464690297` succeeded for Pass 6 baseline `e51af6fc1dc5338e4f9d54380fe7acceca55edd1`, including 173 backend tests, 26 browser tests, Docker, profiling and upload/review/export checks. Corrected-commit/container verification remains outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted latency and storage blockers.
 
 ## Project guide
 

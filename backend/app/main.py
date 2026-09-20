@@ -1,4 +1,5 @@
 """One process serves the calculation API and compiled React UI; no user-row persistence."""
+from backend.app.diagnostics import timed, measure
 from functools import lru_cache
 from pathlib import Path
 from threading import BoundedSemaphore
@@ -15,6 +16,7 @@ from backend.app.data.validation import validate_dataset
 from backend.app.forecasting.engine import forecast
 from backend.app.planning.contracts import PlanRequest, PlanResult, PlanSampleRequest
 from backend.app.planning.engine import plan
+from backend.app.planning.presentation import decisions
 from backend.app.data.workflow_api import dataset_for, attach_draft, imported_constraints, install as install_workflow
 
 MAX_BODY_BYTES = 32 * 1024 * 1024
@@ -58,6 +60,8 @@ class BodyLimit:
 
 
 app.add_middleware(BodyLimit)
+from backend.app.diagnostics import TimingHeaders
+app.add_middleware(TimingHeaders)
 
 
 @app.exception_handler(RequestValidationError)
@@ -68,6 +72,7 @@ async def schema_error(request: Request, exc):
 
 
 @lru_cache(maxsize=2)
+@timed('sample_input')
 def sample(size):
     data = generate_sample(size)
     return data, validate_dataset(data)
@@ -126,18 +131,20 @@ def calculate_plan(data, issues=None, review=None):
 
 
 @app.post('/api/plan/sample', response_model=PlanResult, responses=ERRORS)
-def sample_plan(request: PlanSampleRequest, http: Request):
+@timed('route')
+def sample_plan(request: PlanSampleRequest, http: Request, include_stock: bool = False):
     data, issues, context = dataset_for(http,request.size)
     result=calculate_plan(data,issues,imported_constraints(http))
     if isinstance(result,PlanResult):
         result=result.model_copy(update={'provenance':context})
-        return attach_draft(http,data,result,context)
+        return decisions(attach_draft(http,data,result,context),include_stock)
     return result
 
 
 @app.post('/api/plan', response_model=PlanResult, responses=ERRORS)
-def custom_plan(request: PlanRequest):
-    return calculate_plan(request.dataset)
+def custom_plan(request: PlanRequest, include_stock: bool = False):
+    result=calculate_plan(request.dataset)
+    return decisions(result,include_stock) if isinstance(result,PlanResult) else result
 
 
 # Stateless sample scenario APIs use the same admission control as planning.

@@ -1,4 +1,5 @@
 """Orchestration only: real forecasts -> benchmark/joint model -> independent replay."""
+from backend.app.diagnostics import timed, measure
 from hashlib import sha256
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -117,6 +118,7 @@ def plan(data, runtime_seconds=30, *, prepared_forecasts=None, validated_issues=
         issues=issues,failures=verified.failures,exceptions=exceptions,elapsed_ms=(perf_counter()-start)*1000)
 
 
+@timed('explanations')
 def _explanations(ctx,verified,p,m,complete,solver_failure,bp,bm):
     exceptions=list(ctx.exceptions.values()) if p==bp and m==bm else []
     if solver_failure is not None:

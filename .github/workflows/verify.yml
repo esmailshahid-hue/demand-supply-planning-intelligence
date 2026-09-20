@@ -56,6 +56,9 @@ jobs:
       - name: Run production planning smoke
         id: planning_smoke
         run: .venv/bin/python -m scripts.planning_smoke
+      - name: Verify compact planning and authoritative lazy evidence
+        if: ${{ !cancelled() }}
+        run: .venv/bin/python -m scripts.planning_transport_smoke
       - name: Run production scenario smoke
         id: scenario_smoke
         if: ${{ !cancelled() }}

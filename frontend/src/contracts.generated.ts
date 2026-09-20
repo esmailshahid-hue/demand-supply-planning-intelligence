@@ -789,6 +789,8 @@ export interface components {
         };
         /** EvidenceRequest */
         EvidenceRequest: {
+            /** Expected Run Id */
+            expected_run_id?: string | null;
             /** Sku */
             sku: string;
             /** Location Id */
@@ -1282,6 +1284,14 @@ export interface components {
         };
         /** PlanResult */
         PlanResult: {
+            /**
+             * Stock Detail
+             * @default complete
+             * @enum {string}
+             */
+            stock_detail: "complete" | "on_demand";
+            /** Stock Row Count */
+            stock_row_count?: number | null;
             provenance?: components["schemas"]["DatasetProvenance"] | null;
             /** Review Id */
             review_id?: string | null;
@@ -1561,6 +1571,12 @@ export interface components {
         };
         /** ScenarioDetail */
         ScenarioDetail: {
+            /** Review Id */
+            review_id?: string | null;
+            /** Plan Run Id */
+            plan_run_id?: string | null;
+            /** Review Revision */
+            review_revision?: string | null;
             provenance: components["schemas"]["DatasetProvenance"];
             /** Baseline Id */
             baseline_id: string;
@@ -2196,7 +2212,9 @@ export interface operations {
     };
     sample_plan_api_plan_sample_post: {
         parameters: {
-            query?: never;
+            query?: {
+                include_stock?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2247,7 +2265,9 @@ export interface operations {
     };
     custom_plan_api_plan_post: {
         parameters: {
-            query?: never;
+            query?: {
+                include_stock?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2624,7 +2644,9 @@ export interface operations {
     };
     review_plan_api_workflow_review__reference__plan_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_stock?: boolean;
+            };
             header?: never;
             path: {
                 reference: string;

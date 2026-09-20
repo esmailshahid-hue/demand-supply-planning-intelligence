@@ -1,3 +1,71 @@
+# Pass 6 focused release correction — 20 September 2026
+
+Started from clean `e51af6fc1dc5338e4f9d54380fe7acceca55edd1`. This section supersedes older release-readiness statements; historical evidence below is retained.
+
+**Exact baseline CI is green:** [GitHub Actions 35464690297](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35464690297), job `105954779663`, completed successfully for `e51af6f`. It passed 173 backend tests (655.28 s), 26 browser tests (5.8 min), solver smoke, reproducible contracts, production build, Docker build/start, container solver, forecast/planning/scenario smokes, container component profiling and upload/review/accept/export/reopen. Fixture planning HTTP was 3.506 / 3.564 s; full was 9.162 / 9.304 s (engine 8,946.4 / 9,085.4 ms), with deterministic, financially reconciled, independently replayed fallback results. This is baseline evidence, **not CI for these uncommitted changes**.
+
+The canonical Vercel deployment was confirmed at **e51af6f**, deployment `dpl_EjnDRZ4PWPW9qu3HvjctMyHpBvLM`, project `prj_9wUSzLP3zKbvVinWCeNvmyDelVh5`, `iad1`, immutable alias `demand-supply-planning-intelligence-f7633owp1.vercel.app`, production alias `demand-supply-planning-intelligence.vercel.app`. A serial baseline full request in this correction took **19.567 s HTTP / 11,446.3 ms engine / 3,753,044 bytes**, with first byte at 17.997 s. Independent replay passed and status remained `feasible_fallback`. This is another failed baseline runtime observation, not a cold-start claim. The host still reports storage `enabled: false`, `driver: disabled`. No corrected deployment exists and no Vercel settings were changed.
+
+## Implemented correction
+
+- Reuse identical fixed-origin weekday pools while keeping the same arithmetic, date-specific events, ranging and fallbacks. Cache only the pure Riyadh-midnight date conversion, with a bounded cache independent of datasets.
+- Replace the benchmark's repeated opposing-transfer scan with set membership, seeded with the same existing/locked records and updated after each actual new line. Allocation ordering, calendars and financial constraints are unchanged.
+- Reuse serialization of unchanged Dataset fields within one network-forecast request. Every dynamic history/settings projection retains the **exact original Pydantic JSON SHA-256**; no forecast or complete-plan response is cached. Per-series method selection, buffers, full-precision values and provenance remain unchanged.
+- Project the main plan/review/scenario-draft response after full replay and private draft persistence. `stock_detail: on_demand` explicitly identifies the omitted stock table and `stock_row_count` reports its full dimension; all actions, summary/cash/service/explanation records remain. The existing scoped evidence service supplies the selected SKU's authoritative 56-day stock at all related locations, needed for donor/receiver traceability. Complete ledgers remain available with `include_stock=true` for verification and remain inside accepted exports. OpenAPI and generated TypeScript were updated reproducibly.
+- Preserve exact snapshot/dataset/scenario/action hashes on public evidence. Private evidence additionally validates the expected plan run and returns the review reference, revision and run ID. Deleted/consumed references fail; stale review evidence requires regeneration. The UI loads stock only when requested and retains its request cancellation and review guards.
+- Keep the original 10-second, full-dimensional `planning_smoke` assertions intact by requesting the complete ledger explicitly. Add `planning_transport_smoke` as a separate CI gate comparing default compact responses, full replay and deterministic scoped evidence. No assertion, solver budget or failure exit was relaxed.
+- Add opt-in `PLANNING_DIAGNOSTICS=1` timing headers and more detailed standalone/container profiling. Fixed phase names contain no inputs or secrets. Nested forecast/buffer/contract timings are inclusive and must not be summed twice. Fresh-process import, sample construction/validation, protection paths, replay, explanations, contract validation, serialization and HTTP first-byte/body timing are recorded separately.
+- Add a provider-neutral `PrivateStorage` composition over private blob operations and transactional metadata, including upload sealing, verified parser finalization, ownership/hash/expiry, quotas, durable cleanup tombstones and atomic replacement. Local review mutations now use the same replacement boundary rather than depending on a process lock. Hosted activation remains deliberately disabled; no provider or credentials were available. See [PRIVATE_STORAGE.md](PRIVATE_STORAGE.md) for concrete interfaces, conformance scope, required resources, settings and remaining transport integration.
+- Correct the offline policy evaluator to carry transfer acquisition value across weekly origins instead of repricing in-transit units at the donor's later average. Retain received transfer IDs for linked unpaid obligations and respect product active dates. Add daily acquisition-value conservation, including blocked/reserved stock: the next origin book cost aggregates all on-hand units, preventing value creation when unavailable units have a different cost. These changes are confined to the offline evaluator; runtime planning valuation is unchanged.
+
+## Verification status
+
+### Measured bottleneck and correction
+
+The full sample never attempts a joint solve under the retained policy. Baseline Ubuntu/container profiling for **e51af6f** measured full route **11.748 / 9.263 s**, forecast preparation **6.184 / 6.259 s**, benchmark **2.218 / 2.189 s**, independent replay **0.290 / 0.287 s**, explanations **0.090 / 0.091 s** and serialization **0.0245 / 0.0245 s**. First sample preparation was **2.536 s**. Forecast processing and nested benchmark scans dominate computation; solver research would not address this path. Repeated per-series serialization of unchanged Dataset fields was another measured forecast cost (approximately 0.495 s locally before the request-local identity correction).
+
+The baseline hosted request spent **1.570 s** draining its response after the first byte, in addition to **11.446 s** in the engine. The remaining pre-first-byte overhead was not attributed precisely; it must not be called cold initialization without platform evidence. The 16,800-row ledger materially increases transfer volume. The correction removes that table only from the initial decision response, preserving full replay and on-demand evidence.
+
+Comparable serial **local macOS arm64 / Python 3.14.4** component measurements (seconds):
+
+| Component | Before first / repeat | After first / repeat |
+|---|---:|---:|
+| Complete route, excluding final JSON serialization | 3.994 / 3.257 | 2.824 / 2.042 |
+| Sample preparation | 0.750 / cached | 0.748 / cached |
+| Forecast preparation | 2.168 / 2.200 | 1.321 / 1.325 |
+| Benchmark construction | 0.721 / 0.720 | 0.394 / 0.392 |
+| Independent replay (three calls) | 0.130 / 0.106 | 0.130 / 0.104 |
+| Explanations | 0.037 / 0.034 | 0.034 / 0.033 |
+| Complete JSON serialization | 0.0117 / 0.0113 | 0.0113 / 0.0113 |
+| Compact JSON serialization | unavailable | 0.0021 / 0.0021 |
+
+Final first full sample construction/validation split: **0.339 / 0.409 s**. Inclusive forecast details: protection paths **0.00320 s**, buffer calculation **0.00094 s**, per-series result construction **0.00411 s**, all series forecasting **1.186 s**. Unchanged-field serialization/hash work is still included in total forecast preparation; it has not been omitted from timing. Plan contract validation measured **0.000003 s**. Fresh-process API import was **0.212 s** and separate optimizer import **0.232 s**. These are local process measurements, not Vercel cold-instance evidence. No Linux/container runtime is installed here, so there are no corrected container measurements.
+
+### Production HTTP measurements
+
+Single-worker production startup on local port 8020; all requests serial and successful. Forecast smoke preceded these planning checks, so “first” is a request-order label, not a cold sample or instance claim. Engine timings include the complete calculation; HTTP includes transport. Complete-ledger smoke retains its original dimensions, replay, money, response-size, deterministic action/total/explanation and **10-second** assertions.
+
+| Dataset / request | Complete HTTP s | Engine ms | Complete bytes | Default compact HTTP s | Compact bytes |
+|---|---:|---:|---:|---:|---:|
+| Fixture first | 2.431 | 2,405.5 | 786,692 | 2.400 | 331,544 |
+| Fixture repeat | 2.397 | 2,380.7 | 786,692 | 2.397 | 331,543 |
+| Full first | 2.193 | 2,094.2 | 3,753,093 | 2.102 | 1,022,713 |
+| Full repeat | 2.104 | 2,005.8 | 3,753,092 | 2.042 | 1,022,712 |
+
+Default full transfer is **72.75% smaller** than the approximately 3.75 MB baseline. Complete responses grow only by the explicit presentation metadata. Compact full engine times were **2,012.7 / 1,953.7 ms**; first byte **2.101 / 2.041 s**, body drain approximately **0.00075 / 0.00070 s** over local loopback. Local transfer time does not predict hosted WAN time. Scoped selected-SKU detail retains **280 stock rows** across related locations (approximately **113 kB**) and agrees exactly with full authoritative replay; repeat detail is deterministic. No full ledger is duplicated in scenario summaries.
+
+Fixture retains 24 purchases / 311 movements, commitments **SAR 91,606**, payments **SAR 97,746**. Full retains 31 purchases / 607 movements, commitments **SAR 92,550**, payments **SAR 99,050**. Independent replay and funding reconciliation passed for every request; first/repeat actions, summaries and explanations matched. Both honestly report `feasible_fallback`: fixture challenger `visible_must_stock:time_limit` under the unchanged two-second budget; full `joint_model:not_attempted` under the unchanged zero budget, both selecting the validated benchmark.
+
+### Equivalence, offline audit and external gates
+
+Regression hashes captured from e51af6f match every sample forecast quantity and every policy action, stock/cash/service row and explanation at full precision. All 280 series input identities match the original Pydantic serialization byte-for-byte, including independent dataset mutations. Tests retain missing/censored/future-truth isolation, review conflicts and authoritative accepted exports. Private-provider conformance uses explicit test doubles; actual provider IAM, persistent transactions and signed transport remain unverified.
+
+Fixture and full offline policy reports each ran twice and matched byte-for-byte, including the new acquisition-value conservation evidence. Proposed and benchmark releases remain identical: fixture realized fill **48.0418%**, unmet **9,154**, commitments/payments **32,612 / 19,146 SAR**; full fill **39.8934%**, unmet **62,717**, commitments/payments **32,550 / 19,275 SAR**. No service improvement or savings claim is supported. Unit/transit/value conservation, carried receipt identities and dated unpaid obligations reconcile.
+
+Final local verification passed **197 backend tests** (329.24 s; two existing deprecation warnings), **26 browser tests** (2.9 min), seven explicit policy replay tests, solver smoke, reproducible OpenAPI/TypeScript, production build, dependency checks, Python compilation, workflow YAML/gate checks and `git diff --check`. Commands and harness corrections are recorded in [BUILD_STATUS.md](BUILD_STATUS.md). The local sample runtime gate passes. **Pass 6 remains open:** the exact corrected commit still needs green Ubuntu/container CI and separately authorized canonical deployment with two serial full requests under ten seconds. Hosted own-data additionally needs authorized private objects plus transactional metadata, concrete adapter/transport integration and real-provider lifecycle/isolation/workflow verification. No corrected hosted result is claimed; the e51af6f host remains the measured failing baseline.
+
+---
+
 # Pass 6 release evidence — 19–20 September 2026
 
 Reviewed baseline: `599554c3ad4e44c47b0461eff3fac921318ea606`, initially clean. [GitHub Actions 35461717511](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35461717511), job `105946650205`, completed successfully on Ubuntu 24.04.5: 168 backend tests, 26 browser tests, solver, reproducible contracts, production build, Docker build/start, forecast/planning/scenario smokes, container profiling and private workflow smoke. **Pass 5 is closed for that commit.** These results do not certify the new Pass 6 worktree.

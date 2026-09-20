@@ -1,4 +1,5 @@
 """Cross-row checks for normalized data; workbook parsing is a later pass."""
+from backend.app.diagnostics import timed, measure
 from collections import Counter
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -11,6 +12,7 @@ def event_matches(event, product, location_id):
             or (event.scope == "store" and event.scope_id == location_id))
 
 
+@timed('dataset_validation')
 def validate_dataset(data: Dataset) -> list[Issue]:
     issues = []
     def add(code, message, count=1, severity="error"):

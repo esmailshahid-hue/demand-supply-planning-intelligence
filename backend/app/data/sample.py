@@ -1,4 +1,5 @@
 """Deterministic sample generation. Oracle truth and case labels never enter Dataset."""
+from backend.app.diagnostics import timed, measure
 from dataclasses import dataclass
 from datetime import date, timedelta
 from random import Random
@@ -133,5 +134,6 @@ def generate_bundle(size="fixture", seed=97):
     return SyntheticBundle(inputs=inputs, truth=truth, validation_labels=dict(CASES))
 
 
+@timed('sample_construction')
 def generate_sample(size="fixture", seed=97) -> Dataset:
     return generate_bundle(size, seed).inputs

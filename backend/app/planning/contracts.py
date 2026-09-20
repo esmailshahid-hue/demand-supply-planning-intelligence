@@ -177,6 +177,8 @@ class SolverStage(Contract):
 
 
 class PlanResult(Contract):
+    stock_detail: Literal['complete', 'on_demand'] = 'complete'
+    stock_row_count: int | None = None
     provenance: DatasetProvenance | None = None
     review_id: str | None = None
     run_id: str

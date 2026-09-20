@@ -56,7 +56,7 @@ def run_smoke(url):
             label=f'{size} {run}'
             start=perf_counter()
             try:
-                req=Request(url+'/api/plan/sample',data=json.dumps({'size':size}).encode(),headers={'Content-Type':'application/json'})
+                req=Request(url+'/api/plan/sample?include_stock=true',data=json.dumps({'size':size}).encode(),headers={'Content-Type':'application/json'})
                 with urlopen(req,timeout=60) as response:
                     status=response.status; raw=response.read()
                 elapsed=perf_counter()-start

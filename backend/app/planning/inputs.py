@@ -1,8 +1,10 @@
 from collections import defaultdict
+from backend.app.diagnostics import timed, measure
 from datetime import timedelta
 from hashlib import sha256
 from time import perf_counter
 from backend.app.forecasting.engine import forecast
+from backend.app.forecasting.identity import ProjectedIdentity
 from backend.app.planning.contracts import ForecastTrace, Purchase, Movement, Failure
 from backend.app.simulation.replay import cents, week
 
@@ -86,7 +88,9 @@ class Inputs:
             units=int(units),dispatch_date=self.day(i),arrival_date=self.day(i+lane.transit_days))
 
 
+@timed('network_forecast')
 def network_forecasts(data, deadline):
+    identity=ProjectedIdentity(data)
     """Invoke the unchanged Pass 1 evaluator on each series, retaining all relevant input fields.
 
     Partition only history to avoid serializing 99k irrelevant rows 240 times.
@@ -130,7 +134,7 @@ def network_forecasts(data, deadline):
             raise TimeoutError('Network forecast budget exhausted')
         settings=data.settings.model_copy(update={'protection_days':days})
         projected=data.model_copy(update={'demand_history':rows[key], 'settings':settings})
-        result=forecast(projected,*key,runtime_seconds=max(.01,deadline-perf_counter()))
+        result=forecast(projected,*key,runtime_seconds=max(.01,deadline-perf_counter()),_input_hash=identity.hash(rows[key],settings))
         if result.status=='unavailable' or result.buffer.units is None:
             failures.append(Failure(code='forecast_unavailable',message='A defensible forecast and buffer are required for every ranged series.',sku=a.sku,location_id=a.location_id))
             continue
@@ -141,6 +145,7 @@ def network_forecasts(data, deadline):
     return demand,buffers,trace,failures
 
 
+@timed('protection_paths')
 def _valid_path_arrival(data, offer, lane, origin):
     """Return the first store receipt for an offer that is orderable at origin."""
     if not offer.valid_from<=origin<=offer.valid_to:

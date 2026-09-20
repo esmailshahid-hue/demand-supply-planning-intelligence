@@ -1,4 +1,5 @@
 """Rebuild stock, capacity and SAR cash from inputs/actions, without solver variables."""
+from backend.app.diagnostics import timed, measure
 from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -17,6 +18,7 @@ def week(day):
     return day - timedelta(days=day.weekday())
 
 
+@timed('independent_replay')
 def replay(data, demand, buffers, purchases=(), movements=(), horizon=56, include_stock=True):
     """Demand is the immutable forecast boundary; all action quantities/timing are untrusted.
 

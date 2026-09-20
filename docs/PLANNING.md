@@ -1,5 +1,7 @@
 # Planning calculations and sample scenarios
 
+Pass 6 transport correction: main plan, review and scenario-draft responses use `stock_detail: on_demand` with the full `stock_row_count`; only the daily stock table is omitted. Scoped evidence independently reconstructs the selected SKU and related locations with exact dataset/scenario/action hashes; private reviews also bind run and revision. The complete replay remains authoritative for acceptance/exports and is available with `include_stock=true` for verification. Calculation policies below are unchanged. Measured performance and release limitations are in [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
+
 ## Pass 4 reviewed policies
 
 Pass 3 is closed by user-confirmed CI `35308623547` for `259ddab`; new Pass 4 verification is recorded separately in BUILD_STATUS. Uploaded inputs now resolve private references into the same Dataset and calculation engine. No forecast objective, solver tolerance, sample horizon or fallback status rule changed.

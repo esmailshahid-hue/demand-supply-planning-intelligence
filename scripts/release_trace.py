@@ -32,7 +32,7 @@ def run(url):
         return payload if raw else json.loads(payload)
     session=call('/api/workflow/session')
     f=call('/api/forecast/sample',{'size':'fixture','sku':'SKU001','location_id':'S1'})
-    p=call('/api/plan/sample',{'size':'fixture'}); policy=p['proposed']; ledger=policy['replay']
+    p=call('/api/plan/sample?include_stock=true',{'size':'fixture'}); policy=p['proposed']; ledger=policy['replay']
     assert ledger['feasible'] and not ledger['failures']
     purchase=next(a for a in policy['purchases'] if a['action_id']=='P-OFFER008-0')
     move=next(a for a in policy['movements'] if a['source']=='S2' and a['destination']=='S1')
@@ -74,7 +74,7 @@ def run(url):
         assert r['state']=='stale'
         r=call('/api/workflow/review/'+r['reference']+'/regenerate',{'revision':r['revision']})
         assert r['state']=='draft' and r['reference']!=old_ref
-        revised=call('/api/workflow/review/'+r['reference']+'/plan')
+        revised=call('/api/workflow/review/'+r['reference']+'/plan?include_stock=true')
         edited=next(a for a in revised['proposed']['purchases'] if a['action_id']==purchase['action_id'])
         assert edited['units']==120 and revised['provenance']==p['provenance']
         r=call('/api/workflow/review/'+r['reference']+'/accept',{'revision':r['revision'],'acknowledge_shortfalls':True})

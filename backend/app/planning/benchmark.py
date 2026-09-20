@@ -1,4 +1,5 @@
 """Deterministic constrained order-up-to policy; no optimality claim."""
+from backend.app.diagnostics import timed, measure
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 from math import ceil, floor
@@ -8,6 +9,7 @@ from backend.app.simulation.replay import cents, week
 from backend.app.planning.constraints import business_key
 
 
+@timed('benchmark')
 def benchmark(ctx, deadline=float('inf')):
     stock=dict(ctx.initial)
     receipts=defaultdict(float,ctx.receipts)
@@ -43,6 +45,10 @@ def benchmark(ctx, deadline=float('inf')):
             fee=cents(lane.grouped_dispatch_fee);w=week(a.dispatch_date)
             fees[w]+=fee;payments[w]+=fee;paid_groups.add(group)
         movements.append(a)
+    # Membership only: preserve the existing allocation order and include all
+    # confirmed transfer records, exactly as the former opposing-line scan did.
+    dispatched={(t.sku,t.source,t.destination,t.dispatch_date)
+                for t in movements+list(ctx.data.open_transfers)}
     room_cache={}
     def invalidate_room(loc):
         room_cache.pop(loc,None)
@@ -87,7 +93,7 @@ def benchmark(ctx, deadline=float('inf')):
                     continue
                 if business_key(ctx.movement(lane,sku,i,lane.pack_units)) in prohibited:
                     continue
-                if any(t.sku==sku and t.source==dst and t.destination==lane.source and t.dispatch_date==day for t in movements+list(ctx.data.open_transfers)):
+                if (sku,dst,lane.source,day) in dispatched:
                     continue
                 target=sum(ctx.demand[key][arrival:min(56,arrival+7)])+ctx.buffers.get(key,0.)
                 need=max(0.,target-projected(key,arrival))
@@ -118,6 +124,7 @@ def benchmark(ctx, deadline=float('inf')):
                             ctx.explain('PAYMENT_CAPACITY_LIMIT','Existing and planned outflows leave insufficient payment capacity for this dispatch fee.',sku=sku,location_id=dst,day=day)
                     continue
                 movements.append(ctx.movement(lane,sku,i,qty))
+                dispatched.add((sku,lane.source,dst,day))
                 invalidate_room(lane.source);invalidate_room(dst)
                 stock[sku,lane.source]-=qty
                 receipts[sku,dst,arrival]+=qty

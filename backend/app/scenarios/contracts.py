@@ -121,6 +121,9 @@ class Adjustment(Contract):
     reason: str
 
 class ScenarioDetail(Contract):
+    review_id: str | None = None
+    plan_run_id: str | None = None
+    review_revision: str | None = None
     provenance: DatasetProvenance
     baseline_id: str
     scenario_hash: str

@@ -1,7 +1,9 @@
 """Leakage-safe daily weekday forecasts and disjoint 28-day origin evaluation."""
+from backend.app.diagnostics import timed, measure
 from collections import Counter
 from datetime import date, datetime, time, timedelta
 from hashlib import sha256
+from functools import lru_cache
 from statistics import mean
 from time import perf_counter
 from uuid import uuid4
@@ -20,6 +22,7 @@ POLICY = ("Eight disjoint 28-day selection windows where history permits; at lea
           "Known event days are excluded from ordinary training pools. Positive bias is overforecasting.")
 
 
+@lru_cache(maxsize=2048)
 def midnight(day):
     return datetime.combine(day, time(), ZoneInfo("Asia/Riyadh"))
 
@@ -84,7 +87,9 @@ class Series:
             if status == "observed":
                 observed[day] = values[day] = self.rows[day].sales_units
             elif status == "censored":
-                pool = [observed[d] for d in observed if day - timedelta(days=28) <= d < day and d.weekday() == day.weekday()]
+                earliest = day - timedelta(days=28)
+                weekday = day.weekday()
+                pool = [observed[d] for d in observed if earliest <= d < day and d.weekday() == weekday]
                 if pool:
                     estimate = max(self.rows[day].sales_units, mean(pool))
                     values[day] = estimates[day] = estimate
@@ -95,15 +100,25 @@ class Series:
         values, _, observed = self.training(origin)
         a = self.assortment
         launch = a.launch_daily_units if a.launch_known_at is not None and a.launch_known_at < midnight(origin) else None
-        recent = [v for d, v in observed.items() if d >= origin - timedelta(days=28)]
+        earliest = origin - timedelta(days=28)
+        recent = [v for d, v in observed.items() if d >= earliest]
+        recent_mean = mean(recent) if recent else None
+        weekday_pools = {}
         short = len(observed) < 28
         forecasts = {m: [] for m in METHODS}
         for i in range(horizon):
             day = origin + timedelta(days=i)
             # Fixed-origin multi-step forecasts repeat the most recent pre-origin weekday.
             anchor = origin - timedelta(days=(origin.weekday() - day.weekday()) % 7 or 7)
-            candidates = [(values[d], weight) for k, weight in enumerate((.4, .3, .2, .1))
-                          if (d := anchor - timedelta(days=7 * k)) in values]
+            if day.weekday() not in weekday_pools:
+                candidates = [(values[d], weight) for k, weight in enumerate((.4, .3, .2, .1))
+                              if (d := anchor - timedelta(days=7 * k)) in values]
+                # Same origin and weekday have exactly the same eligible pool. Keep
+                # the original arithmetic and apply dated events/ranging below.
+                weekday_pools[day.weekday()] = (candidates,
+                    mean(v for v, _ in candidates) if candidates else None,
+                    sum(v * w for v, w in candidates) / sum(w for _, w in candidates) if candidates else None)
+            candidates, weekday_mean, weighted_mean = weekday_pools[day.weekday()]
             for method in METHODS:
                 fallback = None
                 if not self.ranged(day) or day.weekday() not in self.location.open_weekdays:
@@ -116,15 +131,15 @@ class Series:
                     if method == "seasonal_naive":
                         baseline = candidates[0][0]
                     elif method == "weekday_mean":
-                        baseline = mean(v for v, _ in candidates)
+                        baseline = weekday_mean
                     else:
-                        baseline = sum(v * w for v, w in candidates) / sum(w for _, w in candidates)
+                        baseline = weighted_mean
                     if anchor not in values or len(candidates) < (1 if method == "seasonal_naive" else 4):
                         fallback = "Available same-weekday observations; incomplete four-week pool"
                     if short:
                         fallback = "Short history: available weekday evidence, provisional"
                 elif recent:
-                    baseline = mean(recent)
+                    baseline = recent_mean
                     fallback = "Missing weekday: mean of prior 28 days' uncensored ordinary observations"
                 elif launch is not None:
                     baseline = launch
@@ -223,7 +238,8 @@ def select_model(records):
     return METHODS[0], "evaluated", "No challenger meets both the 5% quantity-error improvement and non-worsening absolute bias rule.", 0.0
 
 
-def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_seconds=30):
+@timed('series_forecast')
+def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_seconds=30, *, _input_hash=None):
     started = perf_counter()
     deadline = started + runtime_seconds
     series = Series(data, sku, location_id)
@@ -248,19 +264,20 @@ def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_sec
         reason += " Intermittent series: no positive floor is imposed; weekday results may be zero."
     def total(points):
         return sum(p.forecast_units for p in points) if all(p.forecast_units is not None for p in points) else None
-    chosen = next(r for r in selection if r.method == selected)
-    errors = sorted(w.underforecast_units for w in chosen.windows if w.horizon == data.settings.protection_days and w.complete)
-    if len(errors) >= 4:
-        # Linear empirical percentile; no distributional/service guarantee.
-        index = (len(errors) - 1) * data.settings.buffer_percentile / 100
-        lo = int(index)
-        units = errors[lo] + (errors[min(lo + 1, len(errors) - 1)] - errors[lo]) * (index - lo)
-        buffer_method, fallback_days = "empirical_underforecast", None
-    else:
-        visible = total(predicted[:28])
-        units = visible / 28 * data.settings.fallback_buffer_days if visible is not None else None
-        buffer_method = "days_of_demand" if units is not None else "unavailable"
-        fallback_days = data.settings.fallback_buffer_days
+    with measure('buffers'):
+        chosen = next(r for r in selection if r.method == selected)
+        errors = sorted(w.underforecast_units for w in chosen.windows if w.horizon == data.settings.protection_days and w.complete)
+        if len(errors) >= 4:
+            # Linear empirical percentile; no distributional/service guarantee.
+            index = (len(errors) - 1) * data.settings.buffer_percentile / 100
+            lo = int(index)
+            units = errors[lo] + (errors[min(lo + 1, len(errors) - 1)] - errors[lo]) * (index - lo)
+            buffer_method, fallback_days = "empirical_underforecast", None
+        else:
+            visible = total(predicted[:28])
+            units = visible / 28 * data.settings.fallback_buffer_days if visible is not None else None
+            buffer_method = "days_of_demand" if units is not None else "unavailable"
+            fallback_days = data.settings.fallback_buffer_days
     history = []
     for i in range(56):
         day = as_of - timedelta(days=56 - i)
@@ -268,12 +285,13 @@ def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_sec
         row = series.rows.get(day)
         history.append(HistoryDay(day=day, observed_sales=row.sales_units if row and state in ("observed", "censored") else None,
             training_estimate=estimates.get(day), status=state))
-    return ForecastResult(run_id=str(uuid4()), input_hash=sha256(data.model_dump_json().encode()).hexdigest(),
-        dataset_id=data.dataset_id, synthetic=data.synthetic, as_of=as_of, sku=sku, product_name=series.product.name,
-        location_id=location_id, location_name=series.location.name, selected_method=selected, status=status,
-        selection_reason=reason, selection_cutoff=cutoff, improvement_pct=improvement, selection=selection,
-        final_check=final_check, forecast=predicted, history=history, visible_units=total(predicted[:28]), tail_units=total(predicted[28:]),
-        buffer=BufferEvidence(units=units, method=buffer_method, protection_days=data.settings.protection_days,
-            percentile=data.settings.buffer_percentile, sample_count=len(errors), fallback_days=fallback_days,
-            note="Selection-period cumulative underforecast errors only. Percentile is not a guaranteed fill rate; no DC buffer is added."),
-        warnings=list(warnings), elapsed_ms=(perf_counter() - started) * 1000, evaluation_policy=POLICY)
+    with measure('forecast_contract'):
+        return ForecastResult(run_id=str(uuid4()), input_hash=_input_hash if _input_hash is not None else sha256(data.model_dump_json().encode()).hexdigest(),
+            dataset_id=data.dataset_id, synthetic=data.synthetic, as_of=as_of, sku=sku, product_name=series.product.name,
+            location_id=location_id, location_name=series.location.name, selected_method=selected, status=status,
+            selection_reason=reason, selection_cutoff=cutoff, improvement_pct=improvement, selection=selection,
+            final_check=final_check, forecast=predicted, history=history, visible_units=total(predicted[:28]), tail_units=total(predicted[28:]),
+            buffer=BufferEvidence(units=units, method=buffer_method, protection_days=data.settings.protection_days,
+                percentile=data.settings.buffer_percentile, sample_count=len(errors), fallback_days=fallback_days,
+                note="Selection-period cumulative underforecast errors only. Percentile is not a guaranteed fill rate; no DC buffer is added."),
+            warnings=list(warnings), elapsed_ms=(perf_counter() - started) * 1000, evaluation_policy=POLICY)

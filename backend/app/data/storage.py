@@ -38,11 +38,24 @@ class UploadAuthorization(Contract):
     content_type: str
 
 
+class DownloadAuthorization(Contract):
+    reference: ObjectReference
+    download_url: str
+    method: Literal['GET'] = 'GET'
+    expires_at: float
+    content_type: str
+    bytes: int
+    sha256: str
+
+
 class Storage(Protocol):
+    driver: str
     def put(self, owner: str, content: bytes, kind: str) -> ObjectReference: ...
     def get(self, owner: str, reference: ObjectReference, kind: str) -> bytes: ...
     def delete(self, owner: str, reference: ObjectReference) -> None: ...
     def sweep(self) -> None: ...
+    def replace(self, owner: str, reference: ObjectReference, content: bytes, kind: str) -> ObjectReference: ...
+    def reset(self, owner: str) -> None: ...
 
 
 class ObjectUnavailable(ValueError):
@@ -51,6 +64,7 @@ class ObjectUnavailable(ValueError):
 
 class LocalStorage:
     """Process-private temp directory; worker restart discards all local sessions."""
+    driver = 'local'
     def __init__(self, *, ttl=TTL, clock=time):
         self.directory = TemporaryDirectory(prefix='planning-session-')
         self.root = Path(self.directory.name)
@@ -97,6 +111,15 @@ class LocalStorage:
             self._record(owner, reference)
             (self.root / reference.object_id).unlink(missing_ok=True)
             del self.records[reference.object_id]
+
+    def replace(self, owner, reference, content, kind):
+        # The old opaque token is the compare-and-swap version. Only one writer
+        # may consume it, and failure must leave the old value readable.
+        with self.lock:
+            self.get(owner, reference, kind)
+            fresh = self.put(owner, content, kind)
+            self.delete(owner, reference)
+            return fresh
 
     def reset(self, owner):
         with self.lock:

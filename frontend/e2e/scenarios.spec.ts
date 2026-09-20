@@ -13,7 +13,7 @@ test('sample action evidence, actual forecast, three presets, combined scenario 
   // one-decimal quantity precision as the ledger, without changing API values.
   await expect(purchaseRow).toContainText(`${nonS1.affected_units.toLocaleString('en-GB',{maximumFractionDigits:1})} units.`);
   const inspectPurchase=purchaseRow.getByRole('button',{name:'Inspect purchase and forecast'});await expect(inspectPurchase).toHaveAttribute('data-evidence-location',nonS1.location_id);
-  const detailResponse=wait(page,'/api/scenarios/detail');await inspectPurchase.click();const detail=await(await detailResponse).json();expect(detail.forecast.location_id).toBe(nonS1.location_id);
+  const detailResponse=wait(page,plan.review_id?`/api/workflow/review/${plan.review_id}/detail`:'/api/scenarios/detail');await inspectPurchase.click();const detail=await(await detailResponse).json();expect(detail.forecast.location_id).toBe(nonS1.location_id);
   await expect(page.getByRole('heading',{name:'SKU payments and grouped movement fees'})).toBeVisible();
   expect(detail.stock.length).toBe(280);expect(detail.feasible).toBe(true);
   await page.getByRole('button',{name:'Open this forecast in Demand Review'}).click();

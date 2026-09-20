@@ -1,0 +1,34 @@
+# Private hosted storage integration boundary
+
+Hosted own-data workflows remain disabled. No authorized provider, resource or credentials were found in the repository/environment, and none were selected or provisioned. `PLANNING_UPLOAD_STORAGE` still permits only the local driver outside Vercel; setting it to `object` does **not** enable the new composition. The browser retains the existing fail-closed explanation.
+
+`backend/app/data/private_storage.py` now implements a provider-independent adapter over two injected interfaces, `PrivateBlobs` and `AtomicMetadata`. This is executable code tested against explicitly test-only doubles in `backend/tests/private_provider_harness.py`, not a production provider certification. Local verification retains `LocalStorage`.
+
+The composition binds opaque references to hashed server session ownership, kind, exact size, SHA-256 and expiry. It reserves quotas before writes, rejects unfinalized reads, verifies private bytes on reads, supports a five-minute single-key upload grant, mandatory upload sealing, server-side workbook finalization and owner-checked one-minute accepted-file download authorization, and delegates workbook content/archive/cell/formula/row limits to the existing parser. Finalization consumes the pending token and deletes upload bytes on success or failure. Durable metadata tombstones preserve cleanup work after failed deletes. Review replacement stages complete bytes before a serializable metadata transaction consumes the old reference; a competing writer cannot publish from that stale reference. The local driver now implements the same atomic replacement operation. No in-process lock is treated as a distributed lock.
+
+## Required authorized resources and integration
+
+Object storage alone is insufficient unless it provides the transactional metadata operations below. An independent transactional database or equivalent conditional transaction service is otherwise required; selecting one remains the owner's decision.
+
+1. Authorize a private object namespace and transactional metadata namespace for this application. Set access, lifecycle/expiry cleanup, size quotas and region intentionally. No permanent public object access; no credentials reach the browser.
+2. Implement `PrivateBlobs`: bounded private reads; one-minute private GET authorization for accepted exports; private writes; idempotent deletion; short-lived, narrowly scoped HTTPS PUT grants that enforce exact MIME, length and checksum. The concrete provider must prevent an old signed PUT from recreating an already finalized/deleted object (revocation, immutable conditional creation with retained tombstones, or an upload gateway checking the pending metadata record). A bare reusable presigned URL is insufficient. The required `seal` operation revokes outstanding PUT grants and freezes the uploaded version before finalization or cleanup. Provider lifecycle cleanup must also remove incomplete multipart uploads and orphaned writes after expiry.
+3. Implement `AtomicMetadata` against shared persistent state. `create` reserves session/global quotas transactionally. `swap`, `promote` and `retire` compare complete expected versions. `promote` must atomically consume the old review and staged replacement, publish the complete new revision and tombstone only the old blob. Reads must be strongly consistent. Cleanup tombstones survive instance crashes and are acknowledged only after physical deletion; upload grants cannot outlive their deletion safeguards. Scheduled cleanup must run without an active web process. A process-local dictionary or serverless temporary file is not acceptable.
+4. Wire the adapter through an explicit allowlisted factory, reference resolution, signed-upload authorization/finalization endpoints and private accepted-file download transport. The finalization result remains on the server: return only the normalized dataset reference/catalog, never browser-held Dataset JSON. Preserve server-processing consent and reconciliation against the accepted snapshot. Generate accepted workbook/snapshot bytes through the existing authoritative export functions and store/download them privately; large files must bypass the Function payload limit through short-lived owner-checked download authorization. The existing raw local import/download routes are not the hosted transport.
+5. Configure the selected provider credentials only as server-side deployment secrets and run the conformance suite against an isolated real-provider namespace from two independent instances. Authorize enabling hosted workflows only after the complete hosted upload → plan/scenario → mutation → regeneration → acceptance → deterministic private download → reopen/new-draft workflow passes.
+
+## Configuration contract
+
+Existing variables remain `VERCEL`, `PLANNING_UPLOAD_STORAGE` (`local` outside Vercel, otherwise disabled) and optional `PLANNING_DIAGNOSTICS=1` for bounded timing headers. No provider environment variables are read yet. The concrete integration must define and document, before activation, these explicit configuration roles:
+
+- private blob resource/namespace identifier and server-only credential or workload identity;
+- transactional metadata connection/namespace and server-only credential or workload identity;
+- upload/download authorization signing configuration, or the provider's equivalent short-lived credential mechanism;
+- cleanup scheduler identity and lifecycle retention policy.
+
+Provider-specific names cannot be truthfully specified before a provider is authorized. Proposed application factory names are `PLANNING_PRIVATE_BLOB_NAMESPACE`, `PLANNING_PRIVATE_METADATA_NAMESPACE`, `PLANNING_PRIVATE_BLOB_CREDENTIAL` and `PLANNING_PRIVATE_METADATA_CREDENTIAL`; these are **reserved documentation names, not currently supported settings**. Workload identity is preferable where supported and may remove credential variables. Do not set fake values or treat a successful Vercel build as evidence these resources exist.
+
+## Conformance evidence and remaining limits
+
+The test-only composition covers owner/type/unknown/expired/deleted references, exact bytes/hash, invalid MIME/size, expanded archives, failed/abandoned uploads, cleanup retry, single-use finalization and competing writes through two adapter instances sharing metadata. It also exercises the existing real parser, planner, review regeneration, acceptance and portable reopen flow against the composition. The existing local workflow suite remains in place.
+
+These tests cannot prove provider IAM privacy, signed-grant enforcement/revocation, distributed transaction isolation, cleanup scheduling, network failure recovery or hosted large-file transport without an authorized provider. Real-provider conformance and all hosted own-data verification remain release blockers. No public blobs, browser credentials, unsigned object URLs or complete-plan caching were added.

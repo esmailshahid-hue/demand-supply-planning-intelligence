@@ -11,6 +11,7 @@ from backend.app.data.storage import store, configuration, TOKEN, ObjectReferenc
 from backend.app.data.workbook import template, parse, WorkbookError, WorkbookIssue, MAX_FILE, MIME
 from backend.app.data.accepted import create_snapshot, snapshot_bytes, read_snapshot, export_workbook
 from backend.app.planning.contracts import PlanResult, Failure
+from backend.app.planning.presentation import decisions
 from backend.app.planning.review import Draft, ReviewConflict, new_draft, decide, regenerate, accept
 from backend.app.scenarios.engine import dataset_hash, provenance
 from backend.app.scenarios.contracts import ScenarioRequest, DetailRequest, Actions, ScenarioDetail
@@ -38,7 +39,7 @@ def encoded(value):
 
 def load(request,reference,kind):
     if not TOKEN.fullmatch(reference): raise ObjectUnavailable('Object is unavailable or expired.')
-    return json.loads(gzip.decompress(store.get(owner(request),ObjectReference(object_id=reference),kind)))
+    return json.loads(gzip.decompress(store.get(owner(request),ObjectReference(object_id=reference,driver=store.driver),kind)))
 
 
 def dataset_for(request,size='fixture'):
@@ -177,9 +178,7 @@ def draft_for(request,reference):
 
 def save_draft(request,reference,record,draft,**extra):
     record={**record,**extra,'draft':draft.model_dump(mode='json')}
-    ref=store.put(owner(request),encoded(record),'draft')
-    # Previous draft tokens become invalid, preventing acceptance of stale revisions.
-    store.delete(owner(request),ObjectReference(object_id=reference))
+    ref=store.replace(owner(request),ObjectReference(object_id=reference,driver=store.driver),encoded(record),'draft')
     return ref.object_id
 
 
@@ -245,18 +244,17 @@ def review_view(reference:str,request:Request):
 
 
 @router.get('/review/{reference}/plan',response_model=PlanResult)
-def review_plan(reference:str,request:Request):
+def review_plan(reference:str,request:Request,include_stock:bool=False):
     _,draft,_,_=draft_for(request,reference)
-    return draft.result.model_copy(update={'review_id':reference})
+    return decisions(draft.result.model_copy(update={'review_id':reference}),include_stock)
 
 
 @router.post('/review/{reference}/decision',response_model=ReviewView)
 def decision(reference:str,body:DecisionRequest,request:Request):
-    with store.lock:
-        record,draft,data,_=draft_for(request,reference)
-        next_draft=decide(draft,data,body.revision,body.action_id,body.status,body.quantity,body.note)
-        ref=save_draft(request,reference,record,next_draft)
-        return view(ref,next_draft)
+    record,draft,data,_=draft_for(request,reference)
+    next_draft=decide(draft,data,body.revision,body.action_id,body.status,body.quantity,body.note)
+    ref=save_draft(request,reference,record,next_draft)
+    return view(ref,next_draft)
 
 
 def guarded(function):
@@ -269,27 +267,25 @@ def guarded(function):
 @router.post('/review/{reference}/regenerate',response_model=ReviewView)
 def rerun(reference:str,body:RevisionRequest,request:Request):
     def calculate():
-        with store.lock:
-            record,draft,data,context=draft_for(request,reference)
-            next_draft=attach_provenance(regenerate(draft,data,body.revision),context)
-            ref=save_draft(request,reference,record,next_draft)
-            return view(ref,next_draft)
+        record,draft,data,context=draft_for(request,reference)
+        next_draft=attach_provenance(regenerate(draft,data,body.revision),context)
+        ref=save_draft(request,reference,record,next_draft)
+        return view(ref,next_draft)
     return guarded(calculate)
 
 
 @router.post('/review/{reference}/accept',response_model=ReviewView)
 def final_accept(reference:str,body:RevisionRequest,request:Request):
     def calculate():
-        with store.lock:
-            record,draft,data,context=draft_for(request,reference)
-            require_provenance(draft,context)
-            accepted,_,versions=accept(draft,data,body.revision,body.acknowledge_shortfalls)
-            require_provenance(accepted,context)
-            try: snapshot=create_snapshot(data,accepted,versions)
-            except ValueError as error: raise HTTPException(422,str(error)) from error
-            binary,raw_size=snapshot_bytes(snapshot);workbook=export_workbook(snapshot)
-            ref=save_draft(request,reference,record,accepted,snapshot=snapshot.model_dump(mode='json'))
-            return view(ref,accepted,{'snapshot_compressed_bytes':len(binary),'snapshot_uncompressed_bytes':raw_size,'export_bytes':len(workbook)})
+        record,draft,data,context=draft_for(request,reference)
+        require_provenance(draft,context)
+        accepted,_,versions=accept(draft,data,body.revision,body.acknowledge_shortfalls)
+        require_provenance(accepted,context)
+        try: snapshot=create_snapshot(data,accepted,versions)
+        except ValueError as error: raise HTTPException(422,str(error)) from error
+        binary,raw_size=snapshot_bytes(snapshot);workbook=export_workbook(snapshot)
+        ref=save_draft(request,reference,record,accepted,snapshot=snapshot.model_dump(mode='json'))
+        return view(ref,accepted,{'snapshot_compressed_bytes':len(binary),'snapshot_uncompressed_bytes':raw_size,'export_bytes':len(workbook)})
     return guarded(calculate)
 
 
@@ -348,11 +344,12 @@ def scenario_draft(body:ScenarioRequest,request:Request):
         apply_imported(draft,request,context)
         source={'size':context.sample_size,'dataset_ref':request.headers.get('X-Dataset-Ref'),'provenance':context.model_dump(mode='json')}
         ref=store.put(owner(request),encoded({'source':source,'draft':draft.model_dump(mode='json')}),'draft')
-        return result.model_copy(update={'review_id':ref.object_id})
+        return decisions(result.model_copy(update={'review_id':ref.object_id}))
     return guarded(calculate)
 
 
 class EvidenceRequest(Contract):
+    expected_run_id: str | None = None
     sku: str
     location_id: str
     action_id: str | None = None
@@ -363,10 +360,13 @@ def review_detail(reference:str,body:EvidenceRequest,request:Request):
     def calculate():
         from backend.app.scenarios.engine import snapshot,detail,actions_of,digest
         _,draft,data,context=draft_for(request,reference)
+        if body.expected_run_id is not None and body.expected_run_id!=draft.result.run_id:
+            raise HTTPException(409,'Evidence belongs to a different plan run.')
+        if draft.state=='stale': raise HTTPException(409,'Regenerate this stale review before inspecting evidence.')
         if not draft.result.proposed: raise HTTPException(409,'No policy available for inspection.')
         actions=actions_of(draft.result.proposed)
-        selected=DetailRequest(baseline=snapshot(context.sample_size,data,Actions(),context),scenario=draft.scenario,policy='replanned',actions=actions,expected_action_hash=digest(actions),**body.model_dump())
-        return detail(data,selected,context)
+        selected=DetailRequest(baseline=snapshot(context.sample_size,data,Actions(),context),scenario=draft.scenario,policy='replanned',actions=actions,expected_action_hash=digest(actions),**body.model_dump(exclude={'expected_run_id'}))
+        return detail(data,selected,context).model_copy(update={'review_id':reference,'plan_run_id':draft.result.run_id,'review_revision':draft.revision})
     return guarded(calculate)
 
 
