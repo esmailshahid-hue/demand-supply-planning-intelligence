@@ -45,6 +45,7 @@ def validate_plan(result):
         assert service_score(proposed)<=service_score(result['no_action'])
     assert sum(Decimal(str(a['value'])) for a in proposed['purchases'])==Decimal(str(ledger['summary']['commitments']))
     assert sum(Decimal(str(a['amount'])) for a in ledger['payments'])==Decimal(str(ledger['summary']['payments']))
+    assert sum(Decimal(str(a['amount'])) for a in ledger['payments'] if a['kind']=='movement')==Decimal(str(ledger['summary']['movement_expense']))
     assert all(min(w[k] for k in ('payment_headroom','commitment_headroom','transfer_headroom'))>=0 for w in ledger['cash'])
 
 

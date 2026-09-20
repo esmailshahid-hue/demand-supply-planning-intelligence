@@ -9,7 +9,6 @@ from pydantic import Field
 from backend.app.contracts import Contract, Dataset, DatasetProvenance, SampleCatalog
 from backend.app.data.storage import store, configuration, TOKEN, ObjectReference, ObjectUnavailable
 from backend.app.data.workbook import template, parse, WorkbookError, WorkbookIssue, MAX_FILE, MIME
-from backend.app.data.accepted import create_snapshot, snapshot_bytes, read_snapshot, export_workbook
 from backend.app.planning.contracts import PlanResult, Failure
 from backend.app.planning.presentation import decisions
 from backend.app.planning.review import Draft, ReviewConflict, new_draft, decide, regenerate, accept
@@ -18,6 +17,7 @@ from backend.app.scenarios.contracts import ScenarioRequest, DetailRequest, Acti
 from backend.app.planning.constraints import ReviewConstraints, business_key
 from backend.app.data.reconciliation import Execution, reconcile
 from fastapi.concurrency import run_in_threadpool
+from backend.app.diagnostics import timed
 
 router=APIRouter(prefix='/api/workflow')
 COOKIE='planning_session'
@@ -42,6 +42,7 @@ def load(request,reference,kind):
     return json.loads(gzip.decompress(store.get(owner(request),ObjectReference(object_id=reference,driver=store.driver),kind)))
 
 
+@timed('dataset_context')
 def dataset_for(request,size='fixture'):
     reference=request.headers.get('X-Dataset-Ref')
     if reference:
@@ -59,6 +60,7 @@ def dataset_for(request,size='fixture'):
     return data,issues,provenance(data,'bundled_'+size,size)
 
 
+@timed('review_attachment')
 def attach_draft(request,data,result,context):
     # Review session persistence is never substituted for a live calculation.
     if not configuration()['enabled'] or not TOKEN.fullmatch(request.cookies.get(COOKIE,'')):
@@ -276,6 +278,7 @@ def rerun(reference:str,body:RevisionRequest,request:Request):
 
 @router.post('/review/{reference}/accept',response_model=ReviewView)
 def final_accept(reference:str,body:RevisionRequest,request:Request):
+    from backend.app.data.accepted import create_snapshot, snapshot_bytes, export_workbook
     def calculate():
         record,draft,data,context=draft_for(request,reference)
         require_provenance(draft,context)
@@ -291,6 +294,7 @@ def final_accept(reference:str,body:RevisionRequest,request:Request):
 
 @router.get('/review/{reference}/download/{kind}')
 def download(reference:str,kind:Literal['workbook','snapshot'],request:Request):
+    from backend.app.data.accepted import snapshot_bytes, export_workbook
     record,draft,_,_=draft_for(request,reference)
     if draft.state not in ('accepted','read_only') or 'snapshot' not in record: raise HTTPException(409,'Current plan is stale or not finally accepted.')
     from backend.app.data.accepted import AcceptedSnapshot
@@ -303,6 +307,7 @@ def download(reference:str,kind:Literal['workbook','snapshot'],request:Request):
 @router.put('/snapshot',response_model=ReviewView)
 async def reopen(request:Request):
     available()
+    from backend.app.data.accepted import read_snapshot
     if request.headers.get('X-Server-Processing')!='confirmed': raise HTTPException(422,'Confirm server processing before importing.')
     try: snapshot=read_snapshot(await request.body())
     except ValueError as error: raise HTTPException(422,str(error)) from error

@@ -1,8 +1,10 @@
 """One process serves the calculation API and compiled React UI; no user-row persistence."""
+from time import perf_counter
+_import_started = perf_counter()
 from backend.app.diagnostics import timed, measure
 from functools import lru_cache
 from pathlib import Path
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, RLock
 from typing import Literal
 
 from fastapi import FastAPI, Request
@@ -17,10 +19,15 @@ from backend.app.forecasting.engine import forecast
 from backend.app.planning.contracts import PlanRequest, PlanResult, PlanSampleRequest
 from backend.app.planning.engine import plan
 from backend.app.planning.presentation import decisions
+_workflow_import_started = perf_counter()
 from backend.app.data.workflow_api import dataset_for, attach_draft, imported_constraints, install as install_workflow
+from backend.app.diagnostics import startup_measurement, instrument_response_fields
+startup_measurement('workflow_import', perf_counter()-_workflow_import_started)
 
 MAX_BODY_BYTES = 32 * 1024 * 1024
 calculation_slot = BoundedSemaphore(1)
+_sample_lock = RLock()
+_setup_started = perf_counter()
 app = FastAPI(title="Demand and Supply Planning Intelligence", version=ENGINE_VERSION,
               description="Synthetic portfolio. Evaluated forecasts and independently validated purchasing, allocation and payment plans.")
 
@@ -38,17 +45,18 @@ class BodyLimit:
             response = JSONResponse(status_code=413, content={"code": "body_limit", "message": "Request exceeds the 32 MiB limit.", "issues": []})
             return await response(scope, receive, send)
         chunks, total = [], 0
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                return
-            total += len(message.get("body", b""))
-            if total > MAX_BODY_BYTES:
-                response = JSONResponse(status_code=413, content={"code": "body_limit", "message": "Request exceeds the 32 MiB limit.", "issues": []})
-                return await response(scope, receive, send)
-            chunks.append(message.get("body", b""))
-            if not message.get("more_body", False):
-                break
+        with measure('request_body'):
+            while True:
+                message = await receive()
+                if message["type"] == "http.disconnect":
+                    return
+                total += len(message.get("body", b""))
+                if total > MAX_BODY_BYTES:
+                    response = JSONResponse(status_code=413, content={"code": "body_limit", "message": "Request exceeds the 32 MiB limit.", "issues": []})
+                    return await response(scope, receive, send)
+                chunks.append(message.get("body", b""))
+                if not message.get("more_body", False):
+                    break
         delivered = False
         async def limited_receive():
             nonlocal delivered
@@ -73,9 +81,19 @@ async def schema_error(request: Request, exc):
 
 @lru_cache(maxsize=2)
 @timed('sample_input')
-def sample(size):
+def _sample(size):
+    from backend.app.planning.preparation import register
     data = generate_sample(size)
-    return data, validate_dataset(data)
+    issues = validate_dataset(data)
+    register(size, data)
+    return data, issues
+
+
+def sample(size):
+    # lru_cache permits duplicate concurrent misses. Publish one exact bundled
+    # object so initial catalog/forecast requests agree with reuse registration.
+    with _sample_lock:
+        return _sample(size)
 
 
 def calculate(data, sku, location_id, issues=None):
@@ -121,6 +139,7 @@ def custom_forecast(request: ForecastRequest):
     return calculate(request.dataset, request.sku, request.location_id)
 
 
+@timed('planning')
 def calculate_plan(data, issues=None, review=None):
     if not calculation_slot.acquire(blocking=False):
         return JSONResponse(status_code=429, headers={'Retry-After': '2'}, content=APIError(code='busy', message='A calculation is running. Please retry shortly.').model_dump())
@@ -206,3 +225,8 @@ def index():
     if not (DIST / "index.html").is_file():
         return JSONResponse(status_code=503, content={"message": "Frontend not built. Run npm ci && npm run build in frontend/."})
     return FileResponse(DIST / "index.html")
+
+
+instrument_response_fields(app)
+startup_measurement('fastapi_setup', perf_counter()-_setup_started)
+startup_measurement('application_import', perf_counter()-_import_started)

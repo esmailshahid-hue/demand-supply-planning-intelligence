@@ -8,7 +8,7 @@ from scripts.planning_smoke import stable_plan, validate_plan
 
 def run(url):
     failures=[]
-    def call(path,body,limit=30):
+    def call(path,body,limit=10):
         start=perf_counter()
         with urlopen(Request(url+path,data=json.dumps(body).encode(),headers={'Content-Type':'application/json'}),timeout=60) as response:
             ready=perf_counter();raw=response.read();status=response.status;timings=response.headers.get('Server-Timing','unavailable')

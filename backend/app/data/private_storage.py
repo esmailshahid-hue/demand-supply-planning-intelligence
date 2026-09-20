@@ -9,10 +9,13 @@ from hashlib import sha256
 from secrets import token_urlsafe
 from time import time
 from typing import Protocol
+import logging
 
 from backend.app.data.storage import (ObjectReference, ObjectUnavailable,
     UploadAuthorization, DownloadAuthorization, TOKEN, TTL, MAX_OBJECT, MAX_SESSION, MAX_TOTAL)
 from backend.app.data.workbook import MIME, MAX_FILE, parse
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -196,14 +199,30 @@ class PrivateStorage:
         finally:
             self.metadata.retire(claimed); self._garbage()
 
-    def _garbage(self):
-        for blob in self.metadata.garbage():
-            self.blobs.seal(blob)
-            self.blobs.delete(blob)
-            self.metadata.cleaned(blob)
+    def _garbage(self, *, strict=False):
+        # Metadata is already committed. Cleanup must never hide its returned
+        # reference or undo the transition; failed work stays durably queued.
+        failures = 0
+        try:
+            pending = self.metadata.garbage()
+        except Exception:
+            pending = []
+            failures += 1
+        for blob in pending:
+            try:
+                self.blobs.seal(blob)
+                self.blobs.delete(blob)
+                self.metadata.cleaned(blob)
+            except Exception:
+                failures += 1
+        if failures:
+            # Bounded operational evidence, without provider messages or IDs.
+            logger.warning('private_cleanup_deferred failures=%d', failures)
+            if strict:
+                raise OSError('Private object cleanup remains queued.')
 
     def sweep(self):
         for row in self.metadata.expired(self.clock()):
             try: self.metadata.retire(row)
             except ObjectUnavailable: pass
-        self._garbage()
+        self._garbage(strict=True)

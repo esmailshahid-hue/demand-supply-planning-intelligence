@@ -3,6 +3,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 import pytest
 from openpyxl import load_workbook
+import openpyxl
 from backend.app.data.sample import generate_sample
 from backend.app.data.workbook import template, parse, preflight, WorkbookError, TABLES
 from backend.app.data.storage import LocalStorage, ObjectUnavailable, ObjectReference, configuration
@@ -85,7 +86,7 @@ def test_cleanup_on_unexpected_parse_exception(fixture,monkeypatch):
     import backend.app.data.workbook as module
     captured=[]
     def broken(path,**kwargs):captured.append(Path(path).parent);raise RuntimeError('secret path')
-    monkeypatch.setattr(module,'load_workbook',broken)
+    monkeypatch.setattr(openpyxl,'load_workbook',broken)
     with pytest.raises(WorkbookError) as error:parse(template(fixture))
     assert 'secret' not in str(error.value)
     assert captured and not captured[0].exists()
@@ -134,10 +135,10 @@ def test_warning_overflow_cannot_hide_blocking_error(fixture,monkeypatch):
 @pytest.mark.parametrize('invalid',[False,True])
 def test_parse_files_deleted_after_success_or_validation_error(fixture,monkeypatch,invalid):
     import backend.app.data.workbook as module
-    paths=[];original=module.load_workbook
+    paths=[];original=openpyxl.load_workbook
     def capture(path,**kwargs):
         paths.append(Path(path).parent);return original(path,**kwargs)
-    monkeypatch.setattr(module,'load_workbook',capture)
+    monkeypatch.setattr(openpyxl,'load_workbook',capture)
     content=template(fixture)
     if invalid:
         content=edit(content,lambda w:setattr(w['Inventory']['D2'],'value',-1))

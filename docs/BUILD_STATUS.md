@@ -1,3 +1,107 @@
+# Final focused Pass 6 correction — 20 September 2026
+
+Started from clean **055eb0a4f6ee78c77f697569a5acbd044a2f5c53**. This section supersedes earlier readiness statements; historical results remain below.
+
+## Baseline CI and canonical deployment
+
+[GitHub Actions 35491100761](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35491100761), job **106026056837**, completed **successfully** for 055eb0a. Logs confirm **197 backend tests in 590.51 s**, **26 browser tests in 4.3 min**, solver, contracts, production build, Docker build/start, container solver, forecast, complete/compact planning, scoped evidence, scenarios, component profile and upload/review/accept/export/reopen. Baseline Ubuntu/container full planning HTTP was **4.349 / 4.462 s** (engine **4,114.3 / 4,287.9 ms**). This is not CI for this new worktree.
+
+Canonical metadata confirms deployment **dpl_vPgb8yq7ivQ7FxDqgAZGkpmotE6n**, immutable alias `demand-supply-planning-intelligence-10cys4089.vercel.app`, region **iad1**, exact **055eb0a**, serving `https://demand-supply-planning-intelligence.vercel.app`. Build readiness is not runtime acceptance. The separate `demand-supply-planning-intelligence-hahy` check is project housekeeping; no project was deleted, disconnected or changed. Its guessed public hostname did not resolve to a deployment through the connector, and project lookup encountered a connector argument-mapping error; no independent second-project runtime claim is made.
+
+## Measured hosted boundary
+
+User-supplied independent measurements retain full HTTP **25.74 / 20.34 / 19.79 s**, reported plan **7.94 / 8.01 / 7.84 s**, and fixture HTTP **23.20 s** versus plan **3.64 s**. One full response reached headers at **19.03 s** and drained in **0.77 s**. A separate fixture flow was plan/capture/detail **17.96 / 13.38 / 13.61 s**. These failures are not discarded because a subsequent repeat is faster.
+
+New serial curl checks of the same canonical 055eb0a deployment in this correction:
+
+| Request | TLS ready s | First response byte s | Body drain s | Total HTTP s | Reported calculation ms | Bytes |
+|---|---:|---:|---:|---:|---:|---:|
+| Health | 0.277 | 2.812 | 0.001 | 2.813 | unavailable | 104 |
+| Full first | 0.172 | 11.516 | 0.774 | **12.290** | 7,536.7 | 1,022,713 |
+| Full repeat | 0.176 | 8.535 | 0.705 | **9.240** | 7,737.1 | 1,022,712 |
+| Fixture | 0.177 | 4.992 | 0.433 | **5.424** | 3,647.0 | 331,545 |
+| Fixture capture | 0.173 | 2.052 | 0.491 | **2.543** | 896.0 | 179,504 |
+| Fixture detail | 0.199 | 2.133 | 0.264 | **2.397** | 1,118.7 | 110,160 |
+
+DNS/connect/TLS and full response metrics are retained in ignored `artifacts/final6-host-*-timing.json`; body drain is total minus first byte. These checks used serial public synthetic requests without concurrent hosted calculations. Fixture detail returned 280 rows and matching cash/provenance. The first full request still fails ten seconds and two consecutive passing full requests were not established. These are baseline observations, not measurements of the new correction or proven instance-cold starts.
+
+The available Vercel runtime-log connector confirms successful invocation paths/statuses on the exact deployment, but exposes neither function duration nor startup/ASGI phase measurements. Diagnostics were off on this deployment. Client time cannot establish Vercel invocation start, new-instance status or attribute all pre-header waiting to Python. The variable residual before headers remains a measured **unattributed pre-header residual across application, platform and network**, not a proven fixed twelve-second network or solver delay. A separately authorized diagnostic deployment is needed to correlate the bounded new phase output with platform invocation duration and client timing. The retained HTTP gate is unchanged.
+
+## Implemented local correction
+
+- Defer `openpyxl` and its NumPy import until actual workbook parsing/export. Defer accepted-snapshot module loading to workflow routes. SciPy/HiGHS remains a lazy optimizer import; the full sample does not attempt a joint solve. Public import regressions also exclude private-provider and test utility modules.
+- Serialize initial bundled-sample construction: Python LRU caching can execute the same first miss concurrently, producing equal but distinct objects and defeating exact-object registration. A lock now makes simultaneous catalog/forecast requests share one constructed sample; a concurrency regression verifies it.
+- Add at most two derived forecast-preparation entries, eligible only for the exact server-registered fixture/full objects with unchanged complete SHA-256. The key includes dataset hash, engine/schema versions, internal forecast version and preparation/horizon version. Return independent copies and fresh forecast calculation UUIDs. Unregistered uploaded/reviewed copies and mutated sample objects bypass reuse. Misses run the unchanged evaluator; no actions, recommendations, replay ledgers, responses or private review state are cached.
+- Keep scenario transformation, snapshot/data/action/scenario/forecast identity checks and every independent stock/cash replay. Reuse only the unchanged bundled forecast preparation; transformed future-path inputs still compute from their complete current contents. Private detail still validates the exact run/reference/revision and rejects stale reviews. Public detail retains its existing versioned snapshot/action identity, rather than inventing an authenticated plan-UUID guarantee.
+- Add opt-in bounded timings for application import, workflow import, FastAPI setup/startup, request body, dataset/context preparation, planning, review attachment, actual FastAPI response validation and Pydantic serialization, ASGI response start/completion, and forecast reuse. Nested/startup metrics are explicitly distinct from per-request durations. Only fixed metric names and numeric times/counts are emitted, without dataset values, identifiers, provider errors or stack traces. No diagnostic environment setting was enabled remotely.
+- Treat private metadata promotion/retirement as the commit point. Blob cleanup failures now retain tombstones and log only `private_cleanup_deferred` plus a count; they cannot hide a committed replacement, deletion/reset or successful upload finalization. Explicit sweep still reports failure nonzero and retries queued work. Accepted files stay owner-checked and readable; old references never return. Pre-commit and original validation errors remain failures.
+- Tighten the **additional compact transport smoke** to the requested ten-second capture/evidence limits. Existing complete planning, scenario comparison, response-size, feasibility, financial, browser and Docker gates remain intact; complete-plan validation also explicitly reconciles movement-fee payments to the reported movement expense. External contracts, frontend source and deployment settings are unchanged.
+
+## Local verification
+
+Final serial local request measurements (same runtime, isolated 055eb0a baseline versus corrected process):
+
+| Request | Baseline HTTP s | Corrected HTTP s | Corrected plan/evidence ms | Bytes |
+|---|---:|---:|---:|---:|
+| full first | 2.832 | 2.940 | 2,056.5 | 1,022,712 |
+| full repeat | 2.061 | 0.816 | 728.9 | 1,022,712 |
+| full capture | 1.654 | 0.410 | 241.3 | 381,064 |
+| full detail | 2.000 | 0.732 | 635.5 | 110,148 |
+| fixture first | 2.647 | 2.599 | 2,583.4 | 331,545 |
+| fixture repeat | 2.424 | 2.179 | 2,163.9 | 331,544 |
+| fixture capture | 0.266 | 0.066 | 38.8 | 179,504 |
+| fixture detail | 0.319 | 0.118 | 101.7 | 110,160 |
+
+The first uncached full request did not materially improve. Repeat work benefits from reuse; those cache hits are not cold-start or hosted proof. Actual ASGI/response validation/serialization phases and startup timings are in [RELEASE_AUDIT.md](RELEASE_AUDIT.md). All requests passed ten seconds, response size, deterministic actions/totals/explanations and authoritative scoped stock/cash/provenance checks.
+
+### Final commands and actual results
+
+Local runtime: macOS arm64, Python **3.14.4**, Node **24.21.0**, installed Chrome. Production HTTP checks ran serially against `PLANNING_DIAGNOSTICS=1 PORT=8030 ./scripts/start.sh`. Baseline component checks used an isolated `git archive` of 055eb0a with the same Python environment. No dependency upgrades or workflow changes were made.
+
+| Executed command/check | Actual result |
+|---|---|
+| `.venv/bin/python -m pytest -q` | **209 passed, 2 existing warnings, 351.05 s** on final source. Includes 14 private-provider conformance tests, 6 injected-cleanup tests, 4 preparation reuse/evidence/concurrency cases and existing calculation-equivalence tests. |
+| `PORT=8030 CHROME_PATH=/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome npm --prefix frontend run test:e2e` under Node 24 | **26 passed in 2.8 min**; frontend source/assertions unchanged. Production browser verification also displayed actual forecast results and navigation with no browser errors. |
+| `.venv/bin/python -m scripts.export_contracts`; `npm --prefix frontend run generate:types` | Passed; final regeneration reproduced byte-identical OpenAPI and generated TypeScript. |
+| `npm --prefix frontend run build` | TypeScript and Vite production build passed: 41 modules, JS 304.94 kB / 91.82 kB gzip, CSS 13.52 kB / 3.84 kB gzip. |
+| `.venv/bin/python -m scripts.solver_smoke` | Passed installed SciPy/HiGHS smoke. |
+| `.venv/bin/python -m scripts.smoke --url http://127.0.0.1:8030` | Built page, health and real fixture/full forecast requests passed. |
+| `.venv/bin/python -m scripts.planning_smoke --url http://127.0.0.1:8030` | All four complete-ledger requests below passed runtime, size, dimensions, independent replay, financial reconciliation and repeat determinism. |
+| `.venv/bin/python -m scripts.planning_transport_smoke --url http://127.0.0.1:8030` | Complete/compact actions, totals and explanations equal; fixture/full scoped stock, cash and provenance equal complete replay; repeated evidence deterministic. Every planning/capture/evidence request passed **10 s** and **4.5 MB**. |
+| `.venv/bin/python -m scripts.scenario_smoke --url http://127.0.0.1:8030` | Passed comparisons, future-path changes, invalid-policy metric protection, independent replay, determinism and response-size gates. |
+| `.venv/bin/python -m scripts.workflow_smoke --url http://127.0.0.1:8030` | Fixture/full upload, validation, review/regeneration/acceptance, XLSX/snapshot reconciliation, repeated download, reopen and reset passed using local storage. |
+| `.venv/bin/python -m scripts.release_trace --url http://127.0.0.1:8030 --output artifacts/final6-trace.json` | Forecast/action/dated cash/scenario/review/export trace reconciled. |
+| `.venv/bin/python -m scripts.planning_profile`, isolated baseline then current | All fixture/full first/repeat profiles passed; three independent replay calls retained. Components and fresh imports recorded in RELEASE_AUDIT. |
+| `.venv/bin/python -m pytest -q backend/tests/test_policy_replay.py` | **7 passed in 0.23 s**, in addition to complete-suite coverage. |
+| `.venv/bin/python -m scripts.policy_replay --size fixture --output …` and `--size full`, each twice | All four exited zero; each size's output was **byte-identical**. Proposed/benchmark actions match; stock/transit/acquisition value and funding reconcile. |
+| `.venv/bin/python -m pip check`; `npm --prefix frontend ls --depth=0` | Both passed. |
+| `.venv/bin/python -m compileall -q backend scripts`; `git diff --check` | Passed, including final source regeneration and documentation diff check. |
+
+Final complete-ledger smoke (after the separate first-miss boundary measurement; these are preparation reuse hits, not cold starts):
+
+| Request | HTTP s | Engine ms | Bytes | Actions purchase / movement | Replay / finance / determinism |
+|---|---:|---:|---:|---:|---|
+| Fixture first | 2.238 | 2,195.1 | 786,691 | 24 / 311 | passed / passed / reference |
+| Fixture repeat | 2.178 | 2,161.4 | 786,693 | 24 / 311 | passed / passed / matched |
+| Full first | 0.831 | 732.2 | 3,753,092 | 31 / 607 | passed / passed / reference |
+| Full repeat | 0.820 | 721.6 | 3,753,092 | 31 / 607 | passed / passed / matched |
+
+Fixture commitments/payments remain **SAR 91,606 / 97,746**; full **SAR 92,550 / 99,050**. Movement-fee payments explicitly equal movement expense. All retain honest `feasible_fallback`, fixture's two-second best-effort challenger and full's unattempted joint stage. Full retains 240 series and 16,800 stock rows. No complete recommendation is cached.
+
+An initial backend run found three workbook tests patching the former eager parser import. Their patches now target `openpyxl.load_workbook` at the actual deferred-import boundary; the resource-cleanup assertions were retained, the three focused tests passed, and the final complete suite passed. The later concurrent first-sample identity issue was corrected and covered before the final 209-test run.
+
+Changed files: `backend/app/data/{accepted,private_storage,workbook,workflow_api}.py`; `backend/app/{diagnostics,main}.py`; `backend/app/planning/{inputs,preparation}.py`; new cleanup, preparation and public-import regressions plus existing diagnostics/workbook tests; `scripts/{planning_smoke,planning_transport_smoke}.py`; BUILD_STATUS, DEPLOYMENT, RELEASE_AUDIT, PRIVATE_STORAGE and PLANNING docs. External contracts, frontend files and deployment configuration have no diff. Detailed ignored verification logs are `artifacts/final6-*`; they are local evidence, not published CI artifacts.
+
+**No new exact-commit CI, corrected deployment or Docker result is claimed.** Docker, Podman, Colima and Lima are unavailable here. Baseline green Linux/Docker CI is explicitly separate from these corrected macOS results.
+
+## Release boundary
+
+The canonical host still reports private workflows disabled. No authorized blob/transactional metadata provider or credentials were introduced. [PRIVATE_STORAGE.md](PRIVATE_STORAGE.md) defines the required real-provider integration and lifecycle verification.
+
+**Neither release gate can close yet.** Public sample needs CI for the exact new correction and a separately authorized canonical deployment passing fixture/full planning, two consecutive full requests, capture and evidence under ten seconds with all reconciliation/size gates. Full hosted own-data additionally needs authorized private persistent storage and the complete real-provider isolation/lifecycle/workflow checks. The request prohibits automatic push/merge/deploy/provisioning/settings changes, so new remote CI/deployment cannot be obtained within this local correction. No such action was performed.
+
+---
+
 # Pass 6 focused release correction — 20 September 2026
 
 Started from clean `e51af6fc1dc5338e4f9d54380fe7acceca55edd1`. This section supersedes older release-readiness statements; historical evidence below is retained.

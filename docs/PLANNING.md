@@ -1,5 +1,7 @@
 # Planning calculations and sample scenarios
 
+Final Pass 6 preparation reuse is limited to the exact registered bundled fixture/full dataset objects and their complete unchanged hash, engine/schema, forecast and preparation versions. Only demand arrays, buffers and forecast traces are copied from the bounded cache; every recommendation, scenario/action identity check and independent replay still runs. Mutated samples, uploaded copies and transformed datasets miss the cache. No complete plan or private session data is cached. See BUILD_STATUS for measurement and release limits.
+
 Pass 6 transport correction: main plan, review and scenario-draft responses use `stock_detail: on_demand` with the full `stock_row_count`; only the daily stock table is omitted. Scoped evidence independently reconstructs the selected SKU and related locations with exact dataset/scenario/action hashes; private reviews also bind run and revision. The complete replay remains authoritative for acceptance/exports and is available with `include_stock=true` for verification. Calculation policies below are unchanged. Measured performance and release limitations are in [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
 
 ## Pass 4 reviewed policies

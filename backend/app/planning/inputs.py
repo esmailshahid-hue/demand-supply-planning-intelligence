@@ -90,12 +90,17 @@ class Inputs:
 
 @timed('network_forecast')
 def network_forecasts(data, deadline):
-    identity=ProjectedIdentity(data)
+    from backend.app.planning.preparation import prepare
+    return prepare(data, deadline, _network_forecasts)
+
+
+def _network_forecasts(data, deadline):
     """Invoke the unchanged Pass 1 evaluator on each series, retaining all relevant input fields.
 
     Partition only history to avoid serializing 99k irrelevant rows 240 times.
     Trace hashes refer to this series projection; the plan has the complete input hash.
     """
+    identity=ProjectedIdentity(data)
     rows = defaultdict(list)
     for r in data.demand_history:
         rows[r.sku,r.location_id].append(r)

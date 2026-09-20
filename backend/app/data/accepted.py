@@ -4,7 +4,6 @@ from io import BytesIO
 import json
 from hashlib import sha256
 from typing import Literal
-from openpyxl import Workbook
 from pydantic import Field
 from backend.app.contracts import Contract, Dataset, SCHEMA_VERSION
 from backend.app.data.workbook import append
@@ -65,6 +64,7 @@ def read_snapshot(content):
 
 
 def export_workbook(snapshot):
+    from openpyxl import Workbook
     draft=snapshot.draft
     if draft.state!='accepted' or not draft.result.proposed or not draft.result.proposed.replay.feasible:
         raise ValueError('Only a finally accepted plan can be exported.')

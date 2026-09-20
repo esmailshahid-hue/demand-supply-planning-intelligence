@@ -1,3 +1,85 @@
+# Final focused Pass 6 correction — 20 September 2026
+
+Current reviewed baseline is **055eb0a4f6ee78c77f697569a5acbd044a2f5c53**. [CI 35491100761](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35491100761), job **106026056837**, completed successfully: 197 backend tests, 26 browser tests, contracts/build, Docker, solver, complete/compact planning, evidence, scenarios and own-data workflow smokes. Those results certify the baseline only. The new local changes have no new remote run or deployment.
+
+The canonical deployed baseline is **dpl_vPgb8yq7ivQ7FxDqgAZGkpmotE6n**, immutable alias `demand-supply-planning-intelligence-10cys4089.vercel.app`, **iad1**, exact **055eb0a**, serving `https://demand-supply-planning-intelligence.vercel.app`. The separate `demand-supply-planning-intelligence-hahy` deployment check remains project housekeeping; it was not disconnected, deleted or reconfigured.
+
+New serial canonical-baseline measurements: full first/repeat **12.290 / 9.240 s HTTP**, **7,536.7 / 7,737.1 ms reported calculation**, **1,022,713 / 1,022,712 bytes**; first byte **11.516 / 8.535 s**, body drain **0.774 / 0.705 s**. Fixture plan/capture/detail were **5.424 / 2.543 / 2.397 s**, with correct 280-row scoped evidence and matching cash/provenance. Health took **2.813 s**. The first full request fails the retained ten-second gate. Earlier independent user measurements of 19.79–25.74 s full HTTP and 13.38 / 13.61 s fixture capture/detail remain relevant failures, not superseded by one faster repeat.
+
+Available runtime logs expose successful invocation paths/statuses but no platform duration or startup details. The large variable pre-header residual cannot yet be fully attributed. DNS/connect/TLS, client first-byte/body times and reported engine time are separately recorded in BUILD_STATUS; none proves a new Vercel instance or measures invocation start. No corrected-host timing is claimed.
+
+The correction defers Excel/NumPy and accepted-file imports to file workflows, and reuses only deterministic forecast preparation for at most two exact registered bundled samples. Eligibility requires the complete unchanged dataset hash; keys include engine/schema, forecast and preparation versions. A single-construction lock keeps concurrent first catalog/forecast requests on the same registered sample object. Mutated or unregistered uploaded/reviewed copies miss; returned buffers/traces/arrays are independent copies with fresh trace UUIDs. Scenario/action checks and independent replay remain live. No complete recommendation, ledger, API response or private state is cached. External contracts, frontend source, planning semantics, solver budgets and deployment settings are unchanged.
+
+Opt-in `PLANNING_DIAGNOSTICS=1` now records fixed-name startup and full ASGI-boundary phases, including actual response-field validation and serialization. Startup durations describe process setup, not extra time to add to each warm request; nested phase times are inclusive. `response_ready` starts when ASGI receives the request and excludes platform work before application dispatch. `asgi_ms` ends after the application sends its body; it cannot establish that the client received it. Application code cannot establish the Vercel invocation start without platform telemetry. Metric names are allowlisted; logs contain numeric durations/counts and no data, IDs, credentials or stack traces. No remote environment variable was set.
+
+Private metadata commit now survives subsequent blob-cleanup failure: the new reference returns, the old reference stays invalid, and durable tombstones remain until successful sweep. Cleanup logs one bounded count; explicit sweep still fails when work remains queued. Delete/reset and upload-finalization cleanup share this behavior; original pre-commit/validation failures remain errors. See PRIVATE_STORAGE for provider contracts and regression scope.
+
+## Local before/after request boundary
+
+Measured serially on macOS arm64 / Python 3.14.4, single-worker Uvicorn, with the same compiled frontend. The baseline backend/scripts were extracted from 055eb0a into an isolated temporary directory; baseline port 8031 was stopped before measuring corrected port 8030. Both pages were checked with agent-browser. Browser verification requested fixture forecasts only; each **first full plan is the first full sample/preparation request in its fresh server process**. This does not establish Vercel instance-cold behavior, and HTTP excludes server-process startup before listening. Measurements completed before the broad test suites ran.
+
+| Request | Baseline HTTP s | Corrected HTTP s | Corrected plan/evidence ms | Bytes |
+|---|---:|---:|---:|---:|
+| full first | 2.832 | 2.940 | 2,056.5 | 1,022,712 |
+| full repeat | 2.061 | 0.816 | 728.9 | 1,022,712 |
+| full capture | 1.654 | 0.410 | 241.3 | 381,064 |
+| full detail | 2.000 | 0.732 | 635.5 | 110,148 |
+| fixture first | 2.647 | 2.599 | 2,583.4 | 331,545 |
+| fixture repeat | 2.424 | 2.179 | 2,163.9 | 331,544 |
+| fixture capture | 0.266 | 0.066 | 38.8 | 179,504 |
+| fixture detail | 0.319 | 0.118 | 101.7 | 110,160 |
+
+The first uncached full request **did not materially improve**: 2.832 → 2.940 s locally; registering and verifying the complete forecast-reuse identity has a small first-miss cost. Repeat full planning, capture and evidence improve substantially. Do not describe a fast cache hit as proof of cold-start or hosted acceptance. Both sizes retain their exact actions, totals, explanations, scoped 280-row stock, cash and provenance; the independent complete replay was fetched separately for equality checks. Responses remain about 1.02 MB full compact, 0.33 MB fixture compact, 0.11 MB scoped detail and 3.75 MB full complete.
+
+Final actual response-boundary phases for full first / repeat (milliseconds, inclusive where nested):
+
+| Phase | First ms | Repeat ms |
+|---|---:|---:|
+| request_body | 0.004 | 0.004 |
+| sample_construction | 303.112 | 0.000 |
+| dataset_validation | 402.098 | 0.000 |
+| sample_input | 787.748 | 0.000 |
+| dataset_context | 866.355 | 79.550 |
+| forecast_identity | 78.655 | 78.803 |
+| network_forecast | 1,398.331 | 81.017 |
+| forecast_reuse | 0.000 | 2.187 |
+| benchmark | 393.225 | 400.098 |
+| independent_replay | 125.490 | 104.152 |
+| explanations | 33.986 | 33.587 |
+| planning | 2,057.361 | 729.816 |
+| review_attachment | 0.024 | 0.011 |
+| response_validation | 0.004 | 0.008 |
+| response_serialization | 2.193 | 2.184 |
+| response_ready | 2,928.543 | 814.315 |
+
+Absent first/miss or repeat/hit phases are zero in this table. `dataset_context` includes sample creation/validation and provenance on a miss; `planning` includes forecasts, benchmark, replay and explanations; neither set should be summed twice. Response validation and JSON serialization are the actual installed FastAPI/Pydantic response-field calls, not a separate estimator. First-response headers and body-drain measurements are retained in `artifacts/final6-boundary-final.json`. Application import was **172.506 ms**, route setup **6.818 ms**, workflow-module import **29.639 ms**, and ASGI lifespan startup **0.009 ms** in this process. These startup metrics are not repeated work on every request. Platform invocation start, interpreter setup before application import and WAN transfer remain separate unknowns until deployment telemetry is available.
+
+## Final component and correctness verification
+
+A separate serial `scripts.planning_profile` comparison against isolated 055eb0a confirms the repeated work eliminated (seconds; inclusive components are not additive):
+
+| Full component | Before first / repeat | After first / repeat |
+|---|---:|---:|
+| Route before final serialization | 2.826 / 2.051 | 2.962 / 0.798 |
+| Sample construction/validation/registration | 0.741 / <0.001 | 0.802 / <0.001 |
+| Forecast preparation, including identity check | 1.338 / 1.330 | 1.438 / 0.081 |
+| Independent replay, three calls | 0.129 / 0.105 | 0.107 / 0.105 |
+| Benchmark construction | 0.392 / 0.395 | 0.396 / 0.394 |
+| Explanation generation | 0.033 / 0.033 | 0.033 / 0.032 |
+| Complete JSON serialization | 0.0113 / 0.0114 | 0.0114 / 0.0112 |
+
+Full joint construction/solve remains unattempted. Fixture route was **2.511 / 2.391 → 2.537 / 2.196 s**, retaining its two-second challenger. This is a targeted repeated-forecast reduction, not evidence that the hosted pre-header residual has been fixed.
+
+Three interleaved **fresh subprocess API imports** measured baseline **0.306 / 0.206 / 0.206 s** and correction **0.160 / 0.153 / 0.175 s** (median **0.206 → 0.160 s**). Every baseline loaded NumPy, openpyxl and accepted-file code; no corrected import loaded those modules. The fresh-import regression additionally excludes SciPy, private-storage composition and unittest.mock. OS filesystem caches were not flushed; these are fresh Python processes, not proven Vercel instance-cold starts. Removing roughly 47 ms of median local imports does not explain all previously observed multi-second hosted residuals.
+
+Final verification: **209 backend tests, 26 browser tests**, solver smoke, exact contract regeneration, production build, forecast/complete-plan/compact-plan/scenario/workflow smokes, release trace, dependencies, compilation and diff checks passed. All four offline fixture/full policy runs passed and repeated files were byte-identical. Private cleanup coverage includes six injected failure/concurrency/API regressions; fourteen provider conformance tests also passed within the complete suite. Cache miss/hit evidence, full-precision calculations, independent replay, scenario identities, stale review rejection and financial reconciliation remain covered. BUILD_STATUS records commands and all four final complete planning measurements. No new Docker or remote verification was possible in this correction.
+
+**Public sample readiness remains open** pending green CI for the exact new correction and a separately authorized canonical deployment passing fixture/full planning, two consecutive full requests, capture and scoped evidence under ten seconds with unchanged payload and reconciliation gates. Docker-compatible tools are unavailable locally. **Full hosted own-data remains blocked**: the actual host reports `enabled: false`, `driver: disabled`; no authorized blob and transactional metadata provider, credentials or real-provider transport/lifecycle verification exists. Neither successful deployment builds nor local speed establishes these release gates.
+
+No push, merge, deployment, paid provisioning or Vercel project-setting change was performed. The instruction prohibiting those actions prevents obtaining a new remote workflow/deployment during this local correction. After separate authorization, verify the exact deployed SHA and correlate diagnostic ASGI phases with Vercel invocation duration and serial client measurements. Keep the duplicate project housekeeping separate from the canonical release check.
+
+---
+
 # Pass 6 focused release correction — 20 September 2026
 
 Started from clean `e51af6fc1dc5338e4f9d54380fe7acceca55edd1`. This section supersedes older release-readiness statements; historical evidence below is retained.

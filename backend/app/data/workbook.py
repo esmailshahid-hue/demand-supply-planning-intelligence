@@ -8,8 +8,6 @@ from time import perf_counter
 from zipfile import ZipFile, BadZipFile
 
 from defusedxml.ElementTree import iterparse
-from openpyxl import Workbook, load_workbook
-from openpyxl.cell import WriteOnlyCell
 from pydantic import ValidationError
 from backend.app import contracts as c
 from backend.app.data.validation import validate_dataset
@@ -62,6 +60,7 @@ def problem(code, guidance, sheet='Workbook', row=None, field=None):
 
 
 def append(ws, values):
+    from openpyxl.cell import WriteOnlyCell
     # Literal strings, including user notes beginning with '=', remain text in exports.
     cells = []
     for value in values:
@@ -80,6 +79,7 @@ def append(ws, values):
 
 
 def template(data=None):
+    from openpyxl import Workbook
     wb = Workbook(write_only=True)
     for name, (field, model, _, _) in TABLES.items():
         ws = wb.create_sheet(name)
@@ -170,6 +170,7 @@ def parse(content, filename='data.xlsx'):
     if Path(filename).suffix.lower() != '.xlsx':
         raise WorkbookError([problem('extension', 'Only .xlsx is supported; .xls and .xlsm are rejected.')])
     expanded = preflight(content)
+    from openpyxl import load_workbook
     # Isolated file exists only within this request, including unexpected exceptions.
     with TemporaryDirectory(prefix='planning-import-') as directory:
         path = Path(directory) / 'input.xlsx'; path.write_bytes(content)
