@@ -1,3 +1,82 @@
+# Final Pass 6 closure check — 20 September 2026
+
+**Verdict: Pass 6 remains open — production latency gate not yet proven.** This section supersedes prior statements that corrected CI, Docker verification or deployment did not exist. Earlier observations remain below as history. Hosted own-data is a separate, intentionally blocked release gate; it is not by itself the reason public-sample Pass 6 remains open.
+
+## Exact candidate, CI and deployment
+
+Local `main`, HEAD and GitHub's live `main` commit lookup all confirmed **03bb1affbe8448849725ad34c939de9601e2dc67** before this closure work. [Verify planning MVP run 35493689224](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35493689224), [job 106032834212](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35493689224/job/106032834212), completed **successfully**. The job log explicitly checks out that SHA; this conclusion is based on logs and completed step results, not just a badge.
+
+CI used Ubuntu **24.04.5**, runner **2.337.0** in **Azure westus**, Python **3.14.7**, Node **24.20.0**. Its HTTP checks address the local Docker container, not the canonical public host:
+
+| Exact-commit workflow check | Actual log result |
+|---|---|
+| Complete backend suite | **209 passed, 2 warnings, 803.23 s** |
+| Host and container solver smoke | Both passed; HiGHS status 0, x=2 |
+| Contract export, generated types, committed-type comparison | All passed; `git diff --exit-code -- frontend/src/contracts.generated.ts` succeeded |
+| Frontend production build | TypeScript and Vite passed; Vite build 1.16 s |
+| Complete browser suite | **26 passed, 4.2 min** |
+| Docker build, startup and health | All passed; dependency-download retry recovered during build |
+| Forecast smoke | Built frontend, health, fixture/full calculations passed |
+| Complete planning | All four rows below passed independent feasibility, finance, dimensions, size, determinism and ten seconds |
+| Compact planning and scoped evidence | Passed compact/complete equality, repeated evidence, stock/cash/provenance, ten seconds and 4.5 MB |
+| Scenarios | Original/frozen/replanned comparisons, invalid frozen-policy disclosure, future-path delays, finance, determinism and scoped evidence passed |
+| Component profiling | Fixture/full first/repeat passed; three independent replay calls retained |
+| Upload/review/accept/export/reopen | Fixture/full passed with CI's **local storage driver**; deterministic downloads, provenance, financial reconciliation, cleanup and session reset passed |
+
+| CI complete plan | HTTP s | Engine ms | Bytes | Purchases / movements |
+|---|---:|---:|---:|---:|
+| Fixture first | 3.199 | 3,139.1 | 786,693 | 24 / 311 |
+| Fixture repeat | 2.439 | 2,402.2 | 786,693 | 24 / 311 |
+| Full first | 6.159 | 5,943.3 | 3,753,092 | 31 / 607 |
+| Full repeat | 2.450 | 2,241.3 | 3,753,092 | 31 / 607 |
+
+Fixture commitments/payments were **SAR 91,606 / 97,746**; full **SAR 92,550 / 99,050**. All four independently replayed policies were honestly **`feasible_fallback`**, with fixture `visible_must_stock:time_limit` and full `joint_model:not_attempted`, followed by the deterministic benchmark. No optimality or solver improvement is claimed.
+
+CI compact full first/repeat HTTP was **2.329 / 2.444 s**, **1,022,713 / 1,022,711 bytes**; full capture **0.990 / 0.851 s**, scoped detail **2.086 / 2.214 s**, **110,149 bytes**. Full component-profile route first/repeat was **8.793 / 2.439 s**, forecast **3.986 / 0.178 s**, benchmark **1.360 / 1.326 s** and independent replay **0.296 / 0.282 s**. These are container evidence, not hosted latency or proven Vercel cold starts.
+
+Both deployment-ID and canonical-host lookups confirmed **dpl_BHtMKw2mgLGXCksj6aB2GqnYBy27**, **READY**, target **production**, region **iad1**, exact **03bb1aff**. The canonical alias currently resolves to that deployment:
+
+- Canonical: [demand-supply-planning-intelligence.vercel.app](https://demand-supply-planning-intelligence.vercel.app)
+- Immutable: [demand-supply-planning-intelligence-qr2woqqgp.vercel.app](https://demand-supply-planning-intelligence-qr2woqqgp.vercel.app)
+
+Exact-deployment runtime logs were inspected for **2026-09-20 06:15:29–07:09:00 UTC**. They contain **one HTTP 400: GET `/` at 06:21:59 UTC**. The connector supplies no cause for it; it predates this closure probe work and must not be silently classified as harmless. Separate 5xx, error/fatal and `timeout` searches returned no entries. There is no new canonical POST verification run to correlate yet. The connector does not expose invocation duration; absence of returned error logs is limited to this window and available telemetry.
+
+## Production latency and manual workflow
+
+The user confirmed no existing authorized remote shell/runner was available. The Codex shell's observed **bom1 → iad1** path and reported **9–14 s TLS establishment** must not count as passing production latency evidence. Earlier unsuccessful measurements remain in the history. Connection/TLS, post-connection waiting, reported calculation, response headers and body transfer must stay separate; no measured application defect has been established by these connection-heavy observations.
+
+No new valid production POST timings were obtained in this closure. An initial ignored local helper rejected an unsupported curl option before sending any request; it is not latency evidence and was superseded by the tested workflow harness. The public session-capability GET via the connected Vercel tool returned HTTP 200 with **`enabled: false`, `driver: disabled`** at 07:06:45 UTC; its tool wall time is not an HTTP phase measurement.
+
+| Required canonical measurement | New production result |
+|---|---|
+| Health, fresh connection | Pending manual workflow |
+| Fixture compact first / repeat | Pending manual workflow |
+| Two consecutive full compact plans | Pending manual workflow |
+| Full-action scenario capture first / repeat | Pending manual workflow |
+| SKU001 / S1 detail first / repeat | Pending manual workflow |
+
+At the user's explicit direction, added [production-latency.yml](../.github/workflows/production-latency.yml), a separate **`workflow_dispatch`-only**, `ubuntu-latest` workflow. The existing green `verify.yml` is unchanged. It requires no Vercel secret, deployment access, Python package installation or new service. Read-only repository permissions and one concurrency group serialize manual runs without cancelling an in-progress run. Checkout/setup-python/upload-artifact use maintained **v7 / Node 24** actions; their official manifests and artifact inputs were checked.
+
+[scripts/production_latency.py](../scripts/production_latency.py) uses the **canonical hostname only**, curl and the standard library. Each request group starts a new curl process; `--next` sends its repeat serially on the same session. It asserts observed fresh/reused connection counts. It records DNS, TCP-ready, TLS-ready, first-byte, body-drain and total seconds, bytes, HTTP/curl status, HTTP version, peer IP, Vercel request/region ID, optional Server-Timing, reported calculation, result status, solver stages and replay status. DNS/TCP/TLS are cumulative milestones; reused connections have no new TCP/TLS handshake. Absent API fields are recorded as null, not invented.
+
+The probe retains **10 s** and **4.5 MB**, uses the existing `validate_plan` and `stable_plan` checks, and verifies capture/detailed evidence against a separate complete replay for the returned actions. Both sample sizes retain their complete dimensions. Slow/malformed/error responses remain failures; later safe checks continue, and missing prerequisite responses explicitly fail dependent checks. There are no retries, sleeps, redirects, warm-up calculations, skipped assertions or complete-response caches. Complete responses fetched for equality also retain the runtime/size checks.
+
+The always-run artifact step uploads raw curl measurements, request/response bodies, headers, errors, aggregate assertions and runner/probe revision metadata under `production-latency-<run_id>-<attempt>` for 30 days. These requests contain only public bundled sample inputs; the workflow does not use private sessions. The runner region is **not assumed to be iad1**: inspect its job setup location and the recorded Vercel request IDs. A green manual run is necessary; alias/deployed-SHA confirmation and exact-deployment runtime-log correlation for its UTC interval remain required before the public verdict closes.
+
+## Verification of the new workflow/harness
+
+- `.venv/bin/python -m unittest backend.tests.test_production_latency -v`: **8 passed**. Includes actual curl POST connection reuse on a loopback server, retained slow-first failures, malformed/failed responses, missing measurements, size/reuse failures, money/policy drift and scoped identity mismatch rejection.
+- `/private/tmp/planning-closure-actionlint/actionlint .github/workflows/production-latency.yml` (v1.7.12): passed. Official release binary used from a temporary directory; repository dependencies unchanged.
+- Full new probe sequence against the **unchanged local API**, with a test-only in-process hostname/protocol substitution: all **11 requests / 105 assertions** and correctness/transport gates passed, including first/repeat connection counts, deterministic policy and authoritative 280-row evidence. Recorded in ignored `artifacts/closure-local-sequence/`; expressly **not production acceptance**.
+- `.venv/bin/python -m compileall -q scripts/production_latency.py backend/tests/test_production_latency.py`: passed. `git diff --exit-code -- .github/workflows/verify.yml` plus byte comparison to HEAD: unchanged. Reviewed command references and **25 local documentation-link targets**, all valid. Final `git diff --check`: passed.
+- `.venv/bin/python -m pytest -q`: **217 passed, 2 existing warnings, 10 subtests passed in 333.69 s**. This is the final local suite including the eight new manual-probe tests; it is separate from the deployed candidate's 209-test GitHub Actions run.
+
+No frontend, application calculation, contracts, dependencies, deployment configuration or existing verification workflow was changed. Frontend build/browser/Docker application gates are already green for **03bb1aff**; they were not rerun solely for the separate probe. New exact-commit CI for the added workflow/script/tests is pending the user's push. The manual workflow was **not pushed or dispatched**.
+
+**Next action:** the user pushes the workflow, obtains green verification for the new commit and manually runs **Verify canonical production latency** from GitHub Actions. Retain the artifact, verify the exact canonical deployment identity again, and inspect its runtime logs over the recorded interval. Public Pass 6 remains pending that successful canonical-host run and correlation. Hosted own-data remains separately disabled pending authorized private storage and real-provider verification; CI conformance/local-storage success does not create a production provider. The existing `demand-supply-planning-intelligence-hahy` project was confirmed in the Vercel project list and remains non-blocking housekeeping; neither project was changed.
+
+---
+
 # Final focused Pass 6 correction — 20 September 2026
 
 Started from clean **055eb0a4f6ee78c77f697569a5acbd044a2f5c53**. This section supersedes earlier readiness statements; historical results remain below.

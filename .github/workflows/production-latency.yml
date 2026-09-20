@@ -1,0 +1,37 @@
+name: Verify canonical production latency
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-production-latency
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out probe revision
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Verify probe failure and evidence handling
+        run: python -m unittest backend.tests.test_production_latency -v
+      - name: Measure canonical production serially
+        run: python -m scripts.production_latency --output artifacts/production-latency
+      - name: Upload all measurements, including failures
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-latency-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/production-latency/
+          if-no-files-found: error
+          retention-days: 30

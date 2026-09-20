@@ -1,3 +1,30 @@
+# Final Pass 6 closure check — 20 September 2026
+
+**Pass 6 remains open — production latency gate not yet proven.** This section supersedes older statements that corrected CI, Docker verification or deployment did not exist. Hosted own-data remains a separate intentionally blocked gate.
+
+Local and remote `main` were confirmed at **03bb1affbe8448849725ad34c939de9601e2dc67**. [Verify planning MVP 35493689224](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35493689224), job **106032834212**, succeeded for that exact checkout: **209 backend tests (803.23 s), 26 browser tests (4.2 min)**, host/container HiGHS smoke, reproducible contracts, production build, Docker build/start/health, forecast, complete/compact planning, authoritative scoped evidence, scenarios, profiling and fixture/full upload/review/accept/export/reopen/reset. The latter uses CI's **local storage driver**, not a hosted private provider. Full results and financial/determinism evidence are in [BUILD_STATUS.md](BUILD_STATUS.md).
+
+Both deployment-ID and canonical-alias lookups confirm **dpl_BHtMKw2mgLGXCksj6aB2GqnYBy27**, **READY**, production, **iad1**, exact **03bb1aff**:
+
+- [Canonical application](https://demand-supply-planning-intelligence.vercel.app)
+- [Immutable deployment](https://demand-supply-planning-intelligence-qr2woqqgp.vercel.app)
+
+Runtime inspection for this exact deployment, **2026-09-20 06:15:29–07:09:00 UTC**, found one **GET `/` HTTP 400 at 06:21:59 UTC**, with no cause provided. Separate 5xx, error/fatal and timeout searches returned no entries. Do not turn that into an unrestricted claim of zero errors; a future manual probe still needs its own request-window correlation. The connector supplies no invocation-duration breakdown.
+
+There is **no new qualifying canonical-host timing run**. The user confirmed the current shell's **bom1 → iad1** route, with approximately **9–14 s TLS establishment**, is unsuitable as passing latency evidence. Those failures remain relevant and do not establish an application defect. No automatic deployment, project/environment change, provisioning, push or dispatch was performed. New production health, fixture first/repeat, full first/repeat, capture and detail timings all remain **pending**.
+
+CI container evidence is distinct: complete full first/repeat **6.159 / 2.450 s**, compact **2.329 / 2.444 s**, capture **0.990 / 0.851 s**, detail **2.086 / 2.214 s**. Compact full responses were **1,022,713 / 1,022,711 bytes**, detail **110,149 bytes**. All independent feasibility, commitments/payments/movement expenses, deterministic actions/totals/explanations, size and evidence checks passed. The deterministic constrained policy remains **`feasible_fallback`**, never optimal. Full component profiling still shows live replay and benchmark work; a fast repeat does not prove an instance-cold start or public WAN latency.
+
+The separate manual [production-latency workflow](../.github/workflows/production-latency.yml) runs on `ubuntu-latest`, sends only canonical-host sample requests, and uploads complete timing/correctness evidence even on failure. Its [probe](../scripts/production_latency.py) records cumulative DNS/TCP/TLS, first byte, body drain, total HTTP, bytes, peer/region/request ID, reported engine/status/stages and replay. Fresh sessions and observed reused connections are checked separately. Fixture/full plans, two consecutive full requests, capture and scoped detail retain **10 seconds** and **4.5 MB**; complete replay confirms stock, cash and provenance. Slow first measurements are retained; there is no retry/sleep/redirect or plan cache.
+
+The production latency gate remains pending until the user pushes this workflow and its manually triggered canonical-host run succeeds. Afterward, verify the alias/deployed SHA and exact-deployment runtime logs for that artifact's UTC window. The probe SHA is not automatically the deployed SHA. A hosted Ubuntu runner's region is not fixed by `ubuntu-latest`; inspect job setup and request IDs before describing the route.
+
+Local harness validation passed actionlint and **8 focused regressions**, plus the full **11-request / 105-assertion** sequence against the unchanged local API. The complete local backend rerun passed **217 tests and 10 subtests in 333.69 s**, with two existing warnings. These prove harness behavior only. The existing `verify.yml` remains unchanged; new exact-commit CI is pending for the added probe/workflow. Final local verification details are in BUILD_STATUS.
+
+The canonical session endpoint was checked again (HTTP 200 at **07:06:45 UTC**) and returns **`enabled: false`, `driver: disabled`**. Full hosted own-data cannot close without an authorized real private provider and lifecycle/isolation/workflow verification. It will not alone keep the separate public-sample gate open once that gate is proven. The duplicate **demand-supply-planning-intelligence-hahy** project still exists and remains non-blocking housekeeping; neither project was disconnected or modified.
+
+---
+
 # Final focused Pass 6 correction — 20 September 2026
 
 Current reviewed baseline is **055eb0a4f6ee78c77f697569a5acbd044a2f5c53**. [CI 35491100761](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35491100761), job **106026056837**, completed successfully: 197 backend tests, 26 browser tests, contracts/build, Docker, solver, complete/compact planning, evidence, scenarios and own-data workflow smokes. Those results certify the baseline only. The new local changes have no new remote run or deployment.
