@@ -10,8 +10,7 @@ from typing import Literal
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from backend.app.contracts import APIError, ENGINE_VERSION, SCHEMA_VERSION, ForecastRequest, ForecastResult, SampleCatalog, SampleRequest
 from backend.app.data.sample import generate_sample
@@ -73,6 +72,31 @@ class BodyLimit:
 app.add_middleware(BodyLimit)
 from backend.app.diagnostics import TimingHeaders
 app.add_middleware(TimingHeaders)
+
+
+class PublicCachePolicy:
+    """Cache only the public shell and Vite's content-hashed asset directory."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        async def cache_send(message):
+            if message['type'] == 'http.response.start':
+                path = scope.get('path', '')
+                value = None
+                if path.startswith('/assets/') and message['status'] == 200:
+                    value = b'public, max-age=31536000, immutable'
+                elif path == '/' and message['status'] == 200:
+                    value = b'public, max-age=0, must-revalidate'
+                if value is not None:
+                    headers = [(key, item) for key, item in message.get('headers', []) if key.lower() != b'cache-control']
+                    message = {**message, 'headers': [*headers, (b'cache-control', value)]}
+            await send(message)
+
+        await self.app(scope, receive, cache_send)
+
+
+app.add_middleware(PublicCachePolicy)
 
 
 @app.exception_handler(RequestValidationError)
@@ -223,14 +247,13 @@ install_workflow(app)
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 # backend/app -> repository root is parents[2].
 if DIST.is_dir():
-    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
-
-
-@app.get("/", include_in_schema=False)
-def index():
-    if not (DIST / "index.html").is_file():
+    # Normal API routes have priority. With no fallback, unknown API and asset
+    # paths remain 404s instead of receiving index.html.
+    app.frontend("/", directory=DIST, fallback=None)
+else:
+    @app.get("/", include_in_schema=False)
+    def index_unavailable():
         return JSONResponse(status_code=503, content={"message": "Frontend not built. Run npm ci && npm run build in frontend/."})
-    return FileResponse(DIST / "index.html")
 
 
 instrument_response_fields(app)

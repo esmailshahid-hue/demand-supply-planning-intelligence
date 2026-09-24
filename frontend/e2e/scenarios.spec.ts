@@ -4,8 +4,7 @@ async function run(page:Page){const pending=wait(page,'/api/scenarios/compare');
 
 test('sample action evidence, actual forecast, three presets, combined scenario and exact reset',async({page})=>{
   test.setTimeout(180_000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/');await expect(page.getByTestId('forecast-result')).toBeVisible();
-  const planning=wait(page,'/api/plan/sample');await page.getByRole('button',{name:/Plan Review/}).click();const plan=await(await planning).json();
+  const planning=wait(page,'/api/plan/sample');await page.goto('/');const plan=await(await planning).json();
   const nonS1=plan.proposed.evidence_targets.find((target:{location_id:string|null})=>target.location_id&&target.location_id!=='S1');expect(nonS1).toBeTruthy();
   const purchaseIndex=plan.proposed.purchases.findIndex((purchase:{action_id:string})=>purchase.action_id===nonS1.action_id);expect(purchaseIndex).toBeGreaterThanOrEqual(0);
   const purchaseRow=page.getByTestId('purchase-table').locator('tbody tr').nth(purchaseIndex);await purchaseRow.locator('summary').click();
@@ -34,7 +33,7 @@ test('sample action evidence, actual forecast, three presets, combined scenario 
   expect(result.definition.delays.length).toBeGreaterThan(0);expect(result.frozen.feasible).toBe(false);expect(result.frozen.summary).toBeNull();
   expect(Object.values(result.shock_delta)).toEqual(expect.arrayContaining([null]));expect(Object.values(result.replan_delta)).toEqual(expect.arrayContaining([null]));expect(Object.values(result.net_delta).every((v:unknown)=>typeof v==='number')).toBe(true);
   await expect(page.getByTestId('frozen-invalid-reason')).toContainText(/Frozen actions are invalid on 2026-/);
-  await expect(page.getByText(/supplier_capacity/).first()).toBeVisible();
+  await page.getByText(/Hard-constraint failures ·/).click();await expect(page.getByText(/supplier_capacity/).first()).toBeVisible();
   await page.getByRole('button',{name:'Reset to baseline'}).click();await page.getByRole('button',{name:'Tighter funds',exact:true}).click();await page.getByRole('button',{name:'Tighter funds',exact:true}).click();result=await run(page);expect(result.frozen.feasible).toBe(false);expect(result.replanned.feasible).toBe(true);
   expect(result.definition.funding).toHaveLength(2);expect(result.definition.funding.map((f:{commitment:number})=>f.commitment)).toEqual(base.weeks.slice(0,2).map((w:{commitment:number})=>Math.round(w.commitment*.3*100)/100));expect(result.definition.funding.every((f:{payment:number|null})=>f.payment===null)).toBe(true);
   await page.getByRole('button',{name:'Promotion',exact:true}).click();await page.getByRole('button',{name:'Supplier disruption',exact:true}).click();result=await run(page);
@@ -53,7 +52,7 @@ test('sample action evidence, actual forecast, three presets, combined scenario 
 });
 
 test('draft and dataset changes prevent an in-flight response overwriting the current selection',async({page})=>{
-  test.setTimeout(100_000);await page.goto('/');await expect(page.getByTestId('forecast-result')).toBeVisible();
+  test.setTimeout(100_000);await page.goto('/');
   const baseline=wait(page,'/api/scenarios/baseline');await page.getByRole('button',{name:/Scenarios/}).click();await baseline;
   await page.getByRole('button',{name:'Promotion',exact:true}).click();
   let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);let fetched!:()=>void;const arrived=new Promise<void>(resolve=>fetched=resolve);

@@ -11,11 +11,21 @@ export const methodNames: Record<Method, string> = {
   seasonal_naive: 'Seasonal naive', weekday_mean: 'Four-week weekday mean', weighted_weekday_mean: 'Recency-weighted weekday mean',
 };
 export async function api<T>(path: string, signal: AbortSignal, body?: unknown, headers: Record<string,string> = sourceHeaders()): Promise<T> {
-  let response: Response;
-  try { response = await fetch(path, { signal, headers: { ...headers, ...(body ? {'Content-Type':'application/json'} : {}) }, ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}) }); } catch(e) { if (signal.aborted) throw e; throw new Error(requestError(e)); }
-  const result = await responseValue(response);
-  if (!response.ok) throw new Error(apiError(result,response.status));
-  return result as T;
+  for (let attempt=0;;attempt++) {
+    let response: Response;
+    try { response = await fetch(path, { signal, headers: { ...headers, ...(body ? {'Content-Type':'application/json'} : {}) }, ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}) }); } catch(e) { if (signal.aborted) throw e; throw new Error(requestError(e)); }
+    const result = await responseValue(response);
+    if (response.status===429&&attempt<20) {
+      await new Promise<void>((resolve,reject)=>{
+        const abort=()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'));};
+        const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},1000*Number(response.headers.get('Retry-After')||2));
+        signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
+      });
+      continue;
+    }
+    if (!response.ok) throw new Error(apiError(result,response.status));
+    return result as T;
+  }
 }
 export const number = (n: number | null | undefined, digits = 1) => n == null ? 'Unavailable' : n.toLocaleString('en-GB', { maximumFractionDigits: digits });
 const roundedForDisplay = (n: number, digits: number) => {

@@ -9,7 +9,7 @@ async function verifyPlan(page: Page, plan: Plan) {
   const proposed = plan.proposed!;
   if (plan.status === 'feasible_fallback') {
     await expect(page.getByRole('heading', { name: 'Validated constrained plan', exact: true })).toBeVisible();
-    await expect(page.getByText(/These recommendations come from the deterministic constrained planner/)).toBeVisible();
+    await expect(page.getByText(/deterministic constrained planner passed independent stock and funding replay/)).toBeVisible();
     expect(plan.stages.at(-1)?.status).toBe('benchmark');
   }
   expect(proposed.replay.feasible).toBe(true);
@@ -17,6 +17,10 @@ async function verifyPlan(page: Page, plan: Plan) {
   await expect(page.getByTestId('plan-result')).toHaveAttribute('data-run-id', plan.run_id);
   await expect(page.getByTestId('plan-commitment')).toHaveText(`SAR ${money(proposed.replay.summary.commitments)}`);
   await expect(page.getByTestId('plan-payments')).toHaveText(`SAR ${money(proposed.replay.summary.payments)}`);
+  const purchaseSection = page.getByTestId('purchase-table').locator('xpath=ancestor::section');
+  if (await purchaseSection.getByRole('button', { name: 'Show all' }).count()) await purchaseSection.getByRole('button', { name: 'Show all' }).click();
+  const movementSection = page.getByTestId('movement-table').locator('xpath=ancestor::section');
+  if (await movementSection.getByRole('button', { name: 'Show all' }).count()) await movementSection.getByRole('button', { name: 'Show all' }).click();
   const purchaseRows = page.getByTestId('purchase-table').locator('tbody tr');
   await expect(purchaseRows).toHaveCount(proposed.purchases.length);
   for (const [i,p] of proposed.purchases.entries()) {
@@ -36,10 +40,8 @@ test('Plan Review matches live purchases, allocations and cash; recalculation an
   test.setTimeout(200_000);
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/');
-  await expect(page.getByTestId('forecast-result')).toBeVisible();
   const first = response(page);
-  await page.getByRole('button', { name: /Plan Review/ }).click();
+  await page.goto('/');
   await expect(page.getByRole('button', { name: 'Calculating plan…' })).toBeDisabled();
   await expect(page.getByTestId('plan-result')).toHaveCount(0);
   const fixture: Plan = await (await first).json();
@@ -81,16 +83,15 @@ test('Plan Review matches live purchases, allocations and cash; recalculation an
 });
 
 test('Plan Review handles API failure and invalid inputs without executable recommendations', async ({ page }) => {
-  await page.route('**/api/plan/sample', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Planning unavailable for this request.' }) }));
+  let invalid=false;
+  await page.route('**/api/plan/sample', route => invalid ? route.fulfill({ json: {
+    run_id:'invalid-test', input_hash:'invalid-test', as_of:'2026-09-14', status:'invalid_inputs',
+    proposed:null, forecasts:[], stages:[], issues:[], failures:[{code:'missing_snapshot',message:'Explicit stock snapshots required.'}],
+  } }) : route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Planning unavailable for this request.' }) }));
   await page.goto('/');
-  await expect(page.getByTestId('forecast-result')).toBeVisible();
-  await page.getByRole('button', { name: /Plan Review/ }).click();
   await expect(page.getByRole('alert')).toContainText('Planning unavailable for this request.');
   await expect(page.getByTestId('plan-result')).toHaveCount(0);
-  await page.route('**/api/plan/sample', route => route.fulfill({ json: {
-    run_id:'invalid-test', input_hash:'invalid-test', as_of:'2026-09-14', status:'invalid_inputs',
-    proposed:null, forecasts:[], issues:[], failures:[{code:'missing_snapshot',message:'Explicit stock snapshots required.'}],
-  } }));
+  invalid=true;
   await page.getByRole('button', { name: 'Retry plan' }).click();
   await expect(page.getByRole('alert')).toContainText('missing_snapshot');
   await expect(page.getByText('Not executable', { exact:true })).toBeVisible();

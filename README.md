@@ -6,7 +6,7 @@ An independent Saudi retail planning portfolio: demand forecasting, multi-locati
 
 The default plan response loads daily stock evidence on demand from authoritative replay; accepted files retain the complete calculation. The provider-independent private storage boundary is tested, but no hosted provider is configured. See [private storage integration](docs/PRIVATE_STORAGE.md).
 
-The app serves a React/TypeScript interface and a Python calculation API from one process. Demand Review evaluates three weekday forecasting methods on a 10-SKU fixture or 60-SKU sample. Plan Review exposes dated stock/cash evidence and exact accept/reject/edit decisions. Scenarios compares unchanged actions with a fresh constrained plan. Data and Assumptions validates a documented workbook before calculation. Baseline smoke retains its 10-second warm live target; fallback status is explicit and does not claim global optimality. See [BUILD_STATUS](docs/BUILD_STATUS.md) for measured results and cold-start qualifications.
+The app serves a React/TypeScript interface and a Python calculation API from one process. It opens on the small-fixture Plan Review; Demand Review data is fetched only when that screen or linked evidence is opened. Plan Review exposes dated stock/cash evidence and exact accept/reject/edit decisions. Demand Review evaluates three weekday forecasting methods on a 10-SKU fixture or 60-SKU sample. Scenarios compares unchanged actions with a fresh constrained plan. Data and Assumptions validates a documented workbook before calculation. Baseline smoke retains its 10-second warm live target; fallback status is explicit and does not claim global optimality. See [BUILD_STATUS](docs/BUILD_STATUS.md) for measured results and cold-start qualifications.
 
 Workbook processing happens on the server after explicit consent. Local data and review files are private temporary session objects, not durable history. Download accepted files before the one-hour expiry or reset. [WORKBOOK.md](docs/WORKBOOK.md) documents all sheets, units, validation, limits, review rules, file formats and external-ID reconciliation. On Vercel, sample workflows remain available but uploads and accepted-file workflows stay unavailable until a private storage adapter is implemented and verified.
 
@@ -29,6 +29,8 @@ npm --prefix frontend run build
 ```
 
 Open **http://127.0.0.1:8000**. API documentation: **http://127.0.0.1:8000/docs**. Startup checks for the compiled frontend; it uses one worker and disables HTTP access logs. Set `PORT` and `HOST` as needed.
+
+The compiled frontend uses FastAPI's low-priority frontend route. On Vercel, the explicit FastAPI static configuration allows only that public shell and its content-hashed assets to be promoted to the CDN despite API middleware; `/api`, session, upload and storage routes remain Python routes. Hashed assets are immutable while `/` revalidates. Local headers, API priority and missing-asset 404s are tested. Exact deployed-route/CDN behavior and hosted timing require a later deployment check; local measurements are not described as cold-start results.
 
 For frontend development, run the API above and `npm --prefix frontend run dev` in another terminal. Vite proxies `/api` to port 8000.
 
