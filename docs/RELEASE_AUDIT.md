@@ -1,3 +1,13 @@
+# Final public-sample release closure — 24 September 2026
+
+Pass 5 and Pass 6 are closed for exact release **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**. Normal verification [35967399001](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967399001) succeeded. The canonical READY production deployment is **`dpl_9zrziwJbe3abDQyxtA1hS6gfjnPa`** in **`iad1`**, available at [the canonical URL](https://demand-supply-planning-intelligence.vercel.app) and [immutable URL](https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app), both serving the exact release commit.
+
+Two consecutive unchanged canonical latency runs passed with no probe failures: [35967540536](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967540536) measured full first/repeat HTTP **9.033 / 3.248 s** and engine **5.381 / 2.557 s**; [35968872124](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35968872124) measured **7.969 / 2.995 s** HTTP and **4.841 / 2.429 s** engine. Approximately **1,022,712-byte** compact responses passed the unchanged cold latency, size, reconciliation, determinism, scenario capture, scoped-detail and independent replay gates. Both runs retained measurement artifacts. The public sample demo, sample planning, scenarios and evidence are production-verified; portfolio-MVP feature development is complete.
+
+Local/Docker workbook upload, review, acceptance, export and portable reopen remain verified. Hosted workbook upload and accepted-export persistence remain intentionally disabled until an authorized private persistent-storage adapter is implemented, configured and lifecycle-tested. That boundary does not block the public sample demo, but this release must not be represented as a fully hosted own-data production service. All earlier statements below that exact-commit CI, deployment or canonical latency acceptance remained pending are historical and superseded by this closure.
+
+---
+
 # Final Pass 6 closure check — 20 September 2026
 
 **Pass 6 remains open — production latency gate not yet proven.** This section supersedes older statements that corrected CI, Docker verification or deployment did not exist. Hosted own-data remains a separate intentionally blocked gate.

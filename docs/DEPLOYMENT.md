@@ -1,3 +1,23 @@
+# Final public-sample production closure — 24 September 2026
+
+**Production verdict:** Pass 5 and Pass 6 are closed for exact release commit **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**. The public sample demo is ready, calculation and hosted-latency gates passed, and portfolio-MVP feature development is complete. This section supersedes earlier pending deployment and latency statements retained below as history.
+
+Deployment identity:
+
+- Canonical URL: [https://demand-supply-planning-intelligence.vercel.app](https://demand-supply-planning-intelligence.vercel.app)
+- Deployment ID: **`dpl_9zrziwJbe3abDQyxtA1hS6gfjnPa`**
+- Immutable URL: [https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app](https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app)
+- State / target / region: **READY / production / `iad1`**
+- Deployed commit: **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**
+
+Exact-commit normal verification [run 35967399001](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967399001) succeeded. Consecutive unchanged canonical latency [run 35967540536](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967540536) and [run 35968872124](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35968872124) also succeeded. Their full first HTTP/engine results were **9.033 / 5.381 s** and **7.969 / 4.841 s**; full repeat results were **3.248 / 2.557 s** and **2.995 / 2.429 s**. Compact responses remained approximately **1,022,712 bytes**.
+
+Both canonical runs passed the unchanged cold full-sample ten-second gate, structured `feasible_fallback` validation, independent replay, payload, reconciliation and determinism assertions, scenario capture and scoped-detail checks. Both uploaded retained artifacts and reported no probe failures. Sample planning, scenarios and evidence are production-verified.
+
+Hosted own-data remains intentionally unavailable. Local/Docker workbook upload, review, acceptance and export are verified, but hosted workbook upload, stored review files and accepted-export persistence remain disabled until an authorized private persistent-storage adapter is implemented and configured. This limitation does not block the public sample portfolio demo; it does prevent describing this release as a fully hosted own-data production service.
+
+---
+
 # Final cold-start latency correction — 24 September 2026
 
 The latest canonical baseline still fails only the retained cold full-sample gate: **11.289 s HTTP / 6.641 s engine**, versus **3.587 / 3.195 s** on repeat, with a **1,022,712-byte** valid `feasible_fallback` response and passing independent replay. The approximately **4.648 s** cold pre-engine/residual interval is now covered by always-on, fixed-name `Server-Timing`; detailed logs remain opt-in. The canonical probe records both the raw timing header and allowlisted parsed phase durations.

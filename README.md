@@ -1,8 +1,8 @@
 # Demand and Supply Planning Intelligence
 
-An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–4 provide live forecasts, feasible planning, original/frozen/replanned scenarios, local XLSX inputs, exact action review, final acceptance and portable exports. Pass 5 adds responsive navigation, keyboard evidence and recoverable review/error states; exact-commit CI has closed that pass. **Pass 6 exact-commit CI and production deployment are verified; public latency acceptance awaits the manual canonical-host workflow. Hosted own-data remains a separate blocked gate. Feature scope is frozen.** No orders are sent.
+An independent Saudi retail planning portfolio: demand forecasting, multi-location allocation and cash/service trade-offs. Passes 1–4 provide live forecasts, feasible planning, original/frozen/replanned scenarios, local XLSX inputs, exact action review, final acceptance and portable exports. Pass 5 adds responsive navigation, keyboard evidence and recoverable review/error states. **Passes 5 and 6 are closed for release `ff2e42d907f6b0a83811849c7efab10ff1007dcc`; the public sample, calculation and hosted-latency gates are verified, and portfolio-MVP feature development is complete.** Hosted own-data remains intentionally unavailable pending an authorized private persistent-storage adapter. No orders are sent.
 
-[Public sample application](https://demand-supply-planning-intelligence.vercel.app) · [Pass 6 audit, measured policy trade-offs and demo script](docs/RELEASE_AUDIT.md). The verified canonical host runs `03bb1aff`, with successful exact-commit CI `35493689224`. The retained 10-second end-to-end gate remains pending a stable remote run of [the manual production latency workflow](.github/workflows/production-latency.yml). Earlier connection-heavy measurements are not passing evidence or proof of an application defect. Local own-data review/export works; hosted own-data remains disabled.
+[Public sample application](https://demand-supply-planning-intelligence.vercel.app) · [Pass 6 audit, measured policy trade-offs and demo script](docs/RELEASE_AUDIT.md). The canonical production deployment is READY in `iad1` at exact commit `ff2e42d`, with successful normal verification run `35967399001`. Two consecutive unchanged canonical latency runs, `35967540536` and `35968872124`, passed the retained cold full-sample gate, replay, response-size, reconciliation, determinism, scenario capture and scoped-detail checks. Local/Docker own-data review and export are verified; hosted upload and accepted-export persistence remain disabled.
 
 The default plan response loads daily stock evidence on demand from authoritative replay; accepted files retain the complete calculation. The provider-independent private storage boundary is tested, but no hosted provider is configured. See [private storage integration](docs/PRIVATE_STORAGE.md).
 
@@ -78,13 +78,13 @@ docker run --rm -p 8000:8000 planning-intelligence
 .venv/bin/python -m scripts.smoke
 ```
 
-Docker is unavailable in the current local workspace. GitHub Actions `35464690297` succeeded for Pass 6 baseline `e51af6fc1dc5338e4f9d54380fe7acceca55edd1`, including 173 backend tests, 26 browser tests, Docker, profiling and upload/review/export checks. Corrected-commit/container verification remains outstanding. See [deployment readiness](docs/DEPLOYMENT.md) for the hosted latency and storage blockers.
+Docker is unavailable in the current local workspace. Exact-commit GitHub Actions run `35967399001` succeeded for release `ff2e42d907f6b0a83811849c7efab10ff1007dcc`, including the established Linux/container verification matrix. See [deployment status](docs/DEPLOYMENT.md) for the completed public-sample evidence and the separate hosted-storage limitation.
 
 ## Project guide
 
 - [Build specification](docs/DEMAND_SUPPLY_MVP_BUILD_PLAN.md): source of truth and six-pass scope.
 - [Build status](docs/BUILD_STATUS.md): executed checks and remaining verification boundaries.
-- [Release audit](docs/RELEASE_AUDIT.md): traced calculations, offline realized policy evaluation, verified hosted revision and release blockers.
+- [Release audit](docs/RELEASE_AUDIT.md): traced calculations, offline realized policy evaluation, verified hosted revision and final public-sample closure.
 - [Workbook workflow](docs/WORKBOOK.md): sheets, validation, review, exports and reconciliation.
 - [Forecast methodology and contracts](docs/FORECASTING.md): cutoff rules, fallback policy and metric definitions.
 - [Planning methodology](docs/PLANNING.md): staged model, benchmark, independent replay and cash semantics.
@@ -93,7 +93,7 @@ Docker is unavailable in the current local workspace. GitHub Actions `3546469029
 - `backend/app/forecasting/engine.py`: the sole forecast/evaluation implementation.
 - `frontend/src/`: four-screen shell, live Demand Review and Plan Review.
 
-Calculations process inputs on the server after consent. There are no accounts, database, persistent history or automatic purchasing. Pass 6 is bounded to specification audit and hosted release verification; private hosted storage requires separate authorization and lifecycle verification. No new scenario types, dashboards, AI narration or integrations are planned in this scope freeze.
+Calculations process inputs on the server after consent. There are no accounts, database, persistent history or automatic purchasing. The six-pass portfolio MVP is complete. Private hosted storage remains separate future work requiring authorization, implementation and lifecycle verification; no new scenario types, dashboards, AI narration or integrations are part of this release.
 
 Offline release evidence (truth stays outside API inputs):
 

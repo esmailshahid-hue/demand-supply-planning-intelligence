@@ -1,3 +1,26 @@
+# Final public-sample release closure — 24 September 2026
+
+**Final verdict:** Pass 5 is closed; Pass 6 is closed; the public sample demo is ready; calculation and hosted-latency gates passed; portfolio-MVP feature development is complete. This section supersedes all pending-readiness statements in the historical sections below.
+
+The verified application release is exact commit **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**. Normal [Verify planning MVP run 35967399001](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967399001) completed successfully for that exact commit, including the established application, browser, Linux/container and local-storage workflow verification matrix.
+
+The canonical host is [https://demand-supply-planning-intelligence.vercel.app](https://demand-supply-planning-intelligence.vercel.app). It resolves to production deployment **`dpl_9zrziwJbe3abDQyxtA1hS6gfjnPa`**, immutable URL [https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app](https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app), state **READY**, target **production**, region **`iad1`**, deployed commit **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**.
+
+Two consecutive unchanged canonical production-latency workflows passed:
+
+| Workflow run | Full first HTTP / engine | Full repeat HTTP / engine | Compact bytes | Result |
+|---|---:|---:|---:|---|
+| [35967540536](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967540536) | **9.033 / 5.381 s** | **3.248 / 2.557 s** | approximately 1,022,712 | success |
+| [35968872124](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35968872124) | **7.969 / 4.841 s** | **2.995 / 2.429 s** | approximately 1,022,712 | success |
+
+Both workflows used the canonical production hostname, passed the unchanged under-ten-second cold full-sample gate, returned structured `feasible_fallback` plans, passed independent replay, response-size, reconciliation and determinism checks, completed scenario capture and scoped-detail checks, uploaded retained measurement artifacts and reported no probe failures. Sample planning, scenarios and authoritative evidence are therefore production-verified.
+
+The own-data boundary remains intentionally narrower. Local and Docker workbook upload, validation, review, regeneration, acceptance, export and portable reopen are verified. Hosted workbook upload, durable review state and accepted-export persistence remain disabled until an authorized private persistent-storage adapter is implemented, configured and verified for transport, isolation, expiry and deletion. This does **not** block the public sample portfolio demo, but it does block describing the application as a fully hosted own-data production service.
+
+No additional feature or latency work is pending for the public portfolio MVP. Historical sections below remain as the audit trail for earlier failures and corrections; their statements that exact-commit CI, deployment or canonical latency acceptance were pending are superseded by this closure.
+
+---
+
 # Final cold-start latency correction — 24 September 2026
 
 **Status: locally verified and ready to commit; exact-commit CI, deployment and canonical-host acceptance remain pending.** This work started from clean `17eaa4be79b7b8bdc7977a24f329438742db36b3`. No push, deployment, workflow dispatch, Vercel setting, latency/size gate, dataset dimension, planning rule or response contract was changed.
