@@ -1,8 +1,9 @@
-"""Full precision reference hashes captured before changes.
+"""Full precision policy references; full v3 deliberately recalibrates inputs.
 
 Calculation hashes cover every action, stock/cash/service row and policy while
 excluding only the intentionally changed explanation fields. Forecast hashes
-cover all quantities rather than only the SKU001 demo result.
+cover all quantities rather than only the SKU001 demo result. Both forecast
+references and the fixture policy are unchanged; v3 full policy is newly pinned.
 """
 import json
 from hashlib import sha256
@@ -35,7 +36,7 @@ def calculation_policy(result):
 
 @pytest.mark.parametrize('size,policy_hash,forecast_hash',[
  ('fixture','a511d4512b0adae0c5431473d0d41b6346e3335b487e21ea389c163b7347b414','e3be2683a27701455fb8a8bdec87e36fa0e669f6c1cf2dedaecacd1e6dc4a489'),
- ('full','af7c81c6c19b82a183102da74df37739e3b1387b2f4fad591cd92a3df8301db3','1fa197074db28021aabb89ad1826b088d0119bccad54546355978cd9d6ba4290')])
+ ('full','cdfbbeb7873dcd45cf437468a2654ccf9060ed1d0d44784c491b030698332bb3','1fa197074db28021aabb89ad1826b088d0119bccad54546355978cd9d6ba4290')])
 def test_full_precision_sample_equivalence(size,policy_hash,forecast_hash):
     def digest(value):return sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     data=sample(size)[0];prepared=network_forecasts(data,perf_counter()+30)

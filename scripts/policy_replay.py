@@ -25,7 +25,7 @@ from backend.app.simulation.replay import cents, replay, week
 
 def initial_state(data):
     data = data.model_copy(deep=True)
-    # Ex ante evaluation-calendar assumption, identical for both policies.
+    # Ex ante evaluation-calendar assumption, identical for all policies.
     last = max(data.budgets, key=lambda b: b.week_start)
     data.budgets += [last.model_copy(update={'week_start': last.week_start + timedelta(days=7*i)}) for i in (1, 2, 3)]
     return data
@@ -77,7 +77,7 @@ def execute_week(data, policy, demand, buffers, truth, transit_values=None):
     initial = sum(stock.values()) + sum(t.remaining_units for t in transfers)
     transit = sum(t.remaining_units for t in transfers)
     external = served = total = inventory_days = 0
-    observations = []; executed = []; cancelled = []
+    observations = []; executed = []; cancelled = []; unmet_by_series = defaultdict(int)
     transfer_arrivals = defaultdict(int)
     for t in transfers: transfer_arrivals[t.arrival_date] += t.remaining_units
     for i in range(7):
@@ -98,6 +98,7 @@ def execute_week(data, policy, demand, buffers, truth, transit_values=None):
             values[key] -= cost*filled; stock[key] -= filled
             served_value += cost*filled
             total += qty; served += filled
+            unmet_by_series[f'{a.sku}/{a.location_id}'] += qty-filled
             event = next((e.event_id for e in data.events if e.start <= day <= e.end and
                 ((e.scope=='sku' and e.scope_id==a.sku) or (e.scope=='store' and e.scope_id==a.location_id) or
                  (e.scope=='category' and e.scope_id==products[a.sku].category))), None)
@@ -158,6 +159,7 @@ def execute_week(data, policy, demand, buffers, truth, transit_values=None):
     result.declared_empty = [name for name in ('open_orders','open_transfers','payables') if not getattr(result,name)]
     return result, {'origin':str(start),'demand_units':total,'fulfilled_units':served,'unmet_units':total-served,
         'fill_pct':100*served/total if total else None,'average_inventory_units':inventory_days/7,
+        'unmet_by_series':dict(unmet_by_series),
         'commitments_sar':committed/100,'payments_in_week_sar':due[week(start)]/100,
         'movement_expense_sar':sum(fees.values())/100,'future_payables_sar':sum(cents(p.amount) for p in pending)/100,
         'closing_inventory_value_sar':closing_value,'inventory_value_conservation':True,'pending_transfer_values_sar':pending_values,'dated_funding_feasible':True,'independent_origin_replay':verified.feasible,'stock_conservation':True,
@@ -171,7 +173,7 @@ def evaluate(size='fixture', seed=97, weeks=4):
     assert 1 <= weeks <= 4
     bundle = generate_bundle(size,seed)
     truth = {(r['sku'],r['location_id'],r['day']):r['true_demand'] for r in bundle.truth}
-    states = {name:initial_state(bundle.inputs) for name in ('proposed','benchmark')}
+    states = {name:initial_state(bundle.inputs) for name in ('proposed','benchmark','no_action')}
     records = {name:[] for name in states}
     valuations = {name:None for name in states}
     for _ in range(weeks):

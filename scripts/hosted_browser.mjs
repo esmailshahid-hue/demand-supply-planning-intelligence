@@ -20,7 +20,11 @@ async function layout(name) {
   steps.push(name); console.log(name);
 }
 try {
-  await actResponse('/api/forecast/sample',()=>page.goto(url));
+  await actResponse('/api/plan/sample',()=>page.goto(url));
+  await expect(page.getByTestId('plan-result')).toBeVisible({timeout:15_000});
+  await expect(page.getByRole('region',{name:'Reviewed actions'})).toHaveCount(0);
+  await layout('verified-opening-plan-desktop');
+  await actResponse('/api/forecast/sample',()=>page.getByRole('button',{name:'Demand Review',exact:true}).click());
   await expect(page.getByTestId('forecast-result')).toBeVisible({timeout:15_000});
   await expect(page.getByText('Pooled signed bias',{exact:true})).toBeVisible();
   await layout('verified-demand-desktop');
@@ -31,8 +35,10 @@ try {
   await actResponse('/api/forecast/sample',()=>page.getByRole('combobox',{name:'Store',exact:true}).selectOption('S2'));
   steps.push('full forecast/product/store/recalculate');
   await actResponse('/api/plan/sample',()=>page.getByRole('button',{name:'Plan Review',exact:true}).click());
+  const fullPlan=await(await actResponse('/api/plan/sample',()=>page.getByLabel('Planning dataset',{exact:true}).selectOption('full'))).json();
+  expect(fullPlan.provenance.sample_size).toBe('full');
   await expect(page.getByTestId('plan-result')).toBeVisible({timeout:15_000});await layout('verified-plan-desktop');
-  const row=page.getByTestId('movement-table').locator('tbody tr').filter({hasText:'S2 → S1'}).first();
+  const row=page.getByTestId('movement-table').locator('tbody tr').first();
   await row.locator('summary').click();
   const d=await(await actResponse('/api/scenarios/detail',()=>row.getByRole('button',{name:'Inspect movement and forecast'}).click())).json();
   expect(d.feasible).toBe(true);await expect(page.getByTestId('action-evidence')).toContainText('Selected action',{timeout:15_000});

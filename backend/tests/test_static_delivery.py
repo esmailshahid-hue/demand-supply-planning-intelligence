@@ -56,7 +56,22 @@ def test_vercel_only_promotes_declared_public_frontend_files():
     config = json.loads((ROOT / 'vercel.json').read_text())
 
     assert not (ROOT / 'pyproject.toml').exists()
+    assert config['buildCommand'].endswith('npm --prefix frontend run build:vercel')
+    assert config['rewrites'] == [{'source': '/', 'destination': '/index.html'}]
+    scripts = json.loads((ROOT / 'frontend/package.json').read_text())['scripts']
+    assert '--outDir ../public' in scripts['build:vercel']
     assert config['functions']['app.py']['maxDuration'] == 60
     headers = {entry['source']: entry['headers'][0]['value'] for entry in config['headers']}
     assert headers['/assets/(.*)'].endswith('immutable')
     assert headers['/'] == 'public, max-age=0, must-revalidate'
+
+
+def test_vercel_public_artifact_is_only_the_compiled_frontend():
+    public = ROOT / 'public'
+    if not (public / 'index.html').exists():
+        pytest.skip('CDN artifact is verified after build:vercel')
+    files = {p.relative_to(public).as_posix() for p in public.rglob('*') if p.is_file()}
+    assert files == {'index.html'} | {p for p in files if p.startswith('assets/index-') and p.endswith(('.js', '.css'))}
+    assert (public / 'index.html').read_bytes() == (DIST / 'index.html').read_bytes()
+    for path in files:
+        assert (public / path).read_bytes() == (DIST / path).read_bytes()

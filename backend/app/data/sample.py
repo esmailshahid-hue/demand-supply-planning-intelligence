@@ -3,11 +3,13 @@ from backend.app.diagnostics import timed, measure
 from dataclasses import dataclass
 from datetime import date, timedelta
 from random import Random
+from math import ceil
+from collections import defaultdict
 
 from backend.app.contracts import Dataset
 from backend.app.forecasting.engine import midnight
 
-SAMPLE_VERSION = "sample-v2"
+SAMPLE_VERSION = "sample-v3"
 AS_OF = date(2026, 9, 14)
 CASES = {
     "uneven_stock": "SKU001", "censored_history": "SKU002", "dated_promotion": "SKU003",
@@ -121,12 +123,12 @@ def generate_bundle(size="fixture", seed=97):
                dict(external_id="PAY-RECEIVED-001", linked_external_id="PO-RECEIVED-001", due_date=AS_OF+timedelta(days=18), amount=1200)]
     monday = AS_OF-timedelta(days=AS_OF.weekday())
     # The 10-SKU fixture intentionally retains its original funding stress case.
-    # The 60-SKU sample has 6.36x its visible demand, so it receives a simple,
-    # deliberately conservative scale allowance rather than the fixture caps.
+    # Full-network authority supports replenishment at its actual operating scale.
+    # The opening fortnight is deliberately tighter than subsequent weeks.
     if size == "fixture":
         commitment = (1500, 15000); payment = (4000, 18000); transfer_budget = 800
     else:
-        commitment = (9000, 30000); payment = (12000, 30000); transfer_budget = 1200
+        commitment = (140000, 220000); payment = (140000, 220000); transfer_budget = 1200
     budgets = [dict(week_start=monday+timedelta(days=7*k), new_commitment_cap=commitment[k >= 2],
                     payment_ceiling=payment[k >= 2], transfer_budget=transfer_budget) for k in range(14)]
     lanes = [dict(source="DC", destination=f"S{i}", transit_days=1 if i < 3 else 2,
@@ -134,6 +136,38 @@ def generate_bundle(size="fixture", seed=97):
                   pack_units=10, allowed_skus=[p["sku"] for p in products]) for i in range(1, 5)]
     lanes += [dict(source="S2", destination="S1", transit_days=2, dispatch_weekdays=list(range(7)),
                    capacity_units=300, grouped_dispatch_fee=20, pack_units=10, allowed_skus=[p["sku"] for p in products])]
+    if size == "full":
+        # Set opening cover from information available at the origin only. No
+        # latent demand, withheld days, forecasts or policy scores enter this rule.
+        observed = defaultdict(list)
+        for row in history:
+            if (AS_OF-timedelta(days=56) <= row["day"] < AS_OF
+                    and row["available_at"] <= midnight(AS_OF)
+                    and row["is_open"] and row["stock_available"] is True
+                    and row["sales_units"] is not None and row["event_id"] is None):
+                observed[row["sku"], row["location_id"]].append(row["sales_units"])
+        rates = {(a["sku"], a["location_id"]):
+                 sum(observed[a["sku"], a["location_id"]])/len(observed[a["sku"], a["location_id"]])
+                 if observed[a["sku"], a["location_id"]] else 0 for a in assortment}
+        for r in inventory:
+            # Preserve the named imbalance, supplier-shortage and late-inbound cases.
+            if r["sku"] in ("SKU001", "SKU004", "SKU008"):
+                continue
+            rate = (sum(v for (sku, _), v in rates.items() if sku == r["sku"])
+                    if r["location_id"] == "DC" else rates[r["sku"], r["location_id"]])
+            cover = 14
+            r["on_hand"] = ceil(rate*cover/10)*10
+        # Two consolidated dispatch opportunities; same total weekly DC lane
+        # capacity as seven daily 1,000-unit opportunities, larger packs. The
+        # longest supplier path still fits the existing 28-day protection bound.
+        for lane in lanes:
+            lane["dispatch_weekdays"] = [0, 3]
+            lane["capacity_units"] = lane["capacity_units"]*7//2
+            lane["pack_units"] = 300 if lane["source"] == "DC" else 10
+        # Full-network supplier deliveries are 600-unit lots (divisible by both
+        # existing case sizes), not daily top-ups. Dated capacity is unchanged.
+        for offer in offers:
+            offer["moq_units"] = 600
     inputs = Dataset(dataset_id=f"{SAMPLE_VERSION}-{size}-{seed}", synthetic=True, products=products,
         locations=locations, assortment=assortment, demand_history=history, inventory=inventory, suppliers=suppliers,
         supplier_offers=offers, supplier_capacity=capacity, transfer_lanes=lanes, open_orders=open_orders,

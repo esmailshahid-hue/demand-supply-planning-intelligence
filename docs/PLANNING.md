@@ -1,5 +1,7 @@
 # Planning calculations and sample scenarios
 
+Current full-sample data is `sample-v3`; [SAMPLE_CALIBRATION.md](SAMPLE_CALIBRATION.md) records the frozen ex-ante assumptions and offline outcomes. Calculation policies below are unchanged. Current verification is in [BUILD_STATUS.md](BUILD_STATUS.md); dated pass measurements below are historical, not current deployment evidence.
+
 Final Pass 6 preparation reuse is limited to the exact registered bundled fixture/full dataset objects and their complete unchanged hash, engine/schema, forecast and preparation versions. Only demand arrays, buffers and forecast traces are copied from the bounded cache; every recommendation, scenario/action identity check and independent replay still runs. Mutated samples, uploaded copies and transformed datasets miss the cache. No complete plan or private session data is cached. See BUILD_STATUS for measurement and release limits.
 
 Pass 6 transport correction: main plan, review and scenario-draft responses use `stock_detail: on_demand` with the full `stock_row_count`; only the daily stock table is omitted. Scoped evidence independently reconstructs the selected SKU and related locations with exact dataset/scenario/action hashes; private reviews also bind run and revision. The complete replay remains authoritative for acceptance/exports and is available with `include_stock=true` for verification. Calculation policies below are unchanged. Measured performance and release limitations are in [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
@@ -54,7 +56,7 @@ The user deliberately retired exact default-fixture completion as an MVP prerequ
 
 The original two-second choice preserved fast exact completion for hand models while avoiding the measured fruitless 28-second sample solve. Before the focused Pass 3 correction, local HTTP first/repeat was 2.908 / 2.644 seconds for fixture and 6.468 / 6.673 seconds for full; actions, totals and explanations matched exactly, all replay checks passed, and all cash reconciled. The 18 September size-aware policy and current measurements are documented above. The request deadline remains cooperative, not an OS-enforced kill, and hosted/CI timings require their own verification.
 
-Future scenarios may compare frozen and replanned validated policies when both use identical scenario assumptions and independent validation. This pass adds no scenario functionality. Scenario responses must share or reference ledgers rather than duplicate the full daily ledger: the current full response is approximately 3.75 MB against the 4.5 MB ceiling.
+Scenarios compare frozen and replanned validated policies under identical scenario assumptions and independent validation. Responses share or reference ledgers rather than duplicating the full daily ledger; current compact/complete response measurements are in BUILD_STATUS against the unchanged 4.5 MB ceiling.
 
 ## Runtime verification correction
 
@@ -96,4 +98,4 @@ Pass 3 scenario responses must continue sharing or referencing the proposed dail
 
 Loading clears the prior result; changing the planning dataset or recalculating updates the whole result from one API response. Aborted requests cannot overwrite newer UI state. Server calculation continues after a browser abort; the shared process semaphore returns 429 with retry guidance while it finishes. This is per-process admission control, not distributed scheduling. No plan is persisted or released to suppliers.
 
-Scenarios, reviewed edits/locks, workbook workflows, exports and hosted release audit remain later passes. Existing confirmed transactions are fixed input actions; there is no Pass 4 user lock workflow yet.
+Scenarios, reviewed edits/locks, workbook workflows and exports were added in subsequent completed passes and are documented above and in WORKBOOK. Existing confirmed transactions remain fixed input actions. Hosted release verification is separately tracked in DEPLOYMENT; no proposed action executes an order.

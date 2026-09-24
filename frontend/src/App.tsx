@@ -6,12 +6,12 @@ import Demand from './Demand';
 import PlanReview from './PlanReview';
 import Scenarios from './Scenarios';
 import type { Detail, Plan } from './scenarioApi';
-import type { ReviewGate, ReviewMutationPhase, ReviewRecovery } from './reviewState';
+import type { ReviewMutationPhase, ReviewRecovery } from './reviewState';
+import { useReviewState } from './useReviewState';
 
 const screens = ['Plan Review', 'Demand Review', 'Scenarios', 'Data and Assumptions'] as const;
 type Screen = typeof screens[number];
 type PlanContext = { plan: Plan; size: Size };
-const planKey = (plan: Plan) => plan.review_id || plan.run_id;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('Plan Review');
@@ -21,7 +21,6 @@ export default function App() {
   const [scenarioInitial, setScenarioInitial] = useState<PlanContext | null>(null);
   const [scenarioDerived, setScenarioDerived] = useState<{ reviewId: string; original: PlanContext | null } | null>(null);
   const [reviewRecovery, setReviewRecovery] = useState<ReviewRecovery | null>(null);
-  const [planGate, setPlanGate] = useState<{ key: string; gate: ReviewGate } | null>(null);
   const [mutationPhase, setMutationPhase] = useState<ReviewMutationPhase>('idle');
   const [linkedForecast, setLinkedForecast] = useState<Detail | null>(null);
   const [size, setSize] = useState<Size>('fixture');
@@ -38,6 +37,8 @@ export default function App() {
   const [sessionRetry, setSessionRetry] = useState(0);
   const [datasetGeneration, setDatasetGeneration] = useState(0);
   const mutationPending = mutationPhase === 'awaiting-response';
+  const cachedPlan = openedPlan || planContext?.plan || null;
+  const reviewState = useReviewState(cachedPlan, reviewRecovery, mutationPhase);
 
   const clearWorkflow = () => {
     setOpenedPlan(null);
@@ -45,7 +46,6 @@ export default function App() {
     setScenarioInitial(null);
     setScenarioDerived(null);
     setReviewRecovery(null);
-    setPlanGate(null);
     setMutationPhase('idle');
     setLinkedForecast(null);
   };
@@ -147,7 +147,6 @@ export default function App() {
     setLocation(nextCatalog.locations[0].location_id);
     clearWorkflow();
     setOpenedPlan(plan);
-    setPlanGate({ key: planKey(plan), gate: { blocked: true, reason: 'Review state is loading.' } });
     setDatasetGeneration(value => value + 1);
     setScreen('Plan Review');
   };
@@ -155,12 +154,7 @@ export default function App() {
   const rememberPlan = useCallback((plan: Plan, nextSize: Size) => {
     setPlanContext({ plan, size: nextSize });
     setSize(nextSize);
-    setPlanGate(current => current?.key === planKey(plan) ? current : {
-      key: planKey(plan),
-      gate: { blocked: !!plan.review_id, reason: plan.review_id ? 'Review state is loading.' : '' },
-    });
   }, []);
-  const updateScenarioState = useCallback((plan: Plan, gate: ReviewGate) => setPlanGate({ key: planKey(plan), gate }), []);
   const recordRecovery = useCallback((next: ReviewRecovery) => {
     setReviewRecovery(next);
     setScenarioDerived(current => current ? { ...current, reviewId: next.review.reference } : current);
@@ -194,17 +188,16 @@ export default function App() {
     setScenarioInitial(null);
     setScenarioDerived(null);
     setReviewRecovery(null);
-    setPlanGate(null);
   };
 
-  const currentPlanBlocked = !!planContext && (!planGate || planGate.key !== planKey(planContext.plan) || planGate.gate.blocked);
+  const currentPlanBlocked = !!cachedPlan && reviewState.gate.blocked;
   const scenariosDisabled = mutationPending || !!scenarioDerived || currentPlanBlocked;
   const scenarioDerivedActive = !!scenarioDerived && (
     scenarioDerived.reviewId === (openedPlan?.review_id || planContext?.plan.review_id)
     || scenarioDerived.reviewId === reviewRecovery?.review.reference
   );
   const openScenarios = (context: PlanContext | null = planContext) => {
-    if (mutationPending || scenarioDerived || (context && (!planGate || planGate.key !== planKey(context.plan) || planGate.gate.blocked))) return;
+    if (mutationPending || scenarioDerived || (context && reviewState.gate.blocked)) return;
     setScenarioInitial(context);
     setLinkedForecast(null);
     setScreen('Scenarios');
@@ -217,7 +210,6 @@ export default function App() {
     setOpenedPlan(original?.plan || null);
     setPlanContext(original);
     setScenarioInitial(original);
-    setPlanGate(original ? { key: planKey(original.plan), gate: { blocked: false, reason: '' } } : null);
     setScreen('Scenarios');
   };
   const navigate = (name: Screen) => {
@@ -225,7 +217,6 @@ export default function App() {
     if (name === 'Scenarios') openScenarios();
     else setScreen(name);
   };
-  const cachedPlan = openedPlan || planContext?.plan || null;
   const firstPlanForecast = planContext?.plan.forecasts[0];
 
   return (
@@ -243,7 +234,7 @@ export default function App() {
             const title = name === 'Scenarios' && scenariosDisabled
               ? scenarioDerived
                 ? 'Return to the original scenario baseline before starting another comparison.'
-                : planGate?.gate.reason || 'Finish the current review before testing scenarios.'
+                : reviewState.gate.reason || 'Finish the current review before testing scenarios.'
               : undefined;
             return <button key={name} className={screen === name ? 'nav-item active' : 'nav-item'} aria-current={screen === name ? 'page' : undefined} disabled={disabled} title={title} onClick={() => navigate(name)}><span className="nav-number" aria-hidden="true">0{index + 1}</span>{name}</button>;
           })}
@@ -258,6 +249,7 @@ export default function App() {
         <header className="topbar"><span>Planning workspace <span className="crumb">/ {screen}</span></span><span className="sample-label">{source?.provenance?.source === 'portable' ? 'PORTABLE SNAPSHOT' : source ? 'UPLOADED DATA' : 'SYNTHETIC DATA'} <span>· SAR · Riyadh</span></span></header>
         <main id="main-content" tabIndex={-1}>
           <div className="page-heading"><div><p className="eyebrow">Demand and supply planning</p><h1>{screen}</h1><p>{screen === 'Demand Review' ? 'A forecast you can trace back to the evidence.' : screen === 'Plan Review' ? 'What to buy, where stock goes, and which demand remains uncovered.' : screen === 'Data and Assumptions' ? 'Know what is included, and where the evidence stops.' : 'Compare the shock with keeping your actions and with replanning.'}</p></div><span className="phase-tag">Portfolio MVP</span></div>
+          {reviewState.error && <div role="alert" className="error"><p>Review status could not be loaded: {reviewState.error}</p><button disabled={mutationPending} onClick={reviewState.retry}>Retry review</button></div>}
           {screen === 'Data and Assumptions' ? (
             <DataWorkspace onUse={useData} onReset={resetData} onReopen={reopen} reconciliationReference={reviewRecovery?.review.reference || openedPlan?.review_id}/>
           ) : screen === 'Demand Review' && linkedForecast ? (
@@ -278,8 +270,10 @@ export default function App() {
           ) : screen === 'Plan Review' ? (
             !sessionReady ? <div className="loading" role="status">Preparing the planning workspace…</div> : <>
               {sessionError && <p className="notice" role="alert">Review availability could not be checked. Sample planning remains available. <button onClick={() => setSessionRetry(value => value + 1)}>Retry availability</button></p>}
-              <PlanReview key={`${source?.reference?.object_id || 'sample'}:${datasetGeneration}`} initialPlan={cachedPlan} datasetLocked={!!openedPlan} recovery={reviewRecovery} scenarioDerived={scenarioDerivedActive} mutationPhase={mutationPhase} onReviewed={reviewPlan} uploaded={!!source} onReady={rememberPlan} onPlanInvalidated={invalidatePlan} onForecast={openForecast} onScenarios={(plan, nextSize) => openScenarios({ plan, size: nextSize })} onReturnToOriginalScenario={returnToOriginalScenario} onScenarioState={updateScenarioState} onRecovery={recordRecovery} onRecoveryClear={clearRecovery} onMutation={setMutationPhase}/>
+              <PlanReview key={`${source?.reference?.object_id || 'sample'}:${datasetGeneration}`} initialPlan={cachedPlan} datasetLocked={!!openedPlan} recovery={reviewRecovery} reviewState={reviewState} scenarioDerived={scenarioDerivedActive} mutationPhase={mutationPhase} onReviewed={reviewPlan} uploaded={!!source} onReady={rememberPlan} onPlanInvalidated={invalidatePlan} onForecast={openForecast} onScenarios={(plan, nextSize) => openScenarios({ plan, size: nextSize })} onReturnToOriginalScenario={returnToOriginalScenario} onRecovery={recordRecovery} onRecoveryClear={clearRecovery} onMutation={setMutationPhase}/>
             </>
+          ) : currentPlanBlocked ? (
+            <p role="status">{reviewState.gate.reason} Scenario handoff remains blocked.</p>
           ) : (
             <Scenarios uploaded={!!source} firstSku={catalog?.products[0]?.sku || firstPlanForecast?.sku} firstStore={catalog?.locations[0]?.location_id || firstPlanForecast?.location_id} initial={scenarioInitial} onForecast={openForecast} onReview={plan => { if (mutationPending) return; setScenarioDerived({ reviewId: plan.review_id!, original: scenarioInitial }); setReviewRecovery(null); setOpenedPlan(plan); setScreen('Plan Review'); }}/>
           )}

@@ -1,8 +1,12 @@
 # Sample scenarios — Pass 3
 
-## Prompt 2 sample calibration — 24 September 2026
+## Current sample v3 calibration — 24 September 2026
 
-Bundled data is now `sample-v2`; scenario snapshots are `sample-scenarios-2`, and prior hashes/versions are rejected instead of being silently reused. The fixture remains the exact original funding stress case: SAR 1,500 commitment / 4,000 payment for weeks 1–2, then SAR 15,000 / 18,000, with SAR 800 weekly transfer allowance. Only the full sample changed: SAR 9,000 / 12,000 for weeks 1–2, then SAR 30,000 / 30,000, with SAR 1,200 transfer allowance. All operational inputs and the separately held truth retain their pinned hashes.
+The final bounded correction supersedes the funding-only v2 calibration below. Sample IDs are now `sample-v3`; snapshot schema remains `sample-scenarios-2`, while stale dataset IDs/hashes are rejected. Full opening inventory, pack/minimum sizes, dispatch calendars and funding are calibrated ex ante; fixture calculations and all forecast quantities remain unchanged. Four weekly withheld releases achieve 85.75% full fill versus 48.27% with no new action, with independent feasibility, binding constraints and two disclosed observed-stock movement cancellations. See [SAMPLE_CALIBRATION.md](SAMPLE_CALIBRATION.md) for frozen rules and [BUILD_STATUS.md](BUILD_STATUS.md) for current measurements. Original/frozen/replanned arithmetic and all scenario transformations are unchanged.
+
+## Historical Prompt 2 funding-only calibration — sample v2
+
+At that earlier stage bundled data became `sample-v2`. The fixture retained SAR 1,500 commitment / 4,000 payment for weeks 1–2, then SAR 15,000 / 18,000, with SAR 800 weekly transfer allowance. Full funding became SAR 9,000 / 12,000 for weeks 1–2, then SAR 30,000 / 30,000, with SAR 1,200 transfer allowance. Operational inputs and separately held truth retained their prior hashes in that funding-only change. The following figures describe v2, not the current calibrated candidate.
 
 The full sample has 101,822.7 visible and 101,945.6 tail demand units, 38,975 usable opening units (10.72 visible-demand days) and 400 confirmed inbound units (0.11 day). Under the prior fixture-sized funding it produced 41.10% fill, 59,973.8 visible unmet, SAR 92,550 commitments / 99,050 payments, 31 purchases, 607 movements, 155 grouped dispatches and 235 short series. The selected schedule produces 44.44% fill, 56,570.5 visible unmet, SAR 186,336 commitments / 192,896 payments, 47 purchases, 723 movements, 158 grouped dispatches and the same 235 materially short series. Class A/B/C fill is 47.31% / 43.97% / 41.97%. Commitment headroom reaches zero and later payment headroom reaches SAR 12, retaining visible financial pressure. Proposed and deterministic benchmark actions match.
 

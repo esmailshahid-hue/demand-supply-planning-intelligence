@@ -1,4 +1,4 @@
-"""One process serves the calculation API and compiled React UI; no user-row persistence."""
+"""Calculation API; local/Docker also serve the UI. Vercel uses public/ CDN files."""
 from time import perf_counter
 from backend.app.bootstrap import STARTED as _import_started
 _main_import_started = perf_counter()

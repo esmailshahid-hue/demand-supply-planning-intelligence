@@ -31,7 +31,7 @@ jobs:
         run: npm run generate:types && npm run build
         working-directory: frontend
       - name: Verify production static delivery
-        run: .venv/bin/python -m pytest -q backend/tests/test_static_delivery.py
+        run: npm --prefix frontend run build:vercel && .venv/bin/python -m pytest -q backend/tests/test_static_delivery.py
       - name: Verify generated contracts are committed
         run: git diff --exit-code -- frontend/src/contracts.generated.ts
       - name: Install Playwright Chromium
@@ -44,7 +44,8 @@ jobs:
         run: docker build -t planning-pass1 .
       - name: Start Docker application
         run: docker run -d --name planning-pass1 -p 8000:8000 planning-pass1
-      - name: Wait for Docker application
+      - name: Verify Docker health (required by all container smokes)
+        id: docker_health
         run: |
           for attempt in $(seq 1 15); do
             if curl --fail --silent http://127.0.0.1:8000/api/health; then break; fi
@@ -52,22 +53,25 @@ jobs:
           done
           curl --fail --silent http://127.0.0.1:8000/api/health
       - name: Run production forecast smoke
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: .venv/bin/python -m scripts.smoke
       - name: Run solver smoke inside container
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: docker exec planning-pass1 python scripts/solver_smoke.py
       - name: Run production planning smoke
         id: planning_smoke
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: .venv/bin/python -m scripts.planning_smoke
       - name: Verify compact planning and authoritative lazy evidence
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: .venv/bin/python -m scripts.planning_transport_smoke
       - name: Run production scenario smoke
         id: scenario_smoke
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: .venv/bin/python -m scripts.scenario_smoke
       - name: Profile planning components inside container
-        if: ${{ !cancelled() && (steps.planning_smoke.outcome == 'success' || steps.planning_smoke.outcome == 'failure') }}
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: docker exec planning-pass1 python -m scripts.planning_profile
       - name: Run production upload review acceptance and export smoke
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: .venv/bin/python -m scripts.workflow_smoke

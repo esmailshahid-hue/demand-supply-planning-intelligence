@@ -2,26 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { scenarioApi, type Plan } from './scenarioApi';
 import type { components } from './contracts.generated';
-import type { Review, ReviewGate, ReviewMutationPhase, ReviewRecovery } from './reviewState';
+import type { Review, ReviewMutationPhase, ReviewRecovery } from './reviewState';
+import type { ReviewState } from './useReviewState';
 
-export default function ReviewControls({plan,recovery,mutationPhase,onPlan,onProtected,onGate,onRecovery,onRecoveryClear,onMutation}:{plan:Plan;recovery:ReviewRecovery|null;mutationPhase:ReviewMutationPhase;onPlan:(p:Plan)=>void;onProtected:(v:boolean)=>void;onGate:(v:ReviewGate)=>void;onRecovery:(v:ReviewRecovery)=>void;onRecoveryClear:(reference:string)=>void;onMutation:(v:ReviewMutationPhase)=>void}) {
-  const [review,setReview]=useState<Review|null>(null);
+export default function ReviewControls({plan,recovery,reviewState,mutationPhase,onPlan,onRecovery,onRecoveryClear,onMutation}:{plan:Plan;recovery:ReviewRecovery|null;reviewState:ReviewState;mutationPhase:ReviewMutationPhase;onPlan:(p:Plan)=>void;onRecovery:(v:ReviewRecovery)=>void;onRecoveryClear:(reference:string)=>void;onMutation:(v:ReviewMutationPhase)=>void}) {
+  const {review,update:setReview}=reviewState;
   const [action,setAction]=useState('');const [quantity,setQuantity]=useState('');const [note,setNote]=useState('');
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [ack,setAck]=useState(false);
   const submitting=useRef(false);
-  const [retry,setRetry]=useState(0);
-  const reviewLoad=useRef<AbortController|null>(null);
   const operation=useRef<AbortController|null>(null);
   const pendingPlan=recovery&&recovery.previousReference===plan.review_id?recovery.review.reference:null;
-  useEffect(()=>{const blocked=!!pendingPlan||(!review&&!!plan.review_id)||review?.state==='stale';onGate({blocked:!!blocked,reason:pendingPlan?'The replacement calculation is saved, but its result has not loaded.':!review&&plan.review_id?'Review state is still loading or unavailable.':review?.state==='stale'?'Review changes require regeneration before this plan can be used.':''});},[review,plan.review_id,pendingPlan,onGate]);
-  useEffect(()=>{onProtected(review?(review.decisions.length>0||review.state==='accepted'||review.state==='read_only'||review.state==='stale'):!!plan.review_id);},[review?.state,review?.decisions.length,plan.review_id]);
-  useEffect(()=>{reviewLoad.current?.abort();const c=new AbortController();reviewLoad.current=c;setReview(null);setError('');setAck(false);
-    const savedRecovery=recovery;
-    if(savedRecovery&&savedRecovery.previousReference===plan.review_id){setReview(savedRecovery.review);return()=>c.abort();}
-    if(plan.review_id)api<Review>(`/api/workflow/review/${plan.review_id}`,c.signal).then(r=>{if(!c.signal.aborted)setReview(r);}).catch(e=>{if(!c.signal.aborted)setError(e.message);});
-    return()=>c.abort();
-  },[plan.review_id,retry,recovery]);
-  useEffect(()=>()=>{reviewLoad.current?.abort();operation.current?.abort();},[]);
+  useEffect(()=>{setAck(false);},[plan.review_id]);
+  useEffect(()=>()=>{operation.current?.abort();},[]);
   const current=[...(plan.proposed?.purchases||[]),...(plan.proposed?.movements||[])];
   const previous=(review?.decisions||[]).map(d=>d.original as components['schemas']['Purchase']|components['schemas']['Movement']);
   const actions=[...current,...previous.filter(a=>!current.some(p=>p.action_id===a.action_id))];
@@ -48,6 +40,6 @@ export default function ReviewControls({plan,recovery,mutationPhase,onPlan,onPro
       <p>Exports become available only after the current plan is finally accepted. Acceptance does not place orders or execute transfers.</p><p className="download-actions">{immutable?<><a href={`/api/workflow/review/${review.reference}/download/workbook`}>Download reviewed workbook</a> · <a href={`/api/workflow/review/${review.reference}/download/snapshot`}>Download portable snapshot</a></>:<><button disabled>Download reviewed workbook</button> <button disabled>Download portable snapshot</button></>}</p>
       <details><summary>Review decisions · {review.decisions.length}</summary>{review.decisions.map((d,i)=><p key={i}>{String(d.action_type)} · {String(d.business_key).slice(0,12)} · {String(d.status)} · {String(d.original_quantity)} → {String(d.reviewed_quantity??'prohibited')} · {String(d.disposition)}</p>)}</details>
       {review.failures.map((f,i)=><p className="error" key={i}>{String(f.code)} · {String(f.message)}</p>)}
-    </>}{mutationPhase==='awaiting-response'?<p role="status">Saving review mutation…</p>:busy&&<p role="status">Checking review dependencies and independent stock/cash replay…</p>}{error&&<div className="error" role="alert"><p>{error}</p>{!review&&<button disabled={busy} onClick={()=>setRetry(v=>v+1)}>Retry review</button>}</div>}
+    </>}{mutationPhase==='awaiting-response'?<p role="status">Saving review mutation…</p>:busy&&<p role="status">Checking review dependencies and independent stock/cash replay…</p>}{error&&<div className="error" role="alert"><p>{error}</p></div>}
   </section>;
 }

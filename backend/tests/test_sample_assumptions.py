@@ -1,4 +1,4 @@
-"""Versioned sample-funding calibration without changing operational inputs."""
+"""Versioned, ex-ante sample calibration; fixture and oracle truth preserved."""
 import hashlib
 import json
 from time import perf_counter
@@ -15,7 +15,7 @@ from backend.app.scenarios.engine import check_snapshot, snapshot
 
 NON_FINANCIAL_HASHES = {
     'fixture': '4da4244905df654dc90da52de976f566f6bffffed55d6c8b826b12f31c66cc10',
-    'full': '8d111f14946e4c1c80dad1a561e353141b1a66c169eebc9d73c316fcd9a0833c',
+    'full': '224dd9617dd2b3e727a2968694e5445f733cd769d942cf2ad52a62f40ecf6204',
 }
 TRUTH_HASHES = {
     'fixture': '97b6fd0ac958e8a588983a044776a2cca8fcad6394cd7442055009e72c49e03c',
@@ -30,18 +30,20 @@ def stable_hash(value):
 @pytest.mark.parametrize('size', ['fixture','full'])
 def test_sample_version_funding_and_nonfinancial_inputs(size):
     bundle=generate_bundle(size);data=bundle.inputs
-    expected=(1500,15000,4000,18000,800) if size=='fixture' else (9000,30000,12000,30000,1200)
+    expected=(1500,15000,4000,18000,800) if size=='fixture' else (140000,220000,140000,220000,1200)
     c0,c1,p0,p1,transfer=expected
-    assert data.dataset_id==f'sample-v2-{size}-97'
+    assert data.dataset_id==f'sample-v3-{size}-97'
     assert [(b.new_commitment_cap,b.payment_ceiling,b.transfer_budget) for b in data.budgets]==[
         (c0 if i<2 else c1,p0 if i<2 else p1,transfer) for i in range(14)]
     nonfinancial=data.model_dump(mode='json');nonfinancial.pop('dataset_id');nonfinancial.pop('budgets')
     assert stable_hash(nonfinancial)==NON_FINANCIAL_HASHES[size]
     assert stable_hash(bundle.truth)==TRUTH_HASHES[size]
+    if size=='full':
+        assert stable_hash(data.model_dump(mode='json')['demand_history'])=='77e6aead7f009075e80c07f4b3cb91f8fb92f7169aab6043d7ef2b1556eae3f0'
 
 
 @pytest.mark.parametrize('size', ['fixture','full'])
-def test_sample_plans_replay_with_financial_pressure_and_shortages(size):
+def test_sample_plans_replay_with_binding_constraints_and_shortages(size):
     data=generate_bundle(size).inputs
     prepared=network_forecasts(data,perf_counter()+30)
     result=plan(data,prepared_forecasts=prepared)
@@ -49,13 +51,23 @@ def test_sample_plans_replay_with_financial_pressure_and_shortages(size):
     assert result.proposed.purchases==result.benchmark.purchases
     assert result.proposed.movements==result.benchmark.movements
     assert result.proposed.replay.summary.unmet>0 and result.proposed.replay.summary.tail_unmet>0
-    assert any((w.commitment_headroom is not None and w.commitment_headroom<200) for w in result.proposed.replay.cash)
-    assert any((w.payment_headroom is not None and w.payment_headroom<200) for w in result.proposed.replay.cash)
+    if size=='fixture':
+        assert any(w.commitment_headroom<200 for w in result.proposed.replay.cash)
+        assert any(w.payment_headroom<200 for w in result.proposed.replay.cash)
+    else:
+        # A funded operational example, not the fixture's near-zero cash case.
+        assert result.input_hash=='bdc81b2b648bce19e4f0d33fe94c880f78daeaf8a4d2e10976a769d83dc28fcf'
+        assert 70 < result.proposed.replay.summary.fill_pct < 95
+        assert result.proposed.replay.summary.fill_pct-result.no_action.replay.summary.fill_pct>25
+        assert len(result.proposed.movements)<723
+        assert sum(s.unmet>0 for s in result.proposed.replay.service)<180
+        assert {'LANE_CAPACITY_LIMIT','CAPACITY_BELOW_MINIMUM','COMMITMENT_BELOW_MINIMUM'} <= {e.code for e in result.exceptions}
+        assert len(result.model_dump_json().encode())<4_070_541
 
 
 def test_previous_sample_snapshot_is_rejected_as_stale():
     current=generate_bundle('full').inputs
-    previous=current.model_copy(update={'dataset_id':'sample-v1-full-97'})
+    previous=current.model_copy(update={'dataset_id':'sample-v2-full-97'})
     stale=snapshot('full',previous,Actions())
     with pytest.raises(ValueError,match='sample version'):
         check_snapshot(current,stale)

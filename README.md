@@ -4,7 +4,7 @@ An independent Saudi retail planning portfolio that turns synthetic demand, inve
 
 [Public sample](https://demand-supply-planning-intelligence.vercel.app) · [Current build status](docs/BUILD_STATUS.md) · [Deployment status](docs/DEPLOYMENT.md)
 
-**Current release status: BLOCKED.** The public link is available, but its canonical Vercel alias still serves commit `27eb86c`; the attempted Prompt 3 deployment for `2ec1c06` failed before build. A local deployment-manifest correction is ready but has not been published. See the status documents for the exact evidence and remaining authorized release step.
+**Current release status: correction awaiting publication and exact-SHA verification.** The canonical Vercel deployment is READY from `9054582`, not `27eb86c`. Its CI run `36002190655` exposed a review-readiness navigation race. This bounded correction fixes persistent review ownership, Docker smoke dependencies, static/CDN build output and full-sample calibration. It has not been committed or deployed; corrected-commit CI and hosted proof remain required. The `2ec1c06` manifest failure is historical.
 
 ## What the demo shows
 
@@ -13,7 +13,7 @@ An independent Saudi retail planning portfolio that turns synthetic demand, inve
 - **Scenarios** separates the B − A scenario shock, C − B replanning effect and C − A net change. Invalid frozen plans stay visibly invalid while a valid net comparison remains available.
 - **Data and Assumptions** documents the synthetic samples. Local mode validates XLSX inputs and supports review, regeneration, acceptance and portable exports; those storage-backed controls are intentionally disabled on the public host.
 
-The bundled data is `sample-v2`, seed 97, planning date 14 September 2026. The 10-SKU fixture is intentionally a funding stress case. The 60-SKU sample has explicit higher funding limits but still retains material shortages and residual binding constraints. Outcomes are modeled estimates, not observed savings.
+The corrected bundled data is `sample-v3`, seed 97, planning date 14 September 2026. The unchanged 10-SKU fixture is a funding stress case. The calibrated 60-SKU network achieves **85.75% withheld-demand fill versus 48.27% without new actions**, with binding constraints and 559 modeled movements (previously 723). These are synthetic offline results, not observed savings or optimality claims. See [calibration assumptions](docs/SAMPLE_CALIBRATION.md) and [verification evidence](docs/BUILD_STATUS.md).
 
 ## Three-minute workflow
 
@@ -47,6 +47,8 @@ Open <http://127.0.0.1:8000>. API documentation is at <http://127.0.0.1:8000/doc
 .venv/bin/python -m scripts.export_contracts
 npm --prefix frontend run generate:types
 npm --prefix frontend run build
+npm --prefix frontend run build:vercel
+.venv/bin/python -m pytest -q backend/tests/test_static_delivery.py
 CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm --prefix frontend run test:e2e
 ```
 

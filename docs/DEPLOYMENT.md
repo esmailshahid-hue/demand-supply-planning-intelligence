@@ -1,53 +1,55 @@
-# Current deployment status — 24 September 2026
+# Deployment handoff — 24 September 2026
 
-**Status: BLOCKED for Prompt 4 closure.** The public URL works, but it is not the reviewed Prompt 3 candidate or the local closure patch.
+The existing canonical deployment is READY. This bounded correction is not yet published, and its exact-commit CI / hosted verification are pending. No push, merge, deployment, Git disconnection or project-setting change was made.
 
-## Actual production identity
-
-| Item | Observed value |
-|---|---|
-| Canonical URL | [demand-supply-planning-intelligence.vercel.app](https://demand-supply-planning-intelligence.vercel.app) |
-| Deployment | `dpl_HQDadUAeNA8tyz9Ydh6eFFG85zmb` |
-| Immutable URL | [demand-supply-planning-intelligence-6gfzoc1na.vercel.app](https://demand-supply-planning-intelligence-6gfzoc1na.vercel.app) |
-| Source SHA | `27eb86c890584102d8fdbfa4f456ba6b926c143e` |
-| State / target / region | READY / production / `iad1` |
-
-Vercel resolved the attempted Prompt 3 production deployment as:
+## Read-only identity inspection
 
 | Item | Observed value |
 |---|---|
-| Deployment | `dpl_99NuyddNXx6PnGL5r6fQcZkKsJCM` |
-| Source SHA | `2ec1c06a16f6f0f028c646e3804b802f48a68ee5` |
-| State / target / region | ERROR / production / `iad1` |
-| Error | `uv lock` rejected the tool-only `pyproject.toml`: no PEP 621 `[project]` table |
+| Canonical alias | [demand-supply-planning-intelligence.vercel.app](https://demand-supply-planning-intelligence.vercel.app) |
+| Owning project | `demand-supply-planning-intelligence` / `prj_9wUSzLP3zKbvVinWCeNvmyDelVh5` |
+| Team | `team_zcIJkL6iQbO9rv4Wmu1sxNk1` |
+| Deployment | `dpl_7AwN5kDSG3GCsfVW1HWgwniB8Y4A` |
+| Immutable host | `demand-supply-planning-intelligence-y734osye3.vercel.app` |
+| Source SHA / state | `905458262e68275e3b5339061a0932e5d3df6ed8` / READY production, `iad1` |
 
-The local correction removes that incomplete manifest. Public shell and asset cache headers remain declared in `vercel.json`, and FastAPI retains its own equivalent headers. This correction is not yet committed or deployed.
+[CI run 36002190655](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/36002190655) for that SHA passed backend (233 + 10 subtests, one pre-build static skip) and post-build static tests (4). Browser results were 25 passed / 1 failed: Scenarios stayed disabled after Plan Review unmounted during review-status loading. Docker never started. The later transport/scenario/workflow connection-refused errors were dependency noise, not three independent application defects.
 
-[Prior-base CI run 35999897102](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35999897102) also failed because its backend phase ran before `frontend/dist` existed. The local correction makes the static integration test phase-aware and repeats it explicitly after the production build. The downstream connection-refused smoke failures in that run were consequences of the stopped pipeline, not production probe results.
+The `2ec1c06` deployment `dpl_99NuyddNXx6PnGL5r6fQcZkKsJCM` failed historically because its tool-only `pyproject.toml` lacked a PEP 621 `[project]` table for `uv lock`. Do not repair or redeploy that old SHA. The current base already removed it; this correction does not recreate a Python manifest or change the requirements source of truth.
 
-## Routing contract
+## Static implementation and proof boundary
 
-- `/` serves the compiled React shell and must revalidate.
-- `/assets/<content-hash>` serves immutable compiled assets.
-- `/api/*`, `/docs` and `/openapi.json` remain Python application routes.
-- Missing API and asset paths return 404; the SPA must not swallow them.
-- Hosted workbook upload, stored reviews and accepted-file downloads remain disabled. Public sample calculations require no account and execute no orders.
+The [official Vercel FastAPI static-files documentation](https://vercel.com/docs/frameworks/backend/fastapi#serving-static-files) says project-root `public/` files are served by the platform, and warns that top-level middleware disables automatic promotion of application-mounted static files. The existing application has global body-limit/timing/cache middleware; cache headers alone did not bypass Python.
 
-Local focused tests prove the route priority and headers in the application. Hosted CDN promotion, HTML delivery without a Python invocation and the current Prompt 3 browser journey require a READY exact-candidate deployment; they are not inferred from configuration.
+`build:vercel` compiles the same React shell and hashed assets into root `public/`. Vercel's build command uses it. An exact `/` → `/index.html` rewrite selects the static shell; there is no SPA catch-all. `/assets/*` uses immutable caching; `/` and `/index.html` must revalidate. `/api/*`, `/docs` and `/openapi.json` remain Python routes with the unchanged 60-second duration. Missing API/assets/pages remain 404. Local/Docker builds still use `frontend/dist` through FastAPI.
 
-## Measurement method
+Local checks verify both builds are byte-identical and `public/` contains only the shell and compiled JS/CSS, with no private/runtime inputs. Route tests verify API priority, 404s and cache policy. **These tests do not prove CDN execution.** No corrected deployment exists yet.
 
-The established checks run bounded, serial requests against the canonical alias and record deployment identity, region, request order, response bytes, HTTP time, engine time, status/stages, action counts, replay, financial reconciliation and determinism. “First” means the first measured request in that session; it is not proof of a process-cold or worldwide latency result.
+Read-only canonical baseline on 24 September: root first/repeat **3.545 / 1.001 s**, JS **1.539 / 0.786 s**. Both root responses and both asset responses expose `application_import` 687.995 ms, `module_bootstrap` 688.435 ms and `fastapi_setup` 24.218 ms. Root was cache MISS both times; JS changed MISS → HIT, retaining the Python timing header. This confirms why immutable caching alone was insufficient. These are sequential measured loads, not controlled process-cold measurements or evidence about the unpublished correction.
 
-Historical `ff2e42d` probes [35967540536](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967540536) and [35968872124](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35968872124) remain baseline evidence only. They cannot close the current candidate.
+## Exact manual release actions
 
-## Required authorized release sequence
+1. Review the diff, commit this correction, and publish it through the existing repository release process. Record the new full SHA; do not call `9054582` the corrected SHA.
+2. Require the exact-SHA Python 3.14 / Node 24 GitHub workflow to pass, including Docker build/start/health, container solver and every smoke. Local Docker is unavailable. The health step's actual outcome now gates dependent smokes; an earlier planning assertion may fail without suppressing other checks against a healthy server.
+3. Confirm the canonical project's production deployment is READY and both immutable deployment metadata and canonical alias resolve to that new SHA. Do not deploy the unused duplicate.
+4. Run the checks below on the unchanged canonical deployment. Retain raw timing/header/browser artifacts and correlate function logs. Root and assets must have no Python timing; the API must retain application timing. Verify immutable assets, HTML conditional revalidation, 404 priority, same-origin API, disabled hosted storage and desktop/mobile operation.
+5. Compare fresh root/asset loads against the recorded `9054582` baseline, correlating cache status and function logs; demonstrate material improvement without equating a fresh TCP connection with a forced cold process. Run the established production-latency workflow twice consecutively on the same deployment. Only then close hosted verification.
 
-No push, deployment or project-setting change was performed during Prompt 4. The exact user action is to publish the current closure patch through the existing release process. After that:
+```sh
+.venv/bin/python -m scripts.static_delivery_smoke --url https://demand-supply-planning-intelligence.vercel.app
+CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node scripts/hosted_browser.mjs https://demand-supply-planning-intelligence.vercel.app
+.venv/bin/python -m scripts.production_latency --output artifacts/production-latency-final-1
+.venv/bin/python -m scripts.production_latency --output artifacts/production-latency-final-2
+```
 
-1. confirm exact-SHA CI succeeds on Python 3.14 / Node 24, including Docker;
-2. resolve the canonical alias to a READY deployment with that same SHA in `iad1`;
-3. verify static root/assets, API 404 priority, disabled storage, links, dated fallback explanations, Plan-first loading, lazy evidence and the four scenario controls plus a combination;
-4. run the canonical production-latency workflow twice consecutively on the unchanged deployment and retain its artifacts.
+The static probe is intentionally not a passing local-FastAPI test. It rejects Python timing on root/assets. The browser script now starts at Plan Review and tests scoped movement evidence without depending on a particular full-sample transfer row. Hosted workbook upload, stored reviews and accepted exports remain unavailable; the local own-data workflow is verified separately.
 
-Only then change the status to READY. Full earlier deployment chronology is preserved in [history/DEPLOYMENT-through-2ec1c06.txt](history/DEPLOYMENT-through-2ec1c06.txt).
+## Manual duplicate-project account cleanup
+
+Both projects still exist. The unused duplicate is `demand-supply-planning-intelligence-hahy`, project ID `prj_OQsMvdHhAK7KP6BKMbPL3Wsjvhk5`. It does **not** own the canonical alias listed above.
+
+In the Vercel dashboard, select the team above, then open **the `-hahy` project** and confirm its project ID in Settings → General. Check Settings → Domains for any user-owned domain before removing anything. In Settings → Git, disconnect its repository to stop duplicate automatic builds. If the project is truly unused, optionally delete **that duplicate only** via Settings → General → Delete Project after checking its deployment history/domains. Deletion removes its deployments and is a separate user decision. Leave the canonical project's Git connection, domains and settings unchanged. This is account cleanup, not a source-code change, and has not been performed.
+
+Official references: [Git disconnection](https://vercel.com/docs/git/vercel-for-github), [project removal](https://vercel.com/docs/projects/managing-projects).
+
+Historical chronology is retained in [history](history/README.md); current local evidence is in [BUILD_STATUS.md](BUILD_STATUS.md).

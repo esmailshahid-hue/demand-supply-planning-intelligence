@@ -675,11 +675,11 @@ def test_sparse_preparation_consumes_solver_deadline(monkeypatch,preparation_sec
 
 @pytest.mark.parametrize('size,expected',[
     ('fixture','583a611c0ccd7b2f31c0b271fadd5f48dbabfc13f13540acab995f0fc9d44161'),
-        ('full','430e3c58d7c83139babd1e8e0b4218d541826346b1dc268a9ad8c41c36e6b454'),
+        ('full','6b52ec8f4d7c23e2e2f8b153409bba9d5c139a356d620055211d44d61f12242f'),
 ])
 def test_receiving_cache_preserves_reference_actions_and_explanations(size,expected):
     # Snapshot obtained from the uncached benchmark; the full value was refreshed
-    # for sample-v2's intentional funding-only calibration. Includes every
+    # for sample-v3's ex-ante full-network data calibration. Includes every
     # action/date/value and exception, guarding invalidation after source stock,
     # destination receipts, DC purchases and daily consumption change.
     import json
