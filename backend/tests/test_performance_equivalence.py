@@ -1,7 +1,8 @@
-"""Full precision reference hashes captured before changes at e51af6f.
+"""Full precision reference hashes captured before changes.
 
-These cover every action, explanation, stock/cash/service row, and all forecast
-quantities for both sample sizes, rather than only the SKU001 demo result.
+Calculation hashes cover every action, stock/cash/service row and policy while
+excluding only the intentionally changed explanation fields. Forecast hashes
+cover all quantities rather than only the SKU001 demo result.
 """
 import json
 from hashlib import sha256
@@ -10,7 +11,6 @@ import pytest
 from backend.app.main import sample
 from backend.app.planning.inputs import network_forecasts
 from backend.app.planning.engine import plan
-from scripts.planning_smoke import stable_plan
 
 
 def authoritative(result):
@@ -21,15 +21,27 @@ def authoritative(result):
         trace.pop('run_id')
     return value
 
+
+def calculation_policy(result):
+    """All policy outputs except the explanation-only service fields."""
+    value={'status':result.status}
+    for name in ('proposed','benchmark','no_action'):
+        policy=getattr(result,name).model_dump(mode='json')
+        for service in policy['replay']['service']:
+            for field in ('reason_codes','reason_summary','shortage_evidence'):
+                service.pop(field,None)
+        value[name]=policy
+    return value
+
 @pytest.mark.parametrize('size,policy_hash,forecast_hash',[
- ('fixture','b98e5ac27b94117555bd5cc538db01348536df75674e2fd4afd441f61ee25dce','e3be2683a27701455fb8a8bdec87e36fa0e669f6c1cf2dedaecacd1e6dc4a489'),
- ('full','1cd6a43f6dc2fd7e19c289672a485cb709a827cb64626d03e82cdc7e2146706e','1fa197074db28021aabb89ad1826b088d0119bccad54546355978cd9d6ba4290')])
+ ('fixture','a511d4512b0adae0c5431473d0d41b6346e3335b487e21ea389c163b7347b414','e3be2683a27701455fb8a8bdec87e36fa0e669f6c1cf2dedaecacd1e6dc4a489'),
+ ('full','2275f5ee23e6a47ea08fac0014ffe636c418f4afd86761527554b7617c889511','1fa197074db28021aabb89ad1826b088d0119bccad54546355978cd9d6ba4290')])
 def test_full_precision_sample_equivalence(size,policy_hash,forecast_hash):
     def digest(value):return sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     data=sample(size)[0];prepared=network_forecasts(data,perf_counter()+30)
     assert digest(list(prepared[0].values()))==forecast_hash
     result=plan(data,prepared_forecasts=prepared)
-    assert digest(stable_plan(result.model_dump(mode='json')))==policy_hash
+    assert digest(calculation_policy(result))==policy_hash
 
 
 @pytest.mark.parametrize('size',['fixture','full'])

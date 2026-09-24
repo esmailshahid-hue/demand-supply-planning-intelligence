@@ -1690,6 +1690,13 @@ export interface components {
             unconstrained_need: number;
             /** Reason Codes */
             reason_codes: string[];
+            /** Reason Summary */
+            reason_summary?: string | null;
+            /**
+             * Shortage Evidence
+             * @default []
+             */
+            shortage_evidence: components["schemas"]["ShortageEvidence"][];
         };
         /** ServiceGroup */
         ServiceGroup: {
@@ -1791,6 +1798,35 @@ export interface components {
              * @enum {string}
              */
             funding_mode: "funded" | "unfunded_exploration";
+        };
+        /** ShortageEvidence */
+        ShortageEvidence: {
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "visible" | "tail";
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Quantity */
+            quantity: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "established_limit" | "uncertain" | "bounded_summary";
+            /** Reason Codes */
+            reason_codes: string[];
+            /** Detail */
+            detail: string;
         };
         /** SolverStage */
         SolverStage: {

@@ -164,8 +164,9 @@ def accept(draft,data,revision,acknowledge=False):
     failures=constraints(draft,changed).failures(actions.purchases,actions.movements)
     checked=replay(changed,*prepared[:2],actions.purchases,actions.movements)
     failures+=checked.failures
+    explanation_fields={'reason_codes','reason_summary','shortage_evidence'}
     if (checked.model_dump(exclude={'service'}) != actions.replay.model_dump(exclude={'service'})
-            or [s.model_dump(exclude={'reason_codes'}) for s in checked.service] != [s.model_dump(exclude={'reason_codes'}) for s in actions.replay.service]):
+            or [s.model_dump(exclude=explanation_fields) for s in checked.service] != [s.model_dump(exclude=explanation_fields) for s in actions.replay.service]):
         failures.append(Failure(code='replay_mismatch',message='Independent replay no longer equals displayed totals and obligations. Regenerate.'))
     versions=forecast_versions(prepared)
     expected={f'{t.sku}/{t.location_id}':t for t in draft.result.forecasts}

@@ -290,6 +290,50 @@ def test_completed_constrained_joint_plan_explains_binding_commitment():
     assert 'PURCHASE_COMMITMENT_AUTHORITY' in {c.code for c in causes}
 
 
+def test_actual_sample_fallback_uses_replayed_dated_evidence_without_trace_codes():
+    from backend.app.main import sample
+    from backend.app.planning.engine import plan
+    data,issues=sample('fixture')
+    result=plan(data,validated_issues=issues)
+    assert result.status=='feasible_fallback'
+    assert any(stage.name=='independent_fallback' and stage.status=='benchmark' for stage in result.stages)
+    diagnostic_codes={'COMMITMENT_BELOW_MINIMUM','DONOR_RESERVE_LIMIT','LEAD_TIME_SHORTFALL',
+        'NO_FUNDED_ORDER','PAYMENT_CAPACITY_LIMIT','SHARED_STOCK_LIMIT'}
+    shortages=[service for service in result.proposed.replay.service if service.unmet+service.tail_unmet>0]
+    assert shortages and all(service.shortage_evidence and service.reason_summary for service in shortages)
+    assert all(not diagnostic_codes.intersection(service.reason_codes) for service in shortages)
+    for service in shortages:
+        visible=sum(e.quantity for e in service.shortage_evidence if e.window=='visible')
+        tail=sum(e.quantity for e in service.shortage_evidence if e.window=='tail')
+        assert visible==pytest.approx(service.unmet)
+        assert tail==pytest.approx(service.tail_unmet)
+        assert all(e.start_date<=e.end_date for e in service.shortage_evidence)
+
+
+def test_global_or_sku_trace_is_advanced_diagnostic_not_service_cause():
+    from backend.app.planning.engine import _explanations
+    data=hand_data();demand=hand_demand(56);ctx=Inputs(data,demand,{})
+    ctx.explain('UNRELATED_GLOBAL_TRACE','A rejected candidate elsewhere.',sku='X')
+    result=replay(data,demand,{})
+    diagnostics=_explanations(ctx,result,[],[],False,None,[],[])
+    assert 'UNRELATED_GLOBAL_TRACE' in {item.code for item in diagnostics}
+    assert all('UNRELATED_GLOBAL_TRACE' not in service.reason_codes for service in result.service)
+
+
+def test_no_new_action_fallback_also_receives_dated_shortage_evidence(monkeypatch):
+    from backend.app.planning import engine
+    data=hand_data();demand=hand_demand(56)
+    def invalid_benchmark(ctx,deadline):
+        return [],[ctx.movement(ctx.data.transfer_lanes[0],'X',0,1)]
+    monkeypatch.setattr(engine,'benchmark',invalid_benchmark)
+    monkeypatch.setattr(engine,'joint_budget_seconds',lambda _:0)
+    result=engine.plan(data,prepared_forecasts=(demand,{},[],[]))
+    assert result.status=='feasible_fallback'
+    assert result.stages[-1].status=='no_new_actions'
+    assert not result.proposed.purchases and not result.proposed.movements
+    assert all(service.shortage_evidence for service in result.proposed.replay.service if service.unmet+service.tail_unmet>0)
+
+
 def test_shortage_explanation_uses_replay_dates_and_does_not_blame_satisfied_minimum():
     from backend.app.planning.engine import _shortage_causes
     data=hand_data()
@@ -384,6 +428,8 @@ def test_shortage_explanation_checks_existing_transfer_stock_before_purchase_cau
     assert alternative.day==start+timedelta(days=1)
     assert '30.0 donor units' in alternative.message
     assert 'not proof' in alternative.message
+    assert not {'PURCHASE_COMMITMENT_AUTHORITY','PURCHASE_PAYMENT_CAPACITY','GROUPED_SUPPLIER_MINIMUM'}.intersection(
+        cause.code for cause in causes if cause.day==alternative.day)
 
 
 def test_network_uses_unchanged_forecast_and_trace(dataset):

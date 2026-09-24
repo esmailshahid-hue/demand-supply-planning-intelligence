@@ -1,3 +1,17 @@
+# Prompt 1 cleanup — dated fallback shortage evidence (24 September 2026)
+
+Implemented on the clean reviewed baseline `9264fda`; no push, deployment, budget, scenario, forecast, action-selection or solver-policy change was made. Final benchmark and no-new-action fallbacks now derive typed, dated shortage evidence from their independently replayed ledger. Benchmark construction notes remain separately labeled advanced diagnostics and no longer leak into every SKU/store reason. Visible/tail quantities reconcile exactly; equivalent adjacent evidence is coalesced and changing later causes become an explicit bounded attribution summary.
+
+The dated analyzer checks timely transfers before purchasing-only conclusions, including donor reserve, calendars, receiving/lane headroom and grouped dispatch funding. Purchase checks use supplier/order-date grouped minimums, cent-rounded same-week deposit/balance/fee totals, existing obligations, dated supplier/shared/receiving/lane capacity and remaining headroom. A locally passing path is reported as uncertain because later stock, reserve and funding effects were not globally reoptimized.
+
+Exact pre-change policy hashes were independently recomputed from an isolated `9264fda` archive after excluding only explanation fields. They match the corrected fixture/full hashes (`a511d451…` / `2275f5ee…`), covering every proposed/benchmark/no-action action, stock row, cash row, service quantity and summary. Targeted results: **48 planning tests passed**; **89 review/scenario/workbook/workflow/presentation/equivalence tests passed**; generated OpenAPI/TypeScript reproduced and the frontend production build passed. Python emitted two known FastAPI/Starlette deprecation warnings.
+
+Comparable local Python 3.14.4 profile, full then fixture, before → after: full route first/repeat **2.023/0.727 → 2.979/1.729 s**, explanation **0.036/0.033 → 1.042/1.043 s**, compact **1,022,709/1,022,708 → 1,216,277/1,216,277 bytes**; fixture route **2.358/2.218 → 2.542/2.347 s**, explanation **0.005/0.005 → 0.125/0.124 s**, compact **331,541/331,542 → 371,872/371,870 bytes**. Both sizes remained deterministic `feasible_fallback` results and comfortably below the unchanged ten-second and 4.5 MB gates. These are local process-order measurements, not hosted or process-cold evidence.
+
+Remaining limitation: evidence proves only the stated bounded single-path blocker. When timely paths pass or different paths fail different checks, the UI says no single cause was established and directs the user to scoped stock evidence; it does not claim a globally feasible improvement.
+
+---
+
 # Final public-sample release closure — 24 September 2026
 
 **Final verdict:** Pass 5 is closed; Pass 6 is closed; the public sample demo is ready; calculation and hosted-latency gates passed; portfolio-MVP feature development is complete. This section supersedes all pending-readiness statements in the historical sections below.

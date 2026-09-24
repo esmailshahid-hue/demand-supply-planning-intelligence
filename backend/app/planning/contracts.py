@@ -91,6 +91,16 @@ class StockDay(Contract):
     closing: float
 
 
+class ShortageEvidence(Contract):
+    window: Literal['visible', 'tail']
+    start_date: date
+    end_date: date
+    quantity: float
+    status: Literal['established_limit', 'uncertain', 'bounded_summary']
+    reason_codes: list[str]
+    detail: str
+
+
 class Service(Contract):
     sku: str
     location_id: str
@@ -105,6 +115,8 @@ class Service(Contract):
     buffer_units: float
     unconstrained_need: float
     reason_codes: list[str]
+    reason_summary: str | None = None
+    shortage_evidence: list[ShortageEvidence] = []
 
 
 class Summary(Contract):
