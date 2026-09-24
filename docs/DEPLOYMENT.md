@@ -1,3 +1,17 @@
+# Narrow production-latency correction — 23 September 2026
+
+Canonical run **35858535758**, job **107172785296**, failed only the retained cold full-sample HTTP gate: **12.358 s** total, **12.131 s** first byte, **8.060 s** reported engine, **1,022,712 bytes**, `feasible_fallback`, with independent replay passing and no Vercel runtime errors. Its repeat was **3.760 s** / **3.068 s** engine. The runner/path was `westcentralus`, `sfo1 → iad1`; the Ubuntu 26 annotation needs no application change.
+
+The local correction from `d5eda7ad637e7b40ce799b6ae7bb6c786bf257cc` removes request-local forecast scoring objects and repeated prefix/event work, and indexes deterministic benchmark lookups/future receipts. It changes no dataset, horizon, forecast/model choice, action policy, constraint, funding rule, replay, explanation, response content, runtime gate or deployment configuration. A fresh-process compact full route improved locally from **2.963 s / 2.064 s engine** to **2.266 s / 1.366 s engine**; forecast fell **1.414 → 0.791 s**, benchmark **0.391 → 0.314 s**, while replay/explanations/serialization remained approximately **0.121 / 0.033 / 0.002 s**. This is macOS evidence, not CI or production acceptance.
+
+Do not deploy or dispatch automatically. Once reviewed and committed, obtain green normal CI for that exact SHA, deploy that exact SHA through the authorized release process, verify the canonical alias resolves to it, then manually run `.github/workflows/production-latency.yml` **twice consecutively without code/config changes**. Both runs must pass the first full request below ten seconds; retain their failure-capable artifacts and record run/job IDs here and in BUILD_STATUS. A warm repeat, local run, or normal CI container run cannot replace this canonical-host gate.
+
+Corrected commit, CI run, deployment identity and both production workflow runs: **pending**.
+
+Local verification is complete: 219 backend tests plus 10 subtests, solver/forecast/complete-planning/compact-evidence/scenario/workflow smokes, reproducible contracts, production frontend build, 26 Playwright tests, dependency resolution/audit, compilation and diff checks passed. There is no local Docker-compatible runtime. The correction is ready to commit and enter normal CI; it is not production-accepted or eligible for a hosted-success claim until the exact-commit steps above pass.
+
+---
+
 # Final Pass 6 closure check — 20 September 2026
 
 **Pass 6 remains open — production latency gate not yet proven.** This section supersedes older statements that corrected CI, Docker verification or deployment did not exist. Hosted own-data remains a separate intentionally blocked gate.

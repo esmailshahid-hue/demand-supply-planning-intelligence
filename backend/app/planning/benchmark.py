@@ -45,6 +45,20 @@ def benchmark(ctx, deadline=float('inf')):
             fee=cents(lane.grouped_dispatch_fee);w=week(a.dispatch_date)
             fees[w]+=fee;payments[w]+=fee;paid_groups.add(group)
         movements.append(a)
+    offers_by_sku=defaultdict(list)
+    for offer in ctx.data.supplier_offers:
+        offers_by_sku[offer.sku].append(offer)
+    lanes_by_destination_sku=defaultdict(list)
+    dc_transit_by_sku=defaultdict(list)
+    for lane in ctx.data.transfer_lanes:
+        for sku in lane.allowed_skus:
+            lanes_by_destination_sku[lane.destination,sku].append(lane)
+            if lane.source==ctx.dc:
+                dc_transit_by_sku[sku].append(lane.transit_days)
+    assortments_by_sku=defaultdict(list)
+    for key in ctx.assortment:
+        assortments_by_sku[key[0]].append(key)
+    future_receipt_units={key:sum(receipts[*key,d] for d in range(56)) for key in ctx.keys}
     # Membership only: preserve the existing allocation order and include all
     # confirmed transfer records, exactly as the former opposing-line scan did.
     dispatched={(t.sku,t.source,t.destination,t.dispatch_date)
@@ -81,13 +95,14 @@ def benchmark(ctx, deadline=float('inf')):
         day=ctx.day(i); w=week(day)
         for key in ctx.keys:
             stock[key]+=receipts[*key,i]
+            future_receipt_units[key]-=receipts[*key,i]
             stock[key]=max(0.,stock[key]-ctx.demand.get(key,[0.]*56)[i])
             stock[key]-=dispatches[*key,i]
         paid_lanes={(src,dst) for (src,dst,t) in paid_groups if t==i}
         lane_used=defaultdict(float,{(s,d):q for (s,d,t),q in fixed_lanes.items() if t==i})
         for key in sorted(ctx.assortment,key=rank):
             sku,dst=key
-            for lane in sorted((l for l in ctx.data.transfer_lanes if l.destination==dst and sku in l.allowed_skus),key=lambda l:(l.transit_days,l.source)):
+            for lane in sorted(lanes_by_destination_sku[dst,sku],key=lambda l:(l.transit_days,l.source)):
                 arrival=i+lane.transit_days
                 if arrival>=56 or day.weekday() not in lane.dispatch_weekdays or day.weekday() not in ctx.locations[lane.source].open_weekdays or ctx.day(arrival).weekday() not in ctx.locations[dst].open_weekdays:
                     continue
@@ -101,7 +116,7 @@ def benchmark(ctx, deadline=float('inf')):
                 available=max(0.,stock[sku,lane.source]-ctx.reserve[sku,lane.source,i])
                 # Do not spend stock already promised to later reviewed dispatches.
                 future_reserved=sum(a.units for a in ctx.review.movements if a.sku==sku and a.source==lane.source and a.dispatch_date>day)
-                future_receipts=sum(receipts[sku,lane.source,d] for d in range(i+1,56))
+                future_receipts=future_receipt_units[sku,lane.source]
                 available=max(0.,available-max(0.,future_reserved-future_receipts))
                 pack=lane.pack_units
                 requested=ceil(need/pack)*pack
@@ -128,27 +143,28 @@ def benchmark(ctx, deadline=float('inf')):
                 invalidate_room(lane.source);invalidate_room(dst)
                 stock[sku,lane.source]-=qty
                 receipts[sku,dst,arrival]+=qty
+                future_receipt_units[sku,dst]+=qty
                 lane_used[lane.source,dst]+=qty
                 fees[w]+=fee;payments[w]+=fee;paid_lanes.add((lane.source,dst))
         # Order stock for the next review/protection horizon, net of existing and proposed supply.
-        skus=sorted(ctx.products,key=lambda sku:min((rank(k) for k in ctx.assortment if k[0]==sku),default=(56,True,'C',(sku,''))))
+        skus=sorted(ctx.products,key=lambda sku:min((rank(k) for k in assortments_by_sku[sku]),default=(56,True,'C',(sku,''))))
         for sku in skus:
             options=[]
-            for o in ctx.data.supplier_offers:
-                timing=ctx.timing(o,i) if o.sku==sku else None
+            for o in offers_by_sku[sku]:
+                timing=ctx.timing(o,i)
                 if timing and business_key(ctx.purchase(o,i,o.case_size)) in prohibited:
                     continue
                 if timing:
                     options.append((o.price_per_base_unit,timing[1],o.offer_id,o,timing))
-            shortage=min((rank(k)[0] for k in ctx.assortment if k[0]==sku),default=56)
-            transit=max((l.transit_days for l in ctx.data.transfer_lanes if l.source==ctx.dc and sku in l.allowed_skus),default=1)
+            shortage=min((rank(k)[0] for k in assortments_by_sku[sku]),default=56)
+            transit=max(dc_transit_by_sku[sku],default=1)
             on_time=[option for option in options if option[1]+transit<=shortage]
             if on_time:
                 options=on_time
             elif options and shortage<56:
                 ctx.explain('LEAD_TIME_SHORTFALL','No currently eligible source can reach the next shortage in time; later receipts can only cover later demand.',sku=sku,day=ctx.day(shortage))
             for _,_,_,o,(dispatch,arrival) in sorted(options):
-                horizon=min(56,arrival+ctx.data.settings.review_period_days+max((l.transit_days for l in ctx.data.transfer_lanes if l.source==ctx.dc and sku in l.allowed_skus),default=1))
+                horizon=min(56,arrival+ctx.data.settings.review_period_days+transit)
                 expected=sum(sum(seq[i+1:horizon])+ctx.buffers.get(k,0.) for k,seq in ctx.demand.items() if k[0]==sku)
                 available=sum(stock[sku,l]+sum(receipts[sku,l,d] for d in range(i+1,horizon)) for l in ctx.locations)
                 need=max(0.,expected-available)
@@ -186,6 +202,7 @@ def benchmark(ctx, deadline=float('inf')):
                 purchases.append(ctx.purchase(o,i,qty))
                 invalidate_room(ctx.dc)
                 receipts[sku,ctx.dc,arrival]+=qty
+                future_receipt_units[sku,ctx.dc]+=qty
                 supplier_used[o.supplier_id,sku,dispatch]+=qty
                 shared_used[o.supplier_id,dispatch]+=qty*unit
                 commitments[w]+=total

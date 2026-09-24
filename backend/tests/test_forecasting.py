@@ -1,7 +1,7 @@
 from datetime import timedelta
 import pytest
 from backend.app.contracts import CandidateRecord, Event, WindowRecord
-from backend.app.forecasting.engine import Series, forecast, midnight, pool_metrics, select_model
+from backend.app.forecasting.engine import Series, forecast, midnight, pool_metrics, score_window, score_windows, select_model
 
 
 def metric(result, phase="selection", method="seasonal_naive", horizon=28):
@@ -21,6 +21,17 @@ def test_methods_hand_calculated_and_calendar_weights(regular):
     rows[origin-timedelta(days=14)].sales_units = None
     predicted = Series(regular, "SKU001", "S1").predict_all(origin, 7)
     assert predicted["weighted_weekday_mean"][0].forecast_units == pytest.approx((40*.4+20*.2+10*.1)/.7)
+
+
+def test_single_pass_candidate_scoring_matches_individual_horizon_contracts(regular):
+    series = Series(regular, "SKU001", "S1")
+    origin = regular.settings.as_of - timedelta(days=56)
+    cutoff = regular.settings.as_of - timedelta(days=28)
+    points = series.predict_all(origin, 28, _scoring_only=True)["seasonal_naive"]
+    horizons = sorted({7, regular.settings.protection_days, 28})
+    assert score_windows(series, origin, points, horizons, cutoff) == [
+        score_window(series, origin, points, horizon, cutoff) for horizon in horizons
+    ]
 
 
 def test_future_sales_and_late_reports_cannot_change_earlier_forecast(regular):

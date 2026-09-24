@@ -6,6 +6,7 @@ from hashlib import sha256
 from functools import lru_cache
 from statistics import mean
 from time import perf_counter
+from typing import NamedTuple
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,22 @@ POLICY = ("Eight disjoint 28-day selection windows where history permits; at lea
           "Known event days are excluded from ordinary training pools. Positive bias is overforecasting.")
 
 
+class _ScoredForecastDay(NamedTuple):
+    """Only the two fields consumed while scoring candidate windows."""
+    day: date
+    forecast_units: float | None
+
+
+def _mean(values):
+    """Exact fast path for integral inputs; preserve statistics.mean otherwise."""
+    values = list(values)
+    if all(isinstance(value, (int, float)) and float(value).is_integer() for value in values):
+        # Python integer accumulation is exact; the final division has the same
+        # correctly rounded result as statistics.mean's exact rational path.
+        return sum(int(value) for value in values) / len(values)
+    return mean(values)
+
+
 @lru_cache(maxsize=2048)
 def midnight(day):
     return datetime.combine(day, time(), ZoneInfo("Asia/Riyadh"))
@@ -34,6 +51,7 @@ class Series:
         self.location = next(l for l in data.locations if l.location_id == location_id)
         self.assortment = next(a for a in data.assortment if a.sku == sku and a.location_id == location_id)
         self.rows = {r.day: r for r in data.demand_history if r.sku == sku and r.location_id == location_id}
+        self.row_days = sorted(self.rows)
         self.events = [e for e in data.events if event_matches(e, self.product, location_id)]
         self._ranged = {}
         self._events = {}
@@ -50,6 +68,10 @@ class Series:
         return value
 
     def event(self, day, origin):
+        # Most network series have no applicable events. Avoid building and
+        # probing a per-origin cache for the overwhelmingly common empty case.
+        if not self.events:
+            return None
         key = day, origin
         if key not in self._events:
             self._events[key] = next((e for e in self.events if e.start <= day <= e.end and e.known_at < midnight(origin)), None)
@@ -80,32 +102,49 @@ class Series:
         if origin in self._training:
             return self._training[origin]
         observed, values, estimates = {}, {}, {}
-        for day in sorted(d for d in self.rows if d < origin):
-            status = self.status(day, origin)
+        knowledge_time = midnight(origin)
+        for day in self.row_days:
+            if day >= origin:
+                break
+            row = self.rows[day]
+            if not self.ranged(day):
+                status = "unranged"
+            elif row.available_at < knowledge_time:
+                if not row.is_open:
+                    status = "closed"
+                elif row.sales_units is None or row.stock_available is None:
+                    status = "missing"
+                else:
+                    status = "observed" if row.stock_available else "censored"
+            elif day.weekday() not in self.location.open_weekdays:
+                status = "closed"
+            else:
+                status = "not_yet_available"
+            self._statuses[day, origin] = status
             if self.event(day, origin) is not None:
                 continue
             if status == "observed":
-                observed[day] = values[day] = self.rows[day].sales_units
+                observed[day] = values[day] = row.sales_units
             elif status == "censored":
                 earliest = day - timedelta(days=28)
                 weekday = day.weekday()
                 pool = [observed[d] for d in observed if earliest <= d < day and d.weekday() == weekday]
                 if pool:
-                    estimate = max(self.rows[day].sales_units, mean(pool))
+                    estimate = max(row.sales_units, _mean(pool))
                     values[day] = estimates[day] = estimate
         self._training[origin] = values, estimates, observed
         return self._training[origin]
 
-    def predict_all(self, origin, horizon):
+    def predict_all(self, origin, horizon, *, _scoring_only=False, _methods=METHODS):
         values, _, observed = self.training(origin)
         a = self.assortment
         launch = a.launch_daily_units if a.launch_known_at is not None and a.launch_known_at < midnight(origin) else None
         earliest = origin - timedelta(days=28)
         recent = [v for d, v in observed.items() if d >= earliest]
-        recent_mean = mean(recent) if recent else None
+        recent_mean = _mean(recent) if recent else None
         weekday_pools = {}
         short = len(observed) < 28
-        forecasts = {m: [] for m in METHODS}
+        forecasts = {m: [] for m in _methods}
         for i in range(horizon):
             day = origin + timedelta(days=i)
             # Fixed-origin multi-step forecasts repeat the most recent pre-origin weekday.
@@ -116,12 +155,14 @@ class Series:
                 # Same origin and weekday have exactly the same eligible pool. Keep
                 # the original arithmetic and apply dated events/ranging below.
                 weekday_pools[day.weekday()] = (candidates,
-                    mean(v for v, _ in candidates) if candidates else None,
+                    _mean(v for v, _ in candidates) if candidates else None,
                     sum(v * w for v, w in candidates) / sum(w for _, w in candidates) if candidates else None)
             candidates, weekday_mean, weighted_mean = weekday_pools[day.weekday()]
-            for method in METHODS:
+            open_day = self.ranged(day) and day.weekday() in self.location.open_weekdays
+            event = self.event(day, origin) if open_day else None
+            for method in _methods:
                 fallback = None
-                if not self.ranged(day) or day.weekday() not in self.location.open_weekdays:
+                if not open_day:
                     baseline = 0.0
                     fallback = "Closed or unranged: no demand planned"
                 elif short and launch is not None:
@@ -147,13 +188,15 @@ class Series:
                 else:
                     baseline = None
                     fallback = "No eligible recent observations or declared launch estimate"
-                event = self.event(day, origin) if self.ranged(day) and day.weekday() in self.location.open_weekdays else None
                 revised = baseline
                 if event is not None:
                     revised = event.value if event.kind == "replacement" else (baseline * event.value if baseline is not None else None)
-                forecasts[method].append(ForecastDay(day=day, baseline_units=baseline, forecast_units=revised,
-                    provisional_tail=i >= 28, fallback=fallback, event_id=event.event_id if event else None,
-                    reason=event.reason if event else None))
+                if _scoring_only:
+                    forecasts[method].append(_ScoredForecastDay(day, revised))
+                else:
+                    forecasts[method].append(ForecastDay(day=day, baseline_units=baseline, forecast_units=revised,
+                        provisional_tail=i >= 28, fallback=fallback, event_id=event.event_id if event else None,
+                        reason=event.reason if event else None))
         return forecasts
 
 
@@ -181,6 +224,35 @@ def score_window(series, origin, forecast, horizon, cutoff):
         underforecast_units=max(0.0, -signed) if valid == horizon else None)
 
 
+def score_windows(series, origin, forecast, horizons, cutoff, evidence=None):
+    """Score all requested prefixes in one pass, preserving prefix arithmetic."""
+    excluded = Counter()
+    actual = predicted = absolute = 0.0
+    valid = 0
+    records = []
+    requested = set(horizons)
+    for index, point in enumerate(forecast, 1):
+        status, y = evidence[index - 1] if evidence is not None else (series.status(point.day, cutoff), None)
+        if status != "observed":
+            excluded[status] += 1
+        elif point.forecast_units is None:
+            excluded["forecast_unavailable"] += 1
+        else:
+            if y is None:
+                y = series.rows[point.day].sales_units
+            actual += y
+            predicted += point.forecast_units
+            absolute += abs(point.forecast_units - y)
+            valid += 1
+        if index in requested:
+            signed = predicted - actual
+            records.append(WindowRecord(origin=origin, horizon=index, complete=valid == index,
+                valid_observations=valid, excluded_by_reason=dict(excluded), actual_units=actual,
+                forecast_units=predicted, absolute_error=absolute, signed_error=signed,
+                underforecast_units=max(0.0, -signed) if valid == index else None))
+    return records
+
+
 def pool_metrics(windows, horizon):
     """Pool units, never average series or window percentages. Also usable for network aggregation."""
     rows = [w for w in windows if w.horizon == horizon]
@@ -197,8 +269,8 @@ def pool_metrics(windows, horizon):
         absolute_error=absolute if valid else None, actual_units=actual,
         wape=100 * absolute / actual if actual else None,
         signed_bias_units=signed if valid else None, signed_bias_pct=100 * signed / actual if actual else None,
-        mean_absolute_quantity_error=mean(abs(w.signed_error) for w in complete) if complete else None,
-        mean_quantity_bias=mean(w.signed_error for w in complete) if complete else None)
+        mean_absolute_quantity_error=_mean(abs(w.signed_error) for w in complete) if complete else None,
+        mean_quantity_bias=_mean(w.signed_error for w in complete) if complete else None)
 
 
 def evaluate(series, origins, cutoff, deadline=None):
@@ -207,10 +279,17 @@ def evaluate(series, origins, cutoff, deadline=None):
     for origin in origins:
         if deadline is not None and perf_counter() > deadline:
             raise TimeoutError("Forecast runtime budget exceeded")
-        predicted = series.predict_all(origin, 28)
+        # Candidate scoring consumes only dates and quantities. Construct the
+        # authoritative ForecastDay contracts once, for the selected result.
+        predicted = series.predict_all(origin, 28, _scoring_only=True)
+        points = predicted[METHODS[0]]
+        evidence = []
+        for point in points:
+            status = series.status(point.day, cutoff)
+            actual = series.rows[point.day].sales_units if status == "observed" else None
+            evidence.append((status, actual))
         for method in METHODS:
-            for h in horizons:
-                records[method].append(score_window(series, origin, predicted[method], h, cutoff))
+            records[method].extend(score_windows(series, origin, predicted[method], horizons, cutoff, evidence))
     return [CandidateRecord(method=m, windows=records[m], metrics=[pool_metrics(records[m], h) for h in horizons]) for m in METHODS]
 
 
@@ -250,7 +329,7 @@ def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_sec
     selection = evaluate(series, origins, cutoff, deadline)
     selected, status, reason, improvement = select_model(selection)
     final_check = evaluate(series, [cutoff] if cutoff >= start else [], as_of, deadline)
-    predicted = series.predict_all(as_of, 56)[selected]
+    predicted = series.predict_all(as_of, 56, _methods=(selected,))[selected]
     _, estimates, observed = series.training(as_of)
     if len(observed) < 28:
         status = "provisional"

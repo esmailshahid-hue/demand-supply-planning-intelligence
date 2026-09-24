@@ -32,16 +32,14 @@ def production_request():
 
 
 def invoke_production_route(size):
-    return api.sample_plan(PlanSampleRequest(size=size),production_request(), include_stock=True)
+    return api.sample_plan(PlanSampleRequest(size=size),production_request())
 
 
 def main():
     cold = subprocess.check_output([sys.executable, '-c',
         "from time import perf_counter; s=perf_counter(); from backend.app.main import app; print(perf_counter()-s)"], text=True).strip()
-    started=perf_counter()
-    from backend.app.planning import optimizer
     print(json.dumps({'platform':platform.platform(),'python':platform.python_version(),
-        'fresh_process_api_import_s':float(cold),'optimizer_cold_import_s':perf_counter()-started}),flush=True)
+        'fresh_process_api_import_s':float(cold)}),flush=True)
     adapter=TypeAdapter(PlanResult)
     totals=defaultdict(float);counts=defaultdict(int)
     def timed(name,fn):
@@ -54,12 +52,20 @@ def main():
         return call
     with ExitStack() as stack:
         for module,attr,name in [(engine,'network_forecasts','forecast'),(engine,'benchmark','benchmark'),
-                (engine,'replay','replay'),(engine,'_explanations','explanations'),
-                (optimizer,'optimize','joint_total'),(optimizer.Model,'solve','matrix_and_solve'),
-                (optimizer,'milp','scipy_solve'),(api,'sample','sample_input')]:
+                (engine,'replay','replay'),(engine,'_explanations','explanations'),(api,'sample','sample_input')]:
             stack.enter_context(patch.object(module,attr,timed(name,getattr(module,attr))))
         previous={}
-        for size in ('fixture','full'):
+        # The full calculation deliberately does not load the optimizer. Measure
+        # it first so this is a true fresh-process full request, not a fixture-
+        # warmed request. Import and instrument the optimizer only afterwards.
+        for size in ('full','fixture'):
+            if size == 'fixture':
+                started=perf_counter()
+                from backend.app.planning import optimizer
+                print(json.dumps({'optimizer_cold_import_s':perf_counter()-started}),flush=True)
+                for module,attr,name in [(optimizer,'optimize','joint_total'),
+                        (optimizer.Model,'solve','matrix_and_solve'),(optimizer,'milp','scipy_solve')]:
+                    stack.enter_context(patch.object(module,attr,timed(name,getattr(module,attr))))
             for run in ('first','repeat'):
                 totals.clear();counts.clear();start=perf_counter()
                 with collect() as detailed:

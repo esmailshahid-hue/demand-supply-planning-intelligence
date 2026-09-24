@@ -1,3 +1,42 @@
+# Narrow production-latency correction — 23 September 2026
+
+**Status: locally verified and ready to commit; exact-commit CI, deployment and canonical-host acceptance remain pending.** Started from clean `d5eda7ad637e7b40ce799b6ae7bb6c786bf257cc`. No push, deployment, workflow dispatch, Vercel setting, sample dimension, planning rule, response contract or latency threshold was changed.
+
+Manual production-latency [run 35858535758](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35858535758), job `107172785296`, reached the canonical deployment from GitHub's `westcentralus` runner over `sfo1 → iad1`. Its full first request failed the unchanged ten-second gate at **12.358 s** (first byte **12.131 s**, reported engine **8.060 s**, **1,022,712 bytes**). The repeat was **3.760 s** / engine **3.068 s**. Both returned `feasible_fallback`; independent replay passed and Vercel reported no runtime errors. The Ubuntu 26 annotation is informational.
+
+Fresh-process profiling identified forecast candidate preparation as the cold engine bottleneck, with deterministic benchmark generation second. The evaluator constructed more than 200,000 fully validated `ForecastDay` response models merely to score internal candidate windows, rescored common horizon prefixes independently, and performed repeated event checks for the 232/240 full-sample series with no applicable event. The benchmark repeatedly scanned future receipt ranges and the complete offer/lane/assortment collections. Replay, explanations, response validation and JSON serialization were not material bottlenecks. The full path already avoided the joint optimizer; the profiler previously obscured that fact by importing SciPy before measuring full.
+
+The correction keeps identical arithmetic and authoritative contracts while using lightweight date/quantity points only during candidate scoring, scoring the 7/protection/28-day prefixes in one pass, constructing public `ForecastDay` models only for the selected 56-day forecast, short-circuiting empty event sets, and indexing immutable request-local benchmark inputs/future receipt totals. Exact golden hashes for all forecasts and the complete policy remain unchanged. New regressions compare the combined scorer with the original per-horizon function and compare the entire cold/repeat result after removing only generated IDs/timing; the latter includes status/stages, actions and dates, quantities/values, commitments/payments/headroom, service/unmet results, explanations, all three replay ledgers and scenario baseline capture.
+
+Fresh-process local macOS arm64 / Python 3.14.4 measurements, compact production route, no preceding health/fixture/forecast calculation:
+
+| Full phase | d5eda7a before | Corrected after |
+|---|---:|---:|
+| API module import | not repeated in request | 0.154 s |
+| Sample construction + validation | 0.819 s | 0.820 s |
+| Forecast preparation | 1.414 s | **0.791 s** |
+| Deterministic benchmark / candidate generation | 0.391 s | **0.314 s** |
+| Independent replay (three calls) | 0.122 s | 0.121 s |
+| Shortage explanations | 0.033 s | 0.033 s |
+| Planning engine | 2.064 s | **1.366 s** |
+| Complete route / response construction | 2.963 s | **2.266 s** |
+| Contract validation / JSON serialization | 0.0007 / 0.0021 s | 0.00001 / 0.0022 s |
+| Response bytes | 1,022,713 | 1,022,713 |
+
+Corrected repeat route/engine was **0.718 / 0.637 s**; repeat reuse is retained but is not the cold evidence. The cold engine improved approximately **34%** in the final instrumented comparison. Values are local evidence only and do not establish Linux/container or canonical-host performance. Corrected-commit normal CI and production workflow run IDs are pending because this worktree is uncommitted and the instruction forbids push/deploy/dispatch. After authorized deployment of the exact corrected commit, require **two consecutive unchanged manual production-latency workflow runs** to pass the cold full request; retain both artifacts and do not select a favorable rerun.
+
+Completed local verification:
+
+- Focused optimized-path/scoring regressions passed; complete backend suite passed **219 tests, 10 subtests**, with two existing framework deprecation warnings, in **336.24 s**. The first sandboxed run had 218 passes and one loopback-bind denial; the complete permitted rerun is the recorded result.
+- Solver smoke passed SciPy 1.18.1 and cold/warm HiGHS status 0. Production forecast smoke passed fixture **0.027 / 0.026 s** and full **0.933 / 0.159 s**. Complete planning smoke passed fixture **2.587 / 1.699 s** and full **1.404 / 0.724 s**; full engine was **1,293.4 / 630.3 ms** with 31 purchases, 607 movements, exact SAR 92,550 commitments / 99,050 payments, independent replay, nonnegative headroom and repeat determinism. Those planning labels followed forecast requests and are not cold-start evidence.
+- Compact/complete/scoped-evidence smoke, production scenario smoke and fixture/full upload-review-accept-export-portable-reopen smoke passed. Full scenario compare first/repeat was **2.270 / 2.305 s**; future-path comparison **3.052 s**.
+- Contract export and generated TypeScript were byte-reproducible; frontend production build passed. The complete Playwright rerun passed **26/26 in 2.7 min**. An earlier run had one transient response timeout (25/26); the isolated case then passed in 15.8 s before the clean complete rerun. Skill-governed browser verification also confirmed meaningful content, no error overlay and expected navigation/controls.
+- `pip check`, installed npm-tree resolution, production `npm audit` (**0 vulnerabilities**), Python compilation and `git diff --check` passed. Docker/Podman/Colima/Lima is unavailable locally, so corrected Linux/container evidence remains an exact-commit CI responsibility.
+
+The worktree is ready to commit and submit to CI. It is **not yet ready to claim deployment acceptance**: deploy only the reviewed exact commit after normal CI passes, then complete the two consecutive unchanged canonical production-latency runs described above.
+
+---
+
 # Final Pass 6 closure check — 20 September 2026
 
 **Verdict: Pass 6 remains open — production latency gate not yet proven.** This section supersedes prior statements that corrected CI, Docker verification or deployment did not exist. Earlier observations remain below as history. Hosted own-data is a separate, intentionally blocked release gate; it is not by itself the reason public-sample Pass 6 remains open.
