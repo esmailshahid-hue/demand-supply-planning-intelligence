@@ -1,3 +1,45 @@
+# Final cold-start latency correction — 24 September 2026
+
+**Status: locally verified and ready to commit; exact-commit CI, deployment and canonical-host acceptance remain pending.** This work started from clean `17eaa4be79b7b8bdc7977a24f329438742db36b3`. No push, deployment, workflow dispatch, Vercel setting, latency/size gate, dataset dimension, planning rule or response contract was changed.
+
+The user-supplied second canonical failure was full first/repeat **11.289 / 3.587 s HTTP**, **6.641 / 3.195 s engine**, **1,022,712 bytes**, `feasible_fallback`, independent replay passing, `iad1 → iad1`. Health was **0.216 s** and fixture first/repeat **4.425 / 2.753 s**. The first full request therefore contained approximately **4.648 s** outside the reported engine, versus **0.392 s** on repeat. This supersedes the earlier **12.358 / 8.060 s HTTP/engine** cold result as the latest hosted baseline; it does not count as evidence for this uncommitted correction.
+
+The missing interval is now observable from the earliest application-owned standard-library timestamp through FastAPI construction, workflow/scenario route imports, lifespan startup, request body/schema handling, bundled sample construction and validation, provenance normalization, planning, response construction, FastAPI response validation/serialization and ASGI response readiness. Fixed-name numeric `Server-Timing` is always returned; structured timing logs remain opt-in with `PLANNING_DIAGNOSTICS=1`. The canonical probe stores the raw header and a fixed-allowlist parsed map. No input values, paths, identifiers, environment values or stack traces enter either surface.
+
+The concrete cold-path defect was cross-row validation performing approximately **310,000 failed dynamic Pydantic attribute lookups** while walking the 99,160-row full history. Row schema membership is now resolved once per table, preserving the same row/reference checks and issue ordering. Planning also requests an internal forecast projection containing only the selected 56-day points and buffer/identity fields it consumes; it no longer constructs unused per-series final-check, history and public response models. Public forecast responses are unchanged. Hosted-disabled storage no longer creates an unused temporary directory, cleanup thread or exit handler. These changes reuse immutable work only inside the same calculation/sample object; they do not cache a completed recommendation or require a previous request.
+
+Import-graph audit from a fresh interpreter confirmed `/api/plan/sample` does **not** import SciPy/HiGHS, NumPy, pandas, OpenPyXL or `backend.app.planning.optimizer`. The full plan continues to disclose `joint_model:not_attempted`. Workflow route declarations import lightweight workbook/review/scenario modules, but Excel itself remains function-local and absent from the sample request process. The measured route-import cost is **22.9–31.7 ms**; FastAPI construction is approximately **0.09 ms**. No broad module split was justified by that evidence.
+
+Fresh-process macOS arm64 / Python 3.14.4 evidence was produced by [cold_start_profile.py](../scripts/cold_start_profile.py). Each of three samples started a new production-style Uvicorn process, performed only a TCP readiness check before the measured full plan, then issued one ordinary repeat on the same server. There was no health, fixture, forecast, sleep-based warm-up or prior planning request. Stable policy signatures matched across all six calculations.
+
+| Final full-sample phase | Fresh process 1 | Fresh process 2 | Fresh process 3 |
+|---|---:|---:|---:|
+| Process launch to listening | 0.302 s | 0.287 s | 0.250 s |
+| Module bootstrap/import | 0.210 s | 0.167 s | 0.166 s |
+| Request parsing/validation | 0.0096 s | 0.0051 s | 0.0049 s |
+| Sample construction + validation | 0.637 s | 0.611 s | 0.606 s |
+| Input normalization/provenance | 0.079 s | 0.078 s | 0.080 s |
+| Planning engine | 1.294 s | 1.267 s | 1.269 s |
+| Response construction | 0.00004 s | 0.00004 s | 0.00004 s |
+| Response serialization | 0.0022 s | 0.0022 s | 0.0023 s |
+| ASGI response ready / HTTP total | 2.024 / **2.025 s** | 1.966 / **1.967 s** | 1.963 / **1.965 s** |
+| Startup + HTTP | **2.327 s** | **2.254 s** | **2.215 s** |
+| Ordinary repeat HTTP | 0.729 s | 0.729 s | 0.734 s |
+
+The preceding correction's local component baseline was **2.266 s route / 1.366 s engine / 0.820 s sample input / 0.791 s forecast / 0.314 s benchmark**. The final wall-clock component profile is **1.948 / 1.262 / 0.605 / 0.684 / 0.316 s** respectively; replay/explanations remain live at **0.124 / 0.033 s**. First response size is **1,022,713 bytes** (the one-byte repeat variation is generated timing text). These values meet the requested local targets with substantial margin, but macOS measurements cannot establish corrected Vercel performance.
+
+Behavioral parity is pinned by the pre-existing full-precision fixture/full forecast and complete-policy hashes. The cold/repeat comparison removes only generated IDs/timing and covers status/stages, forecasts, purchases/movements with action IDs/dates/quantities/values, commitments/payments/headroom, service/unmet demand, explanations and all replay ledgers. Scenario capture matches the returned actions, summary and cash. Final local verification:
+
+- Complete backend suite: **220 passed, 10 subtests passed**, two existing framework deprecation warnings, **311.24 s**.
+- Solver smoke passed SciPy 1.18.1 and HiGHS status 0. Contract export/generated TypeScript were byte-reproducible; production frontend build passed.
+- Complete Playwright suite: **26/26 in 2.6 minutes**. Separate skill-guided browser inspection found meaningful content, no error overlay, no captured console errors and expected navigation/controls.
+- Forecast, complete planning, compact/complete/scoped evidence, scenarios and fixture/full upload-review-accept-export-portable-reopen smokes passed. Full complete planning remained 31 purchases / 607 movements, exact SAR **92,550 commitments / 99,050 payments**, nonnegative headroom, independent replay and repeat determinism.
+- `pip check`, installed npm-tree resolution, production `npm audit` (**0 vulnerabilities**), Python compilation and `git diff --check` passed. Docker/Podman/Colima/Lima remains unavailable locally, so exact-commit Linux/container evidence is pending CI.
+
+The corrected worktree is ready to commit and enter normal CI. It is **not production-accepted**. After an authorized exact-SHA deployment, confirm the canonical alias serves that SHA, run normal exact-commit CI, then obtain **two consecutive unchanged** `Verify canonical production latency` passes and record both run/job IDs plus all cold/full phase measurements. Do not rerun an unchanged failure hoping for favorable placement.
+
+---
+
 # Narrow production-latency correction — 23 September 2026
 
 **Status: locally verified and ready to commit; exact-commit CI, deployment and canonical-host acceptance remain pending.** Started from clean `d5eda7ad637e7b40ce799b6ae7bb6c786bf257cc`. No push, deployment, workflow dispatch, Vercel setting, sample dimension, planning rule, response contract or latency threshold was changed.

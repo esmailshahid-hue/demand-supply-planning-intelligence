@@ -1,3 +1,17 @@
+# Final cold-start latency correction — 24 September 2026
+
+The latest canonical baseline still fails only the retained cold full-sample gate: **11.289 s HTTP / 6.641 s engine**, versus **3.587 / 3.195 s** on repeat, with a **1,022,712-byte** valid `feasible_fallback` response and passing independent replay. The approximately **4.648 s** cold pre-engine/residual interval is now covered by always-on, fixed-name `Server-Timing`; detailed logs remain opt-in. The canonical probe records both the raw timing header and allowlisted parsed phase durations.
+
+Starting from `17eaa4be79b7b8bdc7977a24f329438742db36b3`, the local correction removes hundreds of thousands of dynamic Pydantic missing-field lookups from full-dataset validation, constructs only the internal forecast projection consumed by planning, and avoids disabled hosted storage's unused temporary directory and cleanup thread. Fresh import audit confirms SciPy/HiGHS, NumPy, pandas, OpenPyXL and the optimizer remain absent from the full sample path; `joint_model:not_attempted` is unchanged. Public forecasts, planning/scenario contracts, constraints, fallbacks, replay, dimensions, response-size gate and ten-second gate are unchanged.
+
+Three final fresh production-style processes, with no preceding application request, measured full HTTP **2.025 / 1.967 / 1.965 s**, engine **1.294 / 1.267 / 1.269 s**, and process launch-to-listening **0.302 / 0.287 / 0.250 s**. Startup plus HTTP was **2.327 / 2.254 / 2.215 s**; ordinary repeats were **0.729 / 0.729 / 0.734 s**. All six policy signatures matched, independent replay passed, and first responses remained **1,022,713 bytes**. These are local macOS/Python 3.14.4 results, not hosted acceptance.
+
+Local verification passed 220 backend tests plus 10 subtests, 26 Playwright tests, solver, contracts/types/build, forecast/planning/compact-evidence/scenario/workflow smokes, browser inspection, dependency checks/audit, compilation and diff checks. Docker-compatible tooling is unavailable locally. Full evidence and phase comparisons are in [BUILD_STATUS.md](BUILD_STATUS.md).
+
+Do not push, deploy, alter Vercel settings or dispatch workflows automatically. The reviewed commit is ready for the authorized release process, but production acceptance remains pending: obtain green normal CI for the exact SHA; deploy that exact SHA; confirm the canonical alias identity; run `Verify canonical production latency` twice consecutively without implementation/configuration changes; require both runs to pass; retain both artifacts; and record their run/job IDs and cold/full measurements here and in BUILD_STATUS. Corrected commit, CI run, deployment ID and both hosted workflow runs are **pending**.
+
+---
+
 # Narrow production-latency correction — 23 September 2026
 
 Canonical run **35858535758**, job **107172785296**, failed only the retained cold full-sample HTTP gate: **12.358 s** total, **12.131 s** first byte, **8.060 s** reported engine, **1,022,712 bytes**, `feasible_fallback`, with independent replay passing and no Vercel runtime errors. Its repeat was **3.760 s** / **3.068 s** engine. The runner/path was `westcentralus`, `sfo1 → iad1`; the Ubuntu 26 annotation needs no application change.

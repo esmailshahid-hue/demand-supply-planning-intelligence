@@ -39,14 +39,27 @@ def validate_dataset(data: Dataset) -> list[Issue]:
     assortments = {(a.sku, a.location_id): a for a in data.assortment}
     as_of = data.settings.as_of
     add("network", "Exactly one DC and one to four stores are supported.", int(sum(l.kind == "dc" for l in data.locations) != 1))
-    for name, fields in tables:
-        for row in getattr(data, name):
-            if hasattr(row, "sku") and row.sku not in products:
+    for name, _ in tables:
+        rows = getattr(data, name)
+        if not rows:
+            continue
+        # Pydantic resolves a missing attribute through its dynamic fallback.
+        # Discover the uniform row schema once instead of paying that cost for
+        # every field of every observation (the full fixture has ~100k rows).
+        row_fields = type(rows[0]).model_fields
+        has_sku = "sku" in row_fields
+        location_fields = tuple(
+            field for field in ("location_id", "source", "destination")
+            if field in row_fields
+        )
+        has_supplier = "supplier_id" in row_fields
+        for row in rows:
+            if has_sku and row.sku not in products:
                 add("unknown_sku", f"{name}: SKU reference does not exist.")
-            for field in ("location_id", "source", "destination"):
-                if hasattr(row, field) and getattr(row, field) not in locations:
+            for field in location_fields:
+                if getattr(row, field) not in locations:
                     add("unknown_location", f"{name}: location reference does not exist.")
-            if hasattr(row, "supplier_id") and row.supplier_id not in suppliers:
+            if has_supplier and row.supplier_id not in suppliers:
                 add("unknown_supplier", f"{name}: supplier reference does not exist.")
     for p in data.products:
         add("active_dates", "Product active dates are reversed.", int(p.active_to is not None and p.active_to < p.active_from))

@@ -139,7 +139,8 @@ def _network_forecasts(data, deadline):
             raise TimeoutError('Network forecast budget exhausted')
         settings=data.settings.model_copy(update={'protection_days':days})
         projected=data.model_copy(update={'demand_history':rows[key], 'settings':settings})
-        result=forecast(projected,*key,runtime_seconds=max(.01,deadline-perf_counter()),_input_hash=identity.hash(rows[key],settings))
+        result=forecast(projected,*key,runtime_seconds=max(.01,deadline-perf_counter()),
+            _input_hash=identity.hash(rows[key],settings),_planning_only=True)
         if result.status=='unavailable' or result.buffer.units is None:
             failures.append(Failure(code='forecast_unavailable',message='A defensible forecast and buffer are required for every ranged series.',sku=a.sku,location_id=a.location_id))
             continue

@@ -145,21 +145,37 @@ def configuration():
     return {'enabled': True, 'driver': 'local', 'message': 'Local temporary storage: workbook bytes are deleted after parsing. Normalized data, drafts and accepted files expire after one hour; cleanup runs every 30 seconds, on reset and on normal process exit. Download accepted files before leaving.'}
 
 
-store = LocalStorage()
+class DisabledStorage:
+    """Hosted placeholder that performs no filesystem or thread initialization."""
+    driver = 'disabled'
+    records = {}
+
+    def _unavailable(self, *args, **kwargs):
+        raise ObjectUnavailable(configuration()['message'])
+
+    put = get = delete = replace = reset = _unavailable
+
+    def sweep(self):
+        pass
+
+
+store = LocalStorage() if configuration()['enabled'] else DisabledStorage()
 _stop = Event()
 def sweep_abandoned():
     # Recover expired local directories left by a crashed process. Only this
     # service's private naming prefix, current UID and old directories qualify.
     for path in list(Path(gettempdir()).glob('planning-session-*'))+list(Path(gettempdir()).glob('planning-import-*')):
         try:
-            if path != store.root and not path.is_symlink() and path.is_dir() and path.stat().st_uid==os.getuid() and path.stat().st_mtime<time()-TTL:
+            if (not isinstance(store, LocalStorage) or path != store.root) and not path.is_symlink() and path.is_dir() and path.stat().st_uid==os.getuid() and path.stat().st_mtime<time()-TTL:
                 shutil.rmtree(path)
         except OSError:
             pass
 def _cleanup():
     while not _stop.wait(30):
         store.sweep();sweep_abandoned()
-Thread(target=_cleanup, daemon=True, name='planning-object-cleanup').start()
+if isinstance(store, LocalStorage):
+    Thread(target=_cleanup, daemon=True, name='planning-object-cleanup').start()
 def _close():
     _stop.set(); store.close()
-atexit.register(_close)
+if isinstance(store, LocalStorage):
+    atexit.register(_close)

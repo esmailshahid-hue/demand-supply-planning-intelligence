@@ -17,7 +17,7 @@ from backend.app.scenarios.contracts import ScenarioRequest, DetailRequest, Acti
 from backend.app.planning.constraints import ReviewConstraints, business_key
 from backend.app.data.reconciliation import Execution, reconcile
 from fastapi.concurrency import run_in_threadpool
-from backend.app.diagnostics import timed
+from backend.app.diagnostics import timed, measure
 
 router=APIRouter(prefix='/api/workflow')
 COOKIE='planning_session'
@@ -48,8 +48,9 @@ def dataset_for(request,size='fixture'):
     if reference:
         available()
         record=load(request,reference,'dataset')
-        data=Dataset.model_validate(record['dataset'])
-        context=provenance(data,record.get('source_type','uploaded'),None)
+        with measure('input_normalization'):
+            data=Dataset.model_validate(record['dataset'])
+            context=provenance(data,record.get('source_type','uploaded'),None)
         if record.get('provenance') != context.model_dump(mode='json'):
             raise HTTPException(409,'Stored dataset provenance does not match the private dataset. Import or reopen it again.')
         return data, None, context
@@ -57,7 +58,9 @@ def dataset_for(request,size='fixture'):
         raise HTTPException(409,'This scenario requires its matching private uploaded or portable dataset reference.')
     from backend.app.main import sample
     data,issues=sample(size)
-    return data,issues,provenance(data,'bundled_'+size,size)
+    with measure('input_normalization'):
+        context=provenance(data,'bundled_'+size,size)
+    return data,issues,context
 
 
 @timed('review_attachment')

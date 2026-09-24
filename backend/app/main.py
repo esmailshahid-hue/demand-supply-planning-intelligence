@@ -1,6 +1,7 @@
 """One process serves the calculation API and compiled React UI; no user-row persistence."""
 from time import perf_counter
-_import_started = perf_counter()
+from backend.app.bootstrap import STARTED as _import_started
+_main_import_started = perf_counter()
 from backend.app.diagnostics import timed, measure
 from functools import lru_cache
 from pathlib import Path
@@ -28,8 +29,10 @@ MAX_BODY_BYTES = 32 * 1024 * 1024
 calculation_slot = BoundedSemaphore(1)
 _sample_lock = RLock()
 _setup_started = perf_counter()
+_construction_started = perf_counter()
 app = FastAPI(title="Demand and Supply Planning Intelligence", version=ENGINE_VERSION,
               description="Synthetic portfolio. Evaluated forecasts and independently validated purchasing, allocation and payment plans.")
+startup_measurement('fastapi_construction', perf_counter()-_construction_started)
 
 
 class BodyLimit:
@@ -155,8 +158,9 @@ def sample_plan(request: PlanSampleRequest, http: Request, include_stock: bool =
     data, issues, context = dataset_for(http,request.size)
     result=calculate_plan(data,issues,imported_constraints(http))
     if isinstance(result,PlanResult):
-        result=result.model_copy(update={'provenance':context})
-        return decisions(attach_draft(http,data,result,context),include_stock)
+        with measure('response_construction'):
+            result=result.model_copy(update={'provenance':context})
+            return decisions(attach_draft(http,data,result,context),include_stock)
     return result
 
 
@@ -167,8 +171,10 @@ def custom_plan(request: PlanRequest, include_stock: bool = False):
 
 
 # Stateless sample scenario APIs use the same admission control as planning.
+_scenario_import_started = perf_counter()
 from backend.app.scenarios.contracts import BaselineResult, ScenarioRequest, ScenarioResult, DetailRequest, ScenarioDetail, CaptureRequest
 from backend.app.scenarios.engine import baseline_result, compare, detail, capture
+startup_measurement('scenario_import', perf_counter()-_scenario_import_started)
 
 
 def scenario_call(fn, request, http=None):
@@ -229,4 +235,5 @@ def index():
 
 instrument_response_fields(app)
 startup_measurement('fastapi_setup', perf_counter()-_setup_started)
-startup_measurement('application_import', perf_counter()-_import_started)
+startup_measurement('application_import', perf_counter()-_main_import_started)
+startup_measurement('module_bootstrap', perf_counter()-_import_started)

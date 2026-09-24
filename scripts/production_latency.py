@@ -21,6 +21,18 @@ from scripts.planning_smoke import stable_plan, validate_plan
 CANONICAL = 'https://demand-supply-planning-intelligence.vercel.app'
 HTTP_LIMIT = 10
 BYTE_LIMIT = 4_500_000
+SERVER_TIMING_PHASES = frozenset({
+    'application_import', 'benchmark', 'buffers', 'dataset_context',
+    'dataset_validation', 'explanations', 'fastapi_construction',
+    'fastapi_setup', 'fastapi_startup', 'forecast_contract',
+    'forecast_identity', 'forecast_reuse', 'independent_replay',
+    'input_normalization', 'module_bootstrap', 'network_forecast',
+    'planning', 'protection_paths', 'request_body', 'request_validation',
+    'response_construction', 'response_ready', 'response_serialization',
+    'response_validation', 'review_attachment', 'route',
+    'sample_construction', 'sample_input', 'scenario_import',
+    'series_forecast', 'workflow_import',
+})
 
 
 def utcnow():
@@ -30,6 +42,21 @@ def utcnow():
 def require(condition, message):
     if not condition:
         raise AssertionError(message)
+
+
+def server_timings(header):
+    """Parse our bounded Server-Timing metrics without accepting dynamic names."""
+    values = {}
+    for metric in (header or '').split(','):
+        parts = [part.strip() for part in metric.split(';')]
+        if not parts or parts[0] not in SERVER_TIMING_PHASES:
+            continue
+        duration = next((part[4:] for part in parts[1:] if part.startswith('dur=')), None)
+        try:
+            values[parts[0]] = float(duration) if duration is not None else None
+        except ValueError:
+            values[parts[0]] = None
+    return values
 
 
 def curl_command(output, specs):
@@ -67,6 +94,7 @@ def measurement(name, path, timing, headers, raw, value, started, session, index
         'http_version': timing['http_version'], 'remote_ip': timing.get('remote_ip'),
         'vercel_id': headers.get('x-vercel-id'),
         'server_timing': headers.get('server-timing'),
+        'server_timings_ms': server_timings(headers.get('server-timing')),
         'engine_ms': value.get('elapsed_ms'),
         'result_status': value.get('status', policy.get('status')),
         'stages': value.get('stages', policy.get('stages')),

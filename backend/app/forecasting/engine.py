@@ -29,6 +29,16 @@ class _ScoredForecastDay(NamedTuple):
     forecast_units: float | None
 
 
+class _PlanningForecast(NamedTuple):
+    """Projection consumed by planning; never an API response contract."""
+    run_id: str
+    input_hash: str
+    selected_method: str
+    status: str
+    forecast: list[_ScoredForecastDay]
+    buffer: BufferEvidence
+
+
 def _mean(values):
     """Exact fast path for integral inputs; preserve statistics.mean otherwise."""
     values = list(values)
@@ -318,7 +328,8 @@ def select_model(records):
 
 
 @timed('series_forecast')
-def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_seconds=30, *, _input_hash=None):
+def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_seconds=30, *, _input_hash=None,
+             _planning_only=False):
     started = perf_counter()
     deadline = started + runtime_seconds
     series = Series(data, sku, location_id)
@@ -328,8 +339,8 @@ def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_sec
     origins = sorted(cutoff - timedelta(days=28 * k) for k in range(1, 9) if cutoff - timedelta(days=28 * k) >= start + timedelta(days=28))
     selection = evaluate(series, origins, cutoff, deadline)
     selected, status, reason, improvement = select_model(selection)
-    final_check = evaluate(series, [cutoff] if cutoff >= start else [], as_of, deadline)
-    predicted = series.predict_all(as_of, 56, _methods=(selected,))[selected]
+    final_check = [] if _planning_only else evaluate(series, [cutoff] if cutoff >= start else [], as_of, deadline)
+    predicted = series.predict_all(as_of, 56, _scoring_only=_planning_only, _methods=(selected,))[selected]
     _, estimates, observed = series.training(as_of)
     if len(observed) < 28:
         status = "provisional"
@@ -357,6 +368,13 @@ def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_sec
             units = visible / 28 * data.settings.fallback_buffer_days if visible is not None else None
             buffer_method = "days_of_demand" if units is not None else "unavailable"
             fallback_days = data.settings.fallback_buffer_days
+    buffer = BufferEvidence(units=units, method=buffer_method, protection_days=data.settings.protection_days,
+        percentile=data.settings.buffer_percentile, sample_count=len(errors), fallback_days=fallback_days,
+        note="Selection-period cumulative underforecast errors only. Percentile is not a guaranteed fill rate; no DC buffer is added.")
+    input_hash = _input_hash if _input_hash is not None else sha256(data.model_dump_json().encode()).hexdigest()
+    if _planning_only:
+        return _PlanningForecast(run_id=str(uuid4()), input_hash=input_hash, selected_method=selected,
+            status=status, forecast=predicted, buffer=buffer)
     history = []
     for i in range(56):
         day = as_of - timedelta(days=56 - i)
@@ -365,12 +383,10 @@ def forecast(data: Dataset, sku: str, location_id: str, warnings=(), runtime_sec
         history.append(HistoryDay(day=day, observed_sales=row.sales_units if row and state in ("observed", "censored") else None,
             training_estimate=estimates.get(day), status=state))
     with measure('forecast_contract'):
-        return ForecastResult(run_id=str(uuid4()), input_hash=_input_hash if _input_hash is not None else sha256(data.model_dump_json().encode()).hexdigest(),
+        return ForecastResult(run_id=str(uuid4()), input_hash=input_hash,
             dataset_id=data.dataset_id, synthetic=data.synthetic, as_of=as_of, sku=sku, product_name=series.product.name,
             location_id=location_id, location_name=series.location.name, selected_method=selected, status=status,
             selection_reason=reason, selection_cutoff=cutoff, improvement_pct=improvement, selection=selection,
             final_check=final_check, forecast=predicted, history=history, visible_units=total(predicted[:28]), tail_units=total(predicted[28:]),
-            buffer=BufferEvidence(units=units, method=buffer_method, protection_days=data.settings.protection_days,
-                percentile=data.settings.buffer_percentile, sample_count=len(errors), fallback_days=fallback_days,
-                note="Selection-period cumulative underforecast errors only. Percentile is not a guaranteed fill rate; no DC buffer is added."),
+            buffer=buffer,
             warnings=list(warnings), elapsed_ms=(perf_counter() - started) * 1000, evaluation_policy=POLICY)

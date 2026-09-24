@@ -1,4 +1,4 @@
-"""Opt-in bounded timings. No input values, IDs, secrets or dynamic metric names."""
+"""Bounded timing headers with opt-in logs; never include input values or IDs."""
 from collections import defaultdict
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -14,7 +14,9 @@ _PHASES = frozenset(('sample_construction', 'dataset_validation', 'sample_input'
     'dataset_context', 'review_attachment', 'planning', 'request_body',
     'response_validation', 'response_serialization', 'forecast_identity',
     'forecast_reuse', 'application_import', 'fastapi_setup', 'workflow_import',
-    'fastapi_startup', 'response_ready'))
+    'fastapi_startup', 'response_ready', 'module_bootstrap',
+    'fastapi_construction', 'scenario_import', 'request_validation',
+    'input_normalization', 'response_construction'))
 _startup = {}
 logger = logging.getLogger(__name__)
 
@@ -27,13 +29,11 @@ def startup_measurement(name, seconds):
 
 
 def instrument_response_fields(app):
-    """Diagnostic-only wrappers around installed FastAPI response fields.
+    """Low-overhead wrappers around installed FastAPI response fields.
 
     Retain the actual response validation and Pydantic serialization. No copied
     framework pipeline or global class patch; contracts and errors stay intact.
     """
-    if os.getenv('PLANNING_DIAGNOSTICS') != '1':
-        return
     for route in app.routes:
         field = getattr(route, 'response_field', None)
         if field is None or getattr(field, '_planning_timed', False):
@@ -59,6 +59,8 @@ def measure(name):
     if totals is None or name not in _PHASES:
         yield;return
     start=perf_counter()
+    if name == 'route' and '_asgi_started' in totals:
+        totals['request_validation'] += start - totals['_asgi_started']
     try:yield
     finally:totals[name]+=perf_counter()-start
 
@@ -73,7 +75,7 @@ def timed(name):
 class TimingHeaders:
     def __init__(self,app):self.app=app
     async def __call__(self,scope,receive,send):
-        if scope['type']=='lifespan' and os.getenv('PLANNING_DIAGNOSTICS')=='1':
+        if scope['type']=='lifespan':
             started=None
             async def lifecycle_receive():
                 nonlocal started
@@ -85,10 +87,11 @@ class TimingHeaders:
                     startup_measurement('fastapi_startup',perf_counter()-started)
                 await send(message)
             return await self.app(scope,lifecycle_receive,lifecycle_send)
-        if scope['type']!='http' or os.getenv('PLANNING_DIAGNOSTICS')!='1':
+        if scope['type']!='http':
             return await self.app(scope,receive,send)
         with collect() as totals:
             start=perf_counter()
+            totals['_asgi_started']=start
             async def measured_send(message):
                 if message['type']=='http.response.start':
                     # Inclusive nested phases are labeled separately; do not sum
@@ -98,6 +101,7 @@ class TimingHeaders:
                     message={**message,'headers':[*message.get('headers',[]),(b'server-timing',header.encode())]}
                 await send(message)
             await self.app(scope,receive,measured_send)
-            logger.warning('planning_request_complete %s', json.dumps({
-                'asgi_ms':round((perf_counter()-start)*1000,3),
-                'phases_ms':{k:round(v*1000,3) for k,v in totals.items() if k in _PHASES}},sort_keys=True))
+            if os.getenv('PLANNING_DIAGNOSTICS') == '1':
+                logger.warning('planning_request_complete %s', json.dumps({
+                    'asgi_ms':round((perf_counter()-start)*1000,3),
+                    'phases_ms':{k:round(v*1000,3) for k,v in totals.items() if k in _PHASES}},sort_keys=True))

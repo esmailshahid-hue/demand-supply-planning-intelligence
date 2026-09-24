@@ -24,11 +24,23 @@ def timing(path='/api/health', seconds=1, connections=1, status=200, exitcode=0)
 def curl_result(output, specs, records, bodies):
     for (name, _, _), body in zip(specs, bodies):
         (output / (name + '.body.json')).write_bytes(body)
-        (output / (name + '.headers')).write_text('HTTP/2 200\nx-vercel-id: iad1::probe\n')
+        (output / (name + '.headers')).write_text(
+            'HTTP/2 200\nx-vercel-id: iad1::probe\n'
+            'server-timing: module_bootstrap;dur=123.4, planning;dur=5.6, unbounded;dur=9\n')
     return subprocess.CompletedProcess([], 0, '\n'.join(map(json.dumps, records)), '')
 
 
 class ProductionLatencyTests(unittest.TestCase):
+    def test_server_timing_is_retained_and_parsed(self):
+        with TemporaryDirectory() as root:
+            probe = latency.Probe(root)
+            specs = [('health', '/api/health', None)]
+            response = curl_result(probe.output, specs, [timing()], [b'{}'])
+            with patch.object(latency.subprocess, 'run', return_value=response):
+                probe.batch(specs)
+            self.assertEqual(probe.rows[0]['server_timings_ms'],
+                             {'module_bootstrap': 123.4, 'planning': 5.6})
+
     def test_slow_first_is_retained_and_does_not_hide_repeat(self):
         with TemporaryDirectory() as root:
             probe = latency.Probe(root)
