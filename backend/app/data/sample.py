@@ -7,7 +7,7 @@ from random import Random
 from backend.app.contracts import Dataset
 from backend.app.forecasting.engine import midnight
 
-SAMPLE_VERSION = "sample-v1"
+SAMPLE_VERSION = "sample-v2"
 AS_OF = date(2026, 9, 14)
 CASES = {
     "uneven_stock": "SKU001", "censored_history": "SKU002", "dated_promotion": "SKU003",
@@ -120,8 +120,15 @@ def generate_bundle(size="fixture", seed=97):
     payables = [dict(external_id="PAY-LATE-001", linked_external_id="PO-LATE-001", due_date=AS_OF+timedelta(days=43), amount=2200),
                dict(external_id="PAY-RECEIVED-001", linked_external_id="PO-RECEIVED-001", due_date=AS_OF+timedelta(days=18), amount=1200)]
     monday = AS_OF-timedelta(days=AS_OF.weekday())
-    budgets = [dict(week_start=monday+timedelta(days=7*k), new_commitment_cap=1500 if k < 2 else 15000,
-                    payment_ceiling=4000 if k < 2 else 18000, transfer_budget=800) for k in range(14)]
+    # The 10-SKU fixture intentionally retains its original funding stress case.
+    # The 60-SKU sample has 6.36x its visible demand, so it receives a simple,
+    # deliberately conservative scale allowance rather than the fixture caps.
+    if size == "fixture":
+        commitment = (1500, 15000); payment = (4000, 18000); transfer_budget = 800
+    else:
+        commitment = (9000, 30000); payment = (12000, 30000); transfer_budget = 1200
+    budgets = [dict(week_start=monday+timedelta(days=7*k), new_commitment_cap=commitment[k >= 2],
+                    payment_ceiling=payment[k >= 2], transfer_budget=transfer_budget) for k in range(14)]
     lanes = [dict(source="DC", destination=f"S{i}", transit_days=1 if i < 3 else 2,
                   dispatch_weekdays=list(range(7)), capacity_units=1000, grouped_dispatch_fee=20,
                   pack_units=10, allowed_skus=[p["sku"] for p in products]) for i in range(1, 5)]

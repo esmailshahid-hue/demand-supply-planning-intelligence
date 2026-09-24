@@ -63,7 +63,7 @@ def run(url):
     assert scenario['original']['summary']==ledger['summary']
     assert scenario['frozen']['feasible'] and scenario['replanned']['feasible']
     assert scenario['frozen']['purchases']==policy['purchases'] and scenario['frozen']['movements']==policy['movements']
-    for field,before,after in [('shock_delta','original','frozen'),('replan_delta','frozen','replanned')]:
+    for field,before,after in [('shock_delta','original','frozen'),('replan_delta','frozen','replanned'),('net_delta','original','replanned')]:
         for key,value in scenario[field].items():
             assert abs(value-(scenario[after]['summary'][key]-scenario[before]['summary'][key]))<1e-8
     review={'enabled':session['enabled'],'message':session['message']}
@@ -98,7 +98,7 @@ def run(url):
         'movement':move,'donor_stock':donor,'origin_donor_reserve':reserve,'receiver_stock':receiver,'grouped_fee':fee,
         'cash':ledger['cash'],'summary':ledger['summary'],'scenario':{'definition':definition,
             'summaries':{k:scenario[k]['summary'] for k in ('original','frozen','replanned')},
-            'shock_delta':scenario['shock_delta'],'replan_delta':scenario['replan_delta']},
+            'shock_delta':scenario['shock_delta'],'replan_delta':scenario['replan_delta'],'net_delta':scenario['net_delta']},
         'review':review,'measurements':measurements}
 
 
@@ -108,4 +108,4 @@ if __name__=='__main__':
     result=run(args.url);args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps({'measurements':result['measurements'],'review_enabled':result['review']['enabled'],
-        'replan_delta':result['scenario']['replan_delta'],'trace_reconciled':True},indent=2))
+        'replan_delta':result['scenario']['replan_delta'],'net_delta':result['scenario']['net_delta'],'trace_reconciled':True},indent=2))

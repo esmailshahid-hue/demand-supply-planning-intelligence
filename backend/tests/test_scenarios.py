@@ -31,6 +31,9 @@ def test_delay_preserves_decisions_moves_balance_and_suppresses_impossible_servi
     assert not r.frozen.feasible and r.frozen.summary is None and r.frozen.shortages==[]
     assert 'stock_overallocated' in {f.code for f in r.frozen.failures}
     assert all(v is None for v in r.shock_delta.values())
+    assert all(v is None for v in r.replan_delta.values())
+    assert all(v is not None for v in r.net_delta.values())
+    assert r.net_delta==delta(r.original,r.replanned)
     transformed,_,_=transform(data,definition)
     ledger=replay(transformed,hand_demand(56),{},r.frozen.purchases,r.frozen.movements)
     assert [(p.kind,p.amount,p.due_date) for p in ledger.payments if p.reference==old.action_id]==[
@@ -68,6 +71,22 @@ def test_capacity_loss_invalidates_frozen_and_limits_replanning(hand):
     r=compare(data,ScenarioRequest(baseline=base,scenario=definition))
     assert 'supplier_capacity' in {f.code for f in r.frozen.failures}
     assert r.frozen.summary is None and r.replanned.feasible and not r.replanned.purchases
+    assert all(v is None for v in r.shock_delta.values()) and all(v is None for v in r.replan_delta.values())
+    assert all(v is not None for v in r.net_delta.values())
+
+
+def test_frozen_donor_reserve_failure_remains_invalid_with_valid_net_change(hand):
+    data,_,_=hand;s=data.settings.as_of;ctx=Inputs(data,hand_demand(56),{})
+    move=ctx.movement(data.transfer_lanes[2],'X',0,50)
+    base=snapshot('fixture',data,Actions(movements=[move]))
+    definition=ScenarioDefinition(uplifts=[Uplift(scope='store',scope_id='B',start=s,end=s+timedelta(days=6),percent=100)])
+    result=compare(data,ScenarioRequest(baseline=base,scenario=definition))
+    failure=next(f for f in result.frozen.failures if f.code=='donor_reserve')
+    assert not result.frozen.feasible and result.replanned.feasible and failure.day==s
+    assert all(v is None for v in result.shock_delta.values())
+    assert all(v is None for v in result.replan_delta.values())
+    assert result.net_delta==delta(result.original,result.replanned)
+    assert any(abs(v)>0 for v in result.net_delta.values() if v is not None)
 
 
 @pytest.mark.parametrize('field,code',[('commitment','commitment_cap'),('payment','payment_ceiling')])
@@ -132,6 +151,7 @@ def test_real_noop_repeat_reset_and_snapshot_integrity(real_baseline):
     data,base=real_baseline;before=data.model_dump_json();snapshot_before=base.baseline.model_dump_json()
     r=compare(data,ScenarioRequest(baseline=base.baseline))
     assert r.original.summary==base.original.summary==r.frozen.summary==r.replanned.summary
+    assert all(v==0 for values in (r.shock_delta,r.replan_delta,r.net_delta) for v in values.values())
     s=data.settings.as_of;definition=ScenarioDefinition(uplifts=[Uplift(scope='sku',scope_id='SKU001',start=s,end=s+timedelta(days=6),percent=30)])
     first=compare(data,ScenarioRequest(baseline=base.baseline,scenario=definition));again=compare(data,ScenarioRequest(baseline=base.baseline,scenario=definition))
     for key in ('purchases','movements','summary','cash','shortages','explanations'):
@@ -142,6 +162,18 @@ def test_real_noop_repeat_reset_and_snapshot_integrity(real_baseline):
     assert len(first.model_dump_json().encode())<4_500_000 and '"stock":' not in first.model_dump_json()
     bad=base.baseline.model_copy(deep=True);bad.purchases[0].units+=10
     with pytest.raises(ValueError,match='checksum'):compare(data,ScenarioRequest(baseline=bad))
+
+
+def test_feasible_nonzero_funding_scenario_has_all_three_numeric_deltas(real_baseline):
+    data,base=real_baseline;s=data.settings.as_of
+    definition=ScenarioDefinition(funding=[Funding(week_start=s,commitment=3000,payment=6000)])
+    result=compare(data,ScenarioRequest(baseline=base.baseline,scenario=definition))
+    assert result.original.feasible and result.frozen.feasible and result.replanned.feasible
+    for values in (result.shock_delta,result.replan_delta,result.net_delta):
+        assert all(value is not None for value in values.values())
+    assert any(abs(value)>0 for value in result.net_delta.values() if value is not None)
+    for key,value in result.net_delta.items():
+        assert value==pytest.approx(getattr(result.replanned.summary,key)-getattr(result.original.summary,key))
 
 
 def test_supplier_preset_metadata_identifies_one_usable_supplier(real_baseline):
@@ -220,6 +252,7 @@ def test_bundled_snapshot_provenance_and_ids_are_deterministic(size,products,sou
     assert first.size==size and first.provenance.source==source
     assert first.provenance.sample_size==size
     assert first.provenance.dimensions.products==products
+    assert first.version=='sample-scenarios-2'
 
 
 def test_invalid_frozen_detail_exposes_failures_without_invalid_stock_service(real_baseline):

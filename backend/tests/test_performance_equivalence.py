@@ -35,7 +35,7 @@ def calculation_policy(result):
 
 @pytest.mark.parametrize('size,policy_hash,forecast_hash',[
  ('fixture','a511d4512b0adae0c5431473d0d41b6346e3335b487e21ea389c163b7347b414','e3be2683a27701455fb8a8bdec87e36fa0e669f6c1cf2dedaecacd1e6dc4a489'),
- ('full','2275f5ee23e6a47ea08fac0014ffe636c418f4afd86761527554b7617c889511','1fa197074db28021aabb89ad1826b088d0119bccad54546355978cd9d6ba4290')])
+ ('full','af7c81c6c19b82a183102da74df37739e3b1387b2f4fad591cd92a3df8301db3','1fa197074db28021aabb89ad1826b088d0119bccad54546355978cd9d6ba4290')])
 def test_full_precision_sample_equivalence(size,policy_hash,forecast_hash):
     def digest(value):return sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     data=sample(size)[0];prepared=network_forecasts(data,perf_counter()+30)

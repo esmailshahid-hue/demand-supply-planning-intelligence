@@ -43,7 +43,7 @@ class BaselineSnapshot(Actions):
     size: Literal['fixture','full'] | None = None
     provenance: DatasetProvenance | None = None
     dataset_hash: str
-    version: Literal['sample-scenarios-1'] = 'sample-scenarios-1'
+    version: Literal['sample-scenarios-2'] = 'sample-scenarios-2'
     snapshot_id: str
 
 class Outcome(Actions):
@@ -82,10 +82,11 @@ class ScenarioResult(Contract):
     replanned: Outcome
     shock_delta: dict[str,float | None]
     replan_delta: dict[str,float | None]
+    net_delta: dict[str,float | None]
     forecast_versions: dict[str,str]
     action_changes: list[ActionChange]
     elapsed_ms: float
-    note: str = 'Deltas are later minus earlier: frozen − original (shock), replanned − frozen (replanning). Invalid policies have unavailable outcome metrics. Cash shows attempted obligations even when infeasible.'
+    note: str = 'Deltas are later minus earlier: frozen − original (scenario shock), replanned − frozen (replanning), and replanned − original (net scenario plus replanning). The net change is not a replanning benefit. Invalid policies have unavailable dependent metrics; cash shows attempted obligations even when infeasible.'
 
 class BaselineResult(Contract):
     baseline: BaselineSnapshot

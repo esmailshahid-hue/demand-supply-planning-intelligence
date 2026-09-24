@@ -30,7 +30,7 @@ def provenance(data,source='bundled_fixture',sample_size='fixture'):
 def snapshot(size,data,actions,context=None):
     context=context or provenance(data,'bundled_'+size,size)
     if context.dataset_hash!=dataset_hash(data):raise ValueError('Dataset provenance does not match the calculated dataset.')
-    body=dict(size=context.sample_size,provenance=context.model_dump(mode='json'),dataset_hash=context.dataset_hash,version='sample-scenarios-1',**actions.model_dump(mode='json'))
+    body=dict(size=context.sample_size,provenance=context.model_dump(mode='json'),dataset_hash=context.dataset_hash,version='sample-scenarios-2',**actions.model_dump(mode='json'))
     return BaselineSnapshot(**body,snapshot_id=digest(body))
 
 
@@ -254,7 +254,7 @@ def compare(data,request,review=None,context=None):
     frozen_out=outcome('frozen',hash_,frozen,frozen_replay,'validated_frozen',changed)
     replanned=outcome('replanned',hash_,new,new_replay,planned.status,changed,planned.failures if planned.proposed is None else (),planned.exceptions,planned.stages)
     return ScenarioResult(provenance=context or request.baseline.provenance or provenance(data,'bundled_'+request.baseline.size,request.baseline.size),baseline_id=request.baseline.snapshot_id,scenario_hash=hash_,definition=definition,changes=changes,
-        original=original,frozen=frozen_out,replanned=replanned,shock_delta=delta(original,frozen_out),replan_delta=delta(frozen_out,replanned),
+        original=original,frozen=frozen_out,replanned=replanned,shock_delta=delta(original,frozen_out),replan_delta=delta(frozen_out,replanned),net_delta=delta(original,replanned),
         forecast_versions=forecast_versions(scenario_forecasts),action_changes=action_diff(frozen,new),elapsed_ms=(perf_counter()-start)*1000)
 
 

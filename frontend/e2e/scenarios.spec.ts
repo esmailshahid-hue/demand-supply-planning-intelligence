@@ -32,8 +32,11 @@ test('sample action evidence, actual forecast, three presets, combined scenario 
   const alternate=base.suppliers.find((id:string)=>id!==supplier.supplier_id);await page.getByLabel('Capacity supplier').selectOption(alternate);await expect(page.getByLabel('Delayed supplier')).toHaveValue(supplier.supplier_id);await page.getByLabel('Capacity supplier').selectOption(supplier.supplier_id);
   result=await run(page);expect(result.definition.delays[0].supplier_id).toBe(supplier.supplier_id);expect(result.definition.availability[0].supplier_id).toBe(supplier.supplier_id);
   expect(result.definition.delays.length).toBeGreaterThan(0);expect(result.frozen.feasible).toBe(false);expect(result.frozen.summary).toBeNull();
+  expect(Object.values(result.shock_delta)).toEqual(expect.arrayContaining([null]));expect(Object.values(result.replan_delta)).toEqual(expect.arrayContaining([null]));expect(Object.values(result.net_delta).every((v:unknown)=>typeof v==='number')).toBe(true);
+  await expect(page.getByTestId('frozen-invalid-reason')).toContainText(/Frozen actions are invalid on 2026-/);
   await expect(page.getByText(/supplier_capacity/).first()).toBeVisible();
-  await page.getByRole('button',{name:'Reset to baseline'}).click();await page.getByRole('button',{name:'Tighter funds',exact:true}).click();result=await run(page);expect(result.frozen.feasible).toBe(false);expect(result.replanned.feasible).toBe(true);
+  await page.getByRole('button',{name:'Reset to baseline'}).click();await page.getByRole('button',{name:'Tighter funds',exact:true}).click();await page.getByRole('button',{name:'Tighter funds',exact:true}).click();result=await run(page);expect(result.frozen.feasible).toBe(false);expect(result.replanned.feasible).toBe(true);
+  expect(result.definition.funding).toHaveLength(2);expect(result.definition.funding.map((f:{commitment:number})=>f.commitment)).toEqual(base.weeks.slice(0,2).map((w:{commitment:number})=>Math.round(w.commitment*.3*100)/100));expect(result.definition.funding.every((f:{payment:number|null})=>f.payment===null)).toBe(true);
   await page.getByRole('button',{name:'Promotion',exact:true}).click();await page.getByRole('button',{name:'Supplier disruption',exact:true}).click();result=await run(page);
   expect(result.definition.funding.length).toBeGreaterThan(0);expect(result.definition.uplifts.length).toBeGreaterThan(0);expect(result.replanned.feasible).toBe(true);
   await page.getByText('Purchases, movements and forecast inspection · replanned',{exact:true}).click();
@@ -43,7 +46,7 @@ test('sample action evidence, actual forecast, three presets, combined scenario 
   const scoped=wait(page,'/api/scenarios/detail');await replannedButton.click();const d=await(await scoped).json();expect(d.policy).toBe('replanned');expect(d.forecast.location_id).toBe(replannedLocation);expect(d.assumptions_hash).toBe(result.scenario_hash);expect(d.cash).toEqual(result.replanned.cash);
   await page.getByRole('button',{name:'Close evidence'}).click();expect(result.frozen.evidence_targets).toEqual([]);
   await page.getByRole('button',{name:'Reset to baseline'}).click();await expect(page.getByTestId('scenario-results')).toHaveAttribute('data-scenario-hash','baseline');await expect(page.getByText('Original baseline restored.',{exact:false})).toBeVisible();
-  const noop=await run(page);expect(noop.frozen.summary).toEqual(base.original.summary);expect(noop.replanned.summary).toEqual(base.original.summary);
+  const noop=await run(page);expect(noop.frozen.summary).toEqual(base.original.summary);expect(noop.replanned.summary).toEqual(base.original.summary);expect(Object.values(noop.net_delta).every(v=>v===0)).toBe(true);
   await page.getByText('Purchases, movements and forecast inspection · frozen',{exact:true}).click();const noopFrozenTarget=noop.frozen.evidence_targets.find((target:{location_id:string|null})=>target.location_id);expect(noopFrozenTarget).toBeTruthy();
   const noopFrozenButton=page.getByRole('row').filter({hasText:noopFrozenTarget.action_id}).getByRole('button',{name:'Inspect action'}).first();const noopFrozenDetail=wait(page,'/api/scenarios/detail');await noopFrozenButton.click();const noopFrozen=await(await noopFrozenDetail).json();expect(noopFrozen.policy).toBe('frozen');expect(noopFrozen.forecast.location_id).toBe(noopFrozenTarget.location_id);
   expect(errors).toEqual([]);

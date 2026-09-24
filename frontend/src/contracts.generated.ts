@@ -533,10 +533,10 @@ export interface components {
             dataset_hash: string;
             /**
              * Version
-             * @default sample-scenarios-1
+             * @default sample-scenarios-2
              * @constant
              */
-            version: "sample-scenarios-1";
+            version: "sample-scenarios-2";
             /** Snapshot Id */
             snapshot_id: string;
         };
@@ -1648,6 +1648,10 @@ export interface components {
             replan_delta: {
                 [key: string]: number | null;
             };
+            /** Net Delta */
+            net_delta: {
+                [key: string]: number | null;
+            };
             /** Forecast Versions */
             forecast_versions: {
                 [key: string]: string;
@@ -1658,7 +1662,7 @@ export interface components {
             elapsed_ms: number;
             /**
              * Note
-             * @default Deltas are later minus earlier: frozen − original (shock), replanned − frozen (replanning). Invalid policies have unavailable outcome metrics. Cash shows attempted obligations even when infeasible.
+             * @default Deltas are later minus earlier: frozen − original (scenario shock), replanned − frozen (replanning), and replanned − original (net scenario plus replanning). The net change is not a replanning benefit. Invalid policies have unavailable dependent metrics; cash shows attempted obligations even when infeasible.
              */
             note: string;
         };

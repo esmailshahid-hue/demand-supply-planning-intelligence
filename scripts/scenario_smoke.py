@@ -41,6 +41,10 @@ def main():
             assert all(min(w[k] for k in ('payment_headroom','commitment_headroom','transfer_headroom'))>=0 for w in p['cash'])
             if not result['frozen']['feasible']:
                 assert result['frozen']['summary'] is None and all(v is None for v in result['replan_delta'].values())
+                assert all(v is None for v in result['shock_delta'].values())
+                assert all(v is not None for v in result['net_delta'].values())
+            for key,value in result['net_delta'].items():
+                assert abs(value-(result['replanned']['summary'][key]-result['original']['summary'][key]))<1e-8
             signature={k:p[k] for k in ('purchases','movements','summary','cash','shortages','explanations')}
             if previous is not None:assert signature==previous
             previous=signature
@@ -60,8 +64,12 @@ def main():
             assert action['units']==old[action['action_id']]['units']
             if action['supplier_id']=='SUP01':assert action['arrival_date']>old[action['action_id']]['arrival_date']
         print(f'{size} future-path delay: frozen feasible {future["frozen"]["feasible"]}; replanned {future["replanned"]["status"]}',flush=True)
+        tighter={'funding':[{'week_start':w['week_start'],'commitment':float(round(Decimal(str(w['commitment']))*Decimal('.30'),2)),'payment':None} for w in baseline['weeks'][:2]]}
+        tightened=call(args.url,'/api/scenarios/compare',{'baseline':baseline['baseline'],'scenario':tighter})
+        assert tightened['definition']['funding']==tighter['funding']
+        assert tightened['replanned']['feasible'] and all(v is not None for v in tightened['net_delta'].values())
         assert json.dumps(baseline,sort_keys=True)==saved
-    print('Scenario smoke passed: independent feasibility, financial reconciliation, repeat determinism and scoped evidence.')
+    print('Scenario smoke passed: independent feasibility, three-way deltas, idempotent tighter funding, financial reconciliation, repeat determinism and scoped evidence.')
 
 
 if __name__=='__main__':main()
