@@ -30,6 +30,8 @@ jobs:
       - name: Generate frontend types and build
         run: npm run generate:types && npm run build
         working-directory: frontend
+      - name: Verify production static delivery
+        run: .venv/bin/python -m pytest -q backend/tests/test_static_delivery.py
       - name: Verify generated contracts are committed
         run: git diff --exit-code -- frontend/src/contracts.generated.ts
       - name: Install Playwright Chromium

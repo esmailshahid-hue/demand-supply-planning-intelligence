@@ -1,337 +1,53 @@
-# Final public-sample production closure — 24 September 2026
+# Current deployment status — 24 September 2026
 
-**Production verdict:** Pass 5 and Pass 6 are closed for exact release commit **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**. The public sample demo is ready, calculation and hosted-latency gates passed, and portfolio-MVP feature development is complete. This section supersedes earlier pending deployment and latency statements retained below as history.
+**Status: BLOCKED for Prompt 4 closure.** The public URL works, but it is not the reviewed Prompt 3 candidate or the local closure patch.
 
-Deployment identity:
+## Actual production identity
 
-- Canonical URL: [https://demand-supply-planning-intelligence.vercel.app](https://demand-supply-planning-intelligence.vercel.app)
-- Deployment ID: **`dpl_9zrziwJbe3abDQyxtA1hS6gfjnPa`**
-- Immutable URL: [https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app](https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app)
-- State / target / region: **READY / production / `iad1`**
-- Deployed commit: **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**
-
-Exact-commit normal verification [run 35967399001](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967399001) succeeded. Consecutive unchanged canonical latency [run 35967540536](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967540536) and [run 35968872124](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35968872124) also succeeded. Their full first HTTP/engine results were **9.033 / 5.381 s** and **7.969 / 4.841 s**; full repeat results were **3.248 / 2.557 s** and **2.995 / 2.429 s**. Compact responses remained approximately **1,022,712 bytes**.
-
-Both canonical runs passed the unchanged cold full-sample ten-second gate, structured `feasible_fallback` validation, independent replay, payload, reconciliation and determinism assertions, scenario capture and scoped-detail checks. Both uploaded retained artifacts and reported no probe failures. Sample planning, scenarios and evidence are production-verified.
-
-Hosted own-data remains intentionally unavailable. Local/Docker workbook upload, review, acceptance and export are verified, but hosted workbook upload, stored review files and accepted-export persistence remain disabled until an authorized private persistent-storage adapter is implemented and configured. This limitation does not block the public sample portfolio demo; it does prevent describing this release as a fully hosted own-data production service.
-
----
-
-# Final cold-start latency correction — 24 September 2026
-
-The latest canonical baseline still fails only the retained cold full-sample gate: **11.289 s HTTP / 6.641 s engine**, versus **3.587 / 3.195 s** on repeat, with a **1,022,712-byte** valid `feasible_fallback` response and passing independent replay. The approximately **4.648 s** cold pre-engine/residual interval is now covered by always-on, fixed-name `Server-Timing`; detailed logs remain opt-in. The canonical probe records both the raw timing header and allowlisted parsed phase durations.
-
-Starting from `17eaa4be79b7b8bdc7977a24f329438742db36b3`, the local correction removes hundreds of thousands of dynamic Pydantic missing-field lookups from full-dataset validation, constructs only the internal forecast projection consumed by planning, and avoids disabled hosted storage's unused temporary directory and cleanup thread. Fresh import audit confirms SciPy/HiGHS, NumPy, pandas, OpenPyXL and the optimizer remain absent from the full sample path; `joint_model:not_attempted` is unchanged. Public forecasts, planning/scenario contracts, constraints, fallbacks, replay, dimensions, response-size gate and ten-second gate are unchanged.
-
-Three final fresh production-style processes, with no preceding application request, measured full HTTP **2.025 / 1.967 / 1.965 s**, engine **1.294 / 1.267 / 1.269 s**, and process launch-to-listening **0.302 / 0.287 / 0.250 s**. Startup plus HTTP was **2.327 / 2.254 / 2.215 s**; ordinary repeats were **0.729 / 0.729 / 0.734 s**. All six policy signatures matched, independent replay passed, and first responses remained **1,022,713 bytes**. These are local macOS/Python 3.14.4 results, not hosted acceptance.
-
-Local verification passed 220 backend tests plus 10 subtests, 26 Playwright tests, solver, contracts/types/build, forecast/planning/compact-evidence/scenario/workflow smokes, browser inspection, dependency checks/audit, compilation and diff checks. Docker-compatible tooling is unavailable locally. Full evidence and phase comparisons are in [BUILD_STATUS.md](BUILD_STATUS.md).
-
-Do not push, deploy, alter Vercel settings or dispatch workflows automatically. The reviewed commit is ready for the authorized release process, but production acceptance remains pending: obtain green normal CI for the exact SHA; deploy that exact SHA; confirm the canonical alias identity; run `Verify canonical production latency` twice consecutively without implementation/configuration changes; require both runs to pass; retain both artifacts; and record their run/job IDs and cold/full measurements here and in BUILD_STATUS. Corrected commit, CI run, deployment ID and both hosted workflow runs are **pending**.
-
----
-
-# Narrow production-latency correction — 23 September 2026
-
-Canonical run **35858535758**, job **107172785296**, failed only the retained cold full-sample HTTP gate: **12.358 s** total, **12.131 s** first byte, **8.060 s** reported engine, **1,022,712 bytes**, `feasible_fallback`, with independent replay passing and no Vercel runtime errors. Its repeat was **3.760 s** / **3.068 s** engine. The runner/path was `westcentralus`, `sfo1 → iad1`; the Ubuntu 26 annotation needs no application change.
-
-The local correction from `d5eda7ad637e7b40ce799b6ae7bb6c786bf257cc` removes request-local forecast scoring objects and repeated prefix/event work, and indexes deterministic benchmark lookups/future receipts. It changes no dataset, horizon, forecast/model choice, action policy, constraint, funding rule, replay, explanation, response content, runtime gate or deployment configuration. A fresh-process compact full route improved locally from **2.963 s / 2.064 s engine** to **2.266 s / 1.366 s engine**; forecast fell **1.414 → 0.791 s**, benchmark **0.391 → 0.314 s**, while replay/explanations/serialization remained approximately **0.121 / 0.033 / 0.002 s**. This is macOS evidence, not CI or production acceptance.
-
-Do not deploy or dispatch automatically. Once reviewed and committed, obtain green normal CI for that exact SHA, deploy that exact SHA through the authorized release process, verify the canonical alias resolves to it, then manually run `.github/workflows/production-latency.yml` **twice consecutively without code/config changes**. Both runs must pass the first full request below ten seconds; retain their failure-capable artifacts and record run/job IDs here and in BUILD_STATUS. A warm repeat, local run, or normal CI container run cannot replace this canonical-host gate.
-
-Corrected commit, CI run, deployment identity and both production workflow runs: **pending**.
-
-Local verification is complete: 219 backend tests plus 10 subtests, solver/forecast/complete-planning/compact-evidence/scenario/workflow smokes, reproducible contracts, production frontend build, 26 Playwright tests, dependency resolution/audit, compilation and diff checks passed. There is no local Docker-compatible runtime. The correction is ready to commit and enter normal CI; it is not production-accepted or eligible for a hosted-success claim until the exact-commit steps above pass.
-
----
-
-# Final Pass 6 closure check — 20 September 2026
-
-**Pass 6 remains open — production latency gate not yet proven.** This section supersedes older statements that corrected CI, Docker verification or deployment did not exist. Hosted own-data remains a separate intentionally blocked gate.
-
-Local and remote `main` were confirmed at **03bb1affbe8448849725ad34c939de9601e2dc67**. [Verify planning MVP 35493689224](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35493689224), job **106032834212**, succeeded for that exact checkout: **209 backend tests (803.23 s), 26 browser tests (4.2 min)**, host/container HiGHS smoke, reproducible contracts, production build, Docker build/start/health, forecast, complete/compact planning, authoritative scoped evidence, scenarios, profiling and fixture/full upload/review/accept/export/reopen/reset. The latter uses CI's **local storage driver**, not a hosted private provider. Full results and financial/determinism evidence are in [BUILD_STATUS.md](BUILD_STATUS.md).
-
-Both deployment-ID and canonical-alias lookups confirm **dpl_BHtMKw2mgLGXCksj6aB2GqnYBy27**, **READY**, production, **iad1**, exact **03bb1aff**:
-
-- [Canonical application](https://demand-supply-planning-intelligence.vercel.app)
-- [Immutable deployment](https://demand-supply-planning-intelligence-qr2woqqgp.vercel.app)
-
-Runtime inspection for this exact deployment, **2026-09-20 06:15:29–07:09:00 UTC**, found one **GET `/` HTTP 400 at 06:21:59 UTC**, with no cause provided. Separate 5xx, error/fatal and timeout searches returned no entries. Do not turn that into an unrestricted claim of zero errors; a future manual probe still needs its own request-window correlation. The connector supplies no invocation-duration breakdown.
-
-There is **no new qualifying canonical-host timing run**. The user confirmed the current shell's **bom1 → iad1** route, with approximately **9–14 s TLS establishment**, is unsuitable as passing latency evidence. Those failures remain relevant and do not establish an application defect. No automatic deployment, project/environment change, provisioning, push or dispatch was performed. New production health, fixture first/repeat, full first/repeat, capture and detail timings all remain **pending**.
-
-CI container evidence is distinct: complete full first/repeat **6.159 / 2.450 s**, compact **2.329 / 2.444 s**, capture **0.990 / 0.851 s**, detail **2.086 / 2.214 s**. Compact full responses were **1,022,713 / 1,022,711 bytes**, detail **110,149 bytes**. All independent feasibility, commitments/payments/movement expenses, deterministic actions/totals/explanations, size and evidence checks passed. The deterministic constrained policy remains **`feasible_fallback`**, never optimal. Full component profiling still shows live replay and benchmark work; a fast repeat does not prove an instance-cold start or public WAN latency.
-
-The separate manual [production-latency workflow](../.github/workflows/production-latency.yml) runs on `ubuntu-latest`, sends only canonical-host sample requests, and uploads complete timing/correctness evidence even on failure. Its [probe](../scripts/production_latency.py) records cumulative DNS/TCP/TLS, first byte, body drain, total HTTP, bytes, peer/region/request ID, reported engine/status/stages and replay. Fresh sessions and observed reused connections are checked separately. Fixture/full plans, two consecutive full requests, capture and scoped detail retain **10 seconds** and **4.5 MB**; complete replay confirms stock, cash and provenance. Slow first measurements are retained; there is no retry/sleep/redirect or plan cache.
-
-The production latency gate remains pending until the user pushes this workflow and its manually triggered canonical-host run succeeds. Afterward, verify the alias/deployed SHA and exact-deployment runtime logs for that artifact's UTC window. The probe SHA is not automatically the deployed SHA. A hosted Ubuntu runner's region is not fixed by `ubuntu-latest`; inspect job setup and request IDs before describing the route.
-
-Local harness validation passed actionlint and **8 focused regressions**, plus the full **11-request / 105-assertion** sequence against the unchanged local API. The complete local backend rerun passed **217 tests and 10 subtests in 333.69 s**, with two existing warnings. These prove harness behavior only. The existing `verify.yml` remains unchanged; new exact-commit CI is pending for the added probe/workflow. Final local verification details are in BUILD_STATUS.
-
-The canonical session endpoint was checked again (HTTP 200 at **07:06:45 UTC**) and returns **`enabled: false`, `driver: disabled`**. Full hosted own-data cannot close without an authorized real private provider and lifecycle/isolation/workflow verification. It will not alone keep the separate public-sample gate open once that gate is proven. The duplicate **demand-supply-planning-intelligence-hahy** project still exists and remains non-blocking housekeeping; neither project was disconnected or modified.
-
-## Running the manual canonical-host check
-
-After the user pushes these changes, use GitHub **Actions → Verify canonical production latency → Run workflow** on the reviewed branch. The workflow has only `workflow_dispatch`; it does not automatically run on push, deploy, promote, change settings or provision resources. It serializes its own runs and uses `contents: read`. Avoid another simultaneous public calculation while it runs.
-
-Download artifact `production-latency-<run_id>-<attempt>`. `environment.json` identifies the probe commit, UTC interval, runtime and runner; `results.json` records each request and every acceptance failure. Per-request raw response/header/request files and curl JSONL/error logs retain failed as well as successful measurements. Capture/detail solver fields absent from the API remain null. Health, fixture/full first/repeat, capture/detail first/repeat and independent complete-plan equality checks run serially. The 60-second curl transport bound permits recording slow responses; it **does not replace the strict ten-second acceptance assertion**.
-
-Retain runner setup logs to establish the actual runner region. Match Vercel request IDs and the time interval against canonical deployment metadata and runtime logs. Do not assume `GITHUB_SHA` identifies the live deployment, and do not treat HTTP 200, a READY deployment or green local Docker smoke as proof of the canonical latency gate. A green manual run plus exact deployment/error correlation permits the public-sample closure verdict; private storage remains a separate boundary.
-
-The new workflow uses [checkout v7](https://github.com/actions/checkout/blob/v7/action.yml), [setup-python v7](https://github.com/actions/setup-python/blob/v7/action.yml) and [upload-artifact v7](https://github.com/actions/upload-artifact/blob/v7/action.yml), whose official manifests declare Node 24. It installs no application dependencies and needs no Vercel credentials. GitHub-hosted `ubuntu-latest` supplies the runner and curl. Artifact upload uses `always()`, error-on-missing-files and 30-day retention without `continue-on-error`. The original green verification workflow, Python 3.14, application Node 24 configuration and all calculation gates are untouched.
-
----
-
-# Final focused Pass 6 correction — 20 September 2026
-
-Current reviewed baseline is **055eb0a4f6ee78c77f697569a5acbd044a2f5c53**. [CI 35491100761](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35491100761), job **106026056837**, completed successfully: 197 backend tests, 26 browser tests, contracts/build, Docker, solver, complete/compact planning, evidence, scenarios and own-data workflow smokes. Those results certify the baseline only. The new local changes have no new remote run or deployment.
-
-The canonical deployed baseline is **dpl_vPgb8yq7ivQ7FxDqgAZGkpmotE6n**, immutable alias `demand-supply-planning-intelligence-10cys4089.vercel.app`, **iad1**, exact **055eb0a**, serving `https://demand-supply-planning-intelligence.vercel.app`. The separate `demand-supply-planning-intelligence-hahy` deployment check remains project housekeeping; it was not disconnected, deleted or reconfigured.
-
-New serial canonical-baseline measurements: full first/repeat **12.290 / 9.240 s HTTP**, **7,536.7 / 7,737.1 ms reported calculation**, **1,022,713 / 1,022,712 bytes**; first byte **11.516 / 8.535 s**, body drain **0.774 / 0.705 s**. Fixture plan/capture/detail were **5.424 / 2.543 / 2.397 s**, with correct 280-row scoped evidence and matching cash/provenance. Health took **2.813 s**. The first full request fails the retained ten-second gate. Earlier independent user measurements of 19.79–25.74 s full HTTP and 13.38 / 13.61 s fixture capture/detail remain relevant failures, not superseded by one faster repeat.
-
-Available runtime logs expose successful invocation paths/statuses but no platform duration or startup details. The large variable pre-header residual cannot yet be fully attributed. DNS/connect/TLS, client first-byte/body times and reported engine time are separately recorded in BUILD_STATUS; none proves a new Vercel instance or measures invocation start. No corrected-host timing is claimed.
-
-The correction defers Excel/NumPy and accepted-file imports to file workflows, and reuses only deterministic forecast preparation for at most two exact registered bundled samples. Eligibility requires the complete unchanged dataset hash; keys include engine/schema, forecast and preparation versions. A single-construction lock keeps concurrent first catalog/forecast requests on the same registered sample object. Mutated or unregistered uploaded/reviewed copies miss; returned buffers/traces/arrays are independent copies with fresh trace UUIDs. Scenario/action checks and independent replay remain live. No complete recommendation, ledger, API response or private state is cached. External contracts, frontend source, planning semantics, solver budgets and deployment settings are unchanged.
-
-Opt-in `PLANNING_DIAGNOSTICS=1` now records fixed-name startup and full ASGI-boundary phases, including actual response-field validation and serialization. Startup durations describe process setup, not extra time to add to each warm request; nested phase times are inclusive. `response_ready` starts when ASGI receives the request and excludes platform work before application dispatch. `asgi_ms` ends after the application sends its body; it cannot establish that the client received it. Application code cannot establish the Vercel invocation start without platform telemetry. Metric names are allowlisted; logs contain numeric durations/counts and no data, IDs, credentials or stack traces. No remote environment variable was set.
-
-Private metadata commit now survives subsequent blob-cleanup failure: the new reference returns, the old reference stays invalid, and durable tombstones remain until successful sweep. Cleanup logs one bounded count; explicit sweep still fails when work remains queued. Delete/reset and upload-finalization cleanup share this behavior; original pre-commit/validation failures remain errors. See PRIVATE_STORAGE for provider contracts and regression scope.
-
-Final local verification passed **209 backend tests, 26 browser tests**, solver, reproducible contracts, production build, forecast/complete/compact/scenario/workflow smokes, release trace, deterministic fixture/full policy replay, dependencies, compilation and diff checks. Serial local full first/repeat HTTP changed **2.832 / 2.061 → 2.940 / 0.816 s**; full capture/detail **1.654 / 2.000 → 0.410 / 0.732 s**. The first uncached full request did not materially improve. All local ten-second/payload/reconciliation gates passed; these results cannot replace the corrected canonical-host gate. See BUILD_STATUS for commands and RELEASE_AUDIT for full boundary/profile/import evidence.
-
-**Public sample readiness remains open** pending green CI for the exact new correction and a separately authorized canonical deployment passing fixture/full planning, two consecutive full requests, capture and scoped evidence under ten seconds with unchanged payload and reconciliation gates. Docker-compatible tools are unavailable locally. **Full hosted own-data remains blocked**: the actual host reports `enabled: false`, `driver: disabled`; no authorized blob and transactional metadata provider, credentials or real-provider transport/lifecycle verification exists. Neither successful deployment builds nor local speed establishes these release gates.
-
-No push, merge, deployment, paid provisioning or Vercel project-setting change was performed. The instruction prohibiting those actions prevents obtaining a new remote workflow/deployment during this local correction. After separate authorization, verify the exact deployed SHA and correlate diagnostic ASGI phases with Vercel invocation duration and serial client measurements. Keep the duplicate project housekeeping separate from the canonical release check.
-
----
-
-# Pass 6 focused release correction — 20 September 2026
-
-Started from clean `e51af6fc1dc5338e4f9d54380fe7acceca55edd1`. This section supersedes older release-readiness statements; historical evidence below is retained.
-
-**Exact baseline CI is green:** [GitHub Actions 35464690297](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35464690297), job `105954779663`, completed successfully for `e51af6f`. It passed 173 backend tests (655.28 s), 26 browser tests (5.8 min), solver smoke, reproducible contracts, production build, Docker build/start, container solver, forecast/planning/scenario smokes, container component profiling and upload/review/accept/export/reopen. Fixture planning HTTP was 3.506 / 3.564 s; full was 9.162 / 9.304 s (engine 8,946.4 / 9,085.4 ms), with deterministic, financially reconciled, independently replayed fallback results. This is baseline evidence, **not CI for these uncommitted changes**.
-
-The canonical Vercel deployment was confirmed at **e51af6f**, deployment `dpl_EjnDRZ4PWPW9qu3HvjctMyHpBvLM`, project `prj_9wUSzLP3zKbvVinWCeNvmyDelVh5`, `iad1`, immutable alias `demand-supply-planning-intelligence-f7633owp1.vercel.app`, production alias `demand-supply-planning-intelligence.vercel.app`. A serial baseline full request in this correction took **19.567 s HTTP / 11,446.3 ms engine / 3,753,044 bytes**, with first byte at 17.997 s. Independent replay passed and status remained `feasible_fallback`. This is another failed baseline runtime observation, not a cold-start claim. The host still reports storage `enabled: false`, `driver: disabled`. No corrected deployment exists and no Vercel settings were changed.
-
-Deployment configuration, runtime versions, solver budgets, permissions and existing verification gates are unchanged. CI adds the compact-response/scoped-evidence gate beside the unchanged full-ledger planning gate. The default plan/review responses omit only the full daily stock table (`stock_detail: on_demand`); evidence is loaded from authoritative scoped replay, and accepted files retain the complete calculation. `include_stock=true` remains available for full-ledger verification. Optional `PLANNING_DIAGNOSTICS=1` enables bounded phase headers; it is off unless explicitly set and was enabled only for local measurements here.
-
-**No local Docker, Podman, Colima or Lima executable is available.** New Linux/container results must come from CI for the corrected commit. Local Python is 3.14.4; a temporary Node 24.21.0 runtime was used for the production build and browser tooling without modifying dependencies. Default shell Node 25.6.1 is not substituted for the configured Node 24 verification.
-
-**Hosted own-data remains blocked.** The new provider-neutral composition and tests do not authorize or provision a provider. Object storage needs atomic metadata operations, typically a transactional store, as well as private scoped upload/download transport and scheduled cleanup. See [PRIVATE_STORAGE.md](PRIVATE_STORAGE.md) for exact interface requirements, reserved configuration roles and integration steps. Existing hosted raw-upload and accepted-file controls remain fail-closed.
-
-Next release actions: review/commit these changes; obtain green CI for that exact commit, including the original full-ledger gate and new compact/detail gate; obtain separate deployment authorization; verify the deployed SHA; then run hosted forecast, serial fixture/full first-repeat planning, compact/detail, scenario, browser and storage-capability checks. Do not call a warm repeat a cold start. Measure genuine cold initialization/memory only with platform evidence of a new instance. Authorize and integrate a private provider before hosted own-data/session-isolation/download/reopen checks. No deployment/build status can replace these runtime checks.
-
-Local corrected full-ledger fixture first/repeat are **2.431 / 2.397 s**, full **2.193 / 2.104 s** (full engine **2,094.2 / 2,005.8 ms**); all unchanged gates pass locally. Default compact full responses are **1,022,713 / 1,022,712 bytes**, versus baseline approximately **3,753,044 bytes**, a **72.75% reduction**. Scoped authoritative detail and complete exports reconcile. Local profile isolates forecast and benchmark improvements; see [RELEASE_AUDIT.md](RELEASE_AUDIT.md) for before/after components and [BUILD_STATUS.md](BUILD_STATUS.md) for actual commands. Final local verification passed 197 backend tests, 26 browser tests, solver/policy checks, reproducible contracts, build and all forecast/planning/scenario/workflow smokes. These macOS measurements cannot certify corrected Ubuntu or hosted latency.
-
-The **public sample correction is locally verified, pending corrected-commit CI and authorized hosted verification**. The **full hosted own-data release is blocked** by provider authorization and concrete persistent storage/transport integration. Pass 6 cannot close until both release gates pass.
-
----
-
-# Pass 6 hosted verification and release blockers — 19–20 September 2026
-
-Canonical sample URL: **https://demand-supply-planning-intelligence.vercel.app**. Vercel metadata confirms production deployment `dpl_FDjfTcpkSijxKDgpnJRHf5owkojH`, project `prj_9wUSzLP3zKbvVinWCeNvmyDelVh5`, region `iad1`, commit **599554c3ad4e44c47b0461eff3fac921318ea606**. This is a verified existing deployment; no new deployment or settings change occurred. The local Pass 6 evidence-format correction is not deployed.
-
-[GitHub Actions 35461717511](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35461717511), job `105946650205`, **succeeded** for that exact commit, including 168 backend tests, 26 browser tests, reproducible contracts/build, Docker build/start, both solver smokes, forecast/planning/scenario smokes, component profiling and upload/review/accept/export/reopen. Pass 5 is closed for this baseline. New Pass 6 commit CI remains outstanding.
-
-Actual hosted HTTP planning measurements:
-
-| Sample | First / repeat HTTP | First / repeat engine | Largest response |
-|---|---:|---:|---:|
-| Fixture | 8.230 / 5.473 s | 3,998.0 / 4,096.9 ms | 786,643 bytes |
-| Full | **17.022 / 14.929 s** | 11,775.5 / 11,949.9 ms | 3,753,044 bytes |
-
-All four responses passed independent replay, finance, dimensions, payload and repeat-action/summary/explanation checks. Full requests **failed the unchanged 10-second smoke threshold**; the script exited nonzero. Full uses no joint challenger, so solving is not its bottleneck. Exact-commit container profiling measured ~6.27 s forecasting and 2.15 s benchmark work on a warm 9.21 s route; a fresh-process full route took 11.65 s including input generation. Hosted per-stage timing, true instance-cold latency and peak memory still need measurement. Do not raise the existing assertion or claim the warm container pass proves host readiness.
-
-Hosted forecast smoke passed fixture/full. Serial scenario smoke passed original/frozen/replanned correctness, all unchanged size/runtime checks and repeat determinism: full combined comparison **20.283 / 18.141 s**, largest **921,568 bytes**; full future-path change **27.489 s / 1,035,200 bytes**. A separate funding trace verified both commitment and payment-ceiling controls and exact deltas. An overlapping calculation produced explicit 429; its failed smoke was preserved and then rerun serially. See [RELEASE_AUDIT.md](RELEASE_AUDIT.md) for calculation traces, browser evidence, timings, simulation assumptions and demo copy.
-
-**Hosted own-data remains blocked.** The actual session endpoint returns `enabled: false`. Only the local temporary driver exists, and Vercel deliberately disables it. Missing work is an authorized private object-storage adapter with direct upload/finalization and download transport, server-side ownership/type/hash/size checks, atomic review revisions across instances, expiry/deletion and abandoned-upload cleanup. The existing provider-neutral interfaces and a bounded implementation checklist are documented in the audit. No provider credentials, public-object workaround, browser Dataset JSON, serverless-temp-file workaround or infrastructure was introduced. Complete the real-provider lifecycle/isolation and full hosted workflow tests before enabling these features.
-
-Local production own-data workflow and corrected UI are verified separately in BUILD_STATUS. Docker is unavailable locally; container evidence above belongs to baseline CI only. The public sample works but is **not ready against its documented latency gate**. The complete hosted own-data release is **blocked**. Outstanding release actions: resolve and remeasure full-sample latency without weakening gates; authorize/implement/verify private hosted storage; commit the reviewed corrections and obtain exact-commit CI; only with separate authorization deploy, verify the deployed SHA, and repeat hosted browser/API/own-data/cold-memory checks. No push, merge or deployment has been performed.
-
-The following sections are historical and are superseded by this Pass 6 evidence where they describe earlier readiness or pending verification.
-
-# Pass 5 scope freeze and release boundary — 19 September 2026
-
-Pass 5 changes frontend presentation, request-state handling, browser regressions and operator documentation only. No deployment settings, infrastructure, storage adapter, runtime dependencies or calculation contracts changed. Local verification is recorded in [BUILD_STATUS.md](BUILD_STATUS.md); it is not hosted verification.
-
-The user confirmed successful GitHub Actions **35364586310** for reviewed Pass 4 baseline **218db764b9e6addb8e87da9b8d829e584796b19f**, including backend/browser tests, contracts/build, Docker startup/solver, forecast/planning/scenario smoke, container profiling and upload/review/accept/export/reopen. This supersedes the pending-CI statements for that baseline in the historical sections below. It does **not** verify the new Pass 5 worktree or a public host.
-
-Feature scope is frozen for Pass 6: audit input-to-forecast/action/cash/scenario/export traces and withheld policy trade-offs, run exact-commit Ubuntu/container verification, then verify authorized hosted cold/warm latency, payloads, memory, logs and same-domain behavior. Hosted own-data release remains blocked by an authorized private object-storage adapter plus isolation, direct upload/download, expiry and deletion tests. Public sample calculations remain available; hosted upload/review-file/export claims must wait for that work. No browser storage, public files or serverless temporary-file workaround is permitted. Do not modify either Vercel project or provision resources as part of this pass.
-
-No Docker-compatible executable is installed here, so new container build/start/profile and container workflow checks remain for CI. No Pass 5 GitHub Actions success, Vercel build/runtime or hosted upload verification is claimed. Use the local/Docker commands and recovery workflow in [README.md](../README.md).
-
----
-
-# Pass 4 upload and accepted-file readiness
-
-The correction based on `e5abf21` preserves canonical stored-dataset provenance through reviewed regeneration and requires exact provenance agreement before final acceptance/snapshot creation. Local HTTP verification covered uploaded fixture/full inputs with deliberately wrong client size labels, bundled regeneration, accepted snapshot download and portable reopen. The exact corrected commit has not run in GitHub Actions or Vercel, and no hosted runtime success is claimed. Docker and compatible local runtimes remain unavailable. Hosted uploads continue to fail closed pending an authorized private storage adapter.
-
-GitHub Actions **35323370351** tested commit **3ea8f5d**. It passed 156 backend tests, solver smoke, reproducible contracts, frontend build, 13 browser tests, Docker build/start, production forecast/planning/scenario smoke, and production upload/review/accept/export/snapshot-reopen smoke. It failed only in **Profile planning components inside container** with `TypeError: sample_plan() missing 1 required positional argument: 'http'`: Pass 4 had added the FastAPI request parameter while the direct profiler invocation retained the old signature.
-
-The correction constructs an empty Starlette request and still invokes the production `sample_plan` route function. It supplies no dataset reference, session cookie or review constraints, so profiling remains bundled-only and creates no draft/storage objects. The Docker and workflow profiling step remains blocking. The local profiler passed fixture/full first/repeat at **2.744 / 2.567 s** and **4.061 / 3.277 s**, including deterministic comparison and validated replay. Corrected-commit Ubuntu/Docker CI is pending; this local result is not a container claim.
-
-The same correction prevents uploaded/portable provenance from being inferred by SKU count. Private records now bind canonical source, dataset hash and dimensions, and scenario/review requests validate that binding. This does not alter the fail-closed Vercel storage policy below.
-
-The new workflow is verified locally only. No authorized object-storage resource was configured, and none was provisioned. The provider-neutral storage/reference contracts and tested temporary-file driver support the documented 16 MiB local workbook limit without browser Dataset JSON. **Hosted uploads and accepted files remain blocked pending an authorized private storage adapter and lifecycle verification.** `VERCEL` disables the local driver even if `PLANNING_UPLOAD_STORAGE=local`; unknown/unimplemented configurations also fail closed. Bundled sample calculations and template downloads remain available.
-
-Local operation uses one production Uvicorn worker, HttpOnly SameSite session capability cookies, random owner/type-checked references, isolated request files and bounded temporary storage. Original workbook bytes are removed after parsing. Data/drafts/accepted objects expire after one hour, swept every 30 seconds while running, on access/reset/normal exit; crashed directories are cleaned after expiry by a subsequent running process. This is temporary storage, not authentication or durable history. Download portable files before expiry/reset/restart. See [WORKBOOK.md](WORKBOOK.md) for exact file, row, expanded-archive and snapshot bounds.
-
-A hosted adapter must implement direct private browser-to-storage upload with short-lived narrow authorization, ownership, object/content/size validation, no browser credentials, no permanent public URLs and deletion/abandonment lifecycle tests. The browser should send only the small reference to the Function. Snapshot/export downloads must use the same private object path when exceeding Function payload limits. Existing same-domain sample routes, Vercel entrypoint/60-second ceiling and Docker startup are preserved; no settings were changed. The local raw-upload route is deliberately unavailable on Vercel and is not a production storage substitute.
-
-Pass 3 closure is based on **user-confirmed** GitHub Actions **35308623547** for **259ddab**: 108 backend tests, 10 browser tests, build/contracts/Docker/solver, planning and scenario smoke passed; both Vercel build checks succeeded. Fixture planning **3.331 / 3.323 s**, full **8.278 / 8.128 s**, full comparisons **11.666 / 11.472 s**, future-path comparison **17.699 s**. Hosted calculation execution was not independently verified. The cold profiler measured **10.658 s**, including **2.456 s** sample construction; planning smoke followed a sample-warming forecast smoke. Sub-10-second warm results are not Vercel cold-start proof.
-
-No Docker/Podman/Colima/Lima runtime is installed here. Exact-commit Linux CI, container checks and hosted/storage execution for Pass 4 remain outstanding. CI retains existing gates and now includes the production upload/review/accept/export smoke. No new CI or host success is claimed. Historical sections below retain the evidence for earlier commits and are superseded by this readiness boundary.
-
-# Pass 3 sample scenario transport — 17 September 2026
-
-## Focused Pass 3 correction — 18 September 2026
-
-User-supplied GitHub Actions run **35242117761** for Pass 3 commit `bfce1ded` failed the unchanged 10-second planning gate: full first/repeat were **13.009 / 12.283 seconds**. The results themselves were valid, replayed deterministic fallbacks. The workflow profile showed approximately 6.6 seconds of forecasts, 1.45 seconds of benchmark work, 3.0 seconds in a full-sample challenger that did not complete its first required stage, and 1.6–1.7 seconds elsewhere.
-
-The corrected live policy retains a two-second exact challenger for the fixture and discloses `joint_model:not_attempted` with a zero sub-budget for the 240-series sample. Full sample validation is reused from the exact immutable cached sample; custom/scenario inputs still validate current contents. Forecast memoization is per calculation and keyed by complete date/cutoff inputs. No plan or API response is cached, and the 10-second, 30-second and 4.5 MB gates are unchanged.
-
-Local production planning passed at fixture **2.690 / 2.468 s** and full **2.985 / 2.946 s**. Final scenario comparison passed at fixture **2.691 / 2.651 s** and full **4.101 / 4.020 s**; full comparison/detail responses were **921,311–921,312 / 113,298 bytes**. The workflow now runs scenario smoke after a planning-smoke failure unless the job is cancelled, while preserving both nonzero exit codes and the overall failed job state.
-
-This workspace has no Docker, Podman, Colima or Lima runtime. Therefore these are local macOS results. No corrected-commit Ubuntu/Docker run, new Vercel build or hosted runtime was verified, and Pass 3 remains open until the exact corrected commit completes a green workflow. No deployment, push, merge or provisioning occurred.
-
-User-confirmed Ubuntu GitHub Actions run **35228781514** passed for **47dc0217df22d8f31eed2a534e7d279e597861bd**, closing Pass 2: 82 backend tests, eight browser tests, contracts/build, Docker build/start, forecast/container solver smoke and deterministic reconciled planning at 2.865 / 2.851 s fixture and 7.604 / 7.496 s full. Historical blocked statements below are superseded for Pass 2. This is not verification of the new Pass 3 code or a public host.
-
-Pass 3 retains the single FastAPI deployment, relative API paths, existing Docker startup, Vercel configuration and 60-second Function ceiling. Scenario comparisons transport action snapshots/definitions, never full history or daily baseline ledgers. Each request reconstructs the selected sample and validates its versions/actions without depending on durable process memory. Summary responses omit all daily stock; scoped detail independently replays the complete network and returns only the selected SKU's evidence. No database, signing secret, paid service or persistent session is required. Snapshot checksums establish consistency, not authenticated plan provenance; no action execution or accepted export exists.
-
-Measured local production full-sample combined-scenario first/repeat: **6.601 / 6.621 seconds**, **974,263-byte** summaries. Detail: **2.967 seconds**, **97,983-byte** response and **292,827-byte** request. A future-path receipt delay, with separate protection-period forecast preparation, took **9.134 seconds**, response **1,025,787 bytes**. The baseline 10-second gate and 4,500,000-byte guard remain unchanged; scenario smoke separately checks a 30-second HTTP ceiling. See SCENARIOS.md and BUILD_STATUS.md for exact semantics and evidence.
-
-Docker is unavailable on this local macOS workspace. The workflow now includes scenario smoke, but no Pass 3 CI, Docker or Vercel success is claimed. Existing per-instance admission limits, cooperative deadlines and the future workbook upload gap still apply. No deployment, push, merge or provisioning occurred.
-
----
-
-# Current Pass 2 readiness decision — 17 September 2026
-
-This update supersedes the historical strict fixture gate below. The live joint challenger now receives a two-second sub-budget inside the unchanged 30-second overall request budget; the Vercel setting remains 60 seconds. The user retired exact sample MILP completion in favor of independently replayed, deterministic constrained actions with honest `feasible_fallback` status. Completed joint plans still require every required stage to reach optimal status without a positive gap and pass replay.
-
-Local smoke now enforces a **10-second HTTP target** for fixture and full first/repeat requests, full dimensions, action/explanation determinism, benchmark identity, no worse lexicographic service than no new actions, independent replay and exact commitment/payment reconciliation. Final local HTTP first/repeat measurements were **2.908 / 2.644 seconds** for fixture and **6.468 / 6.673 seconds** for full, all independently validated benchmark fallbacks. Full responses were **3,747,963 bytes**. Repeated actions, totals, ledgers and explanations matched exactly. See BUILD_STATUS.md for the complete four-run evidence. This does not claim a successful GitHub Actions run or hosted/Vercel verification for the corrected code. Docker remains unavailable locally.
-
-Full responses remain approximately **3.75 MB**, close to the existing **4.5 MB** guard. Future frozen/replanned scenario comparisons must use identical assumptions and retain independent validation without duplicating full daily ledgers. No deployment, provisioning, scenario transport or paid infrastructure was added.
-
----
-
-# Deployment readiness
-
-Assessed on **17 September 2026**. No public deployment, paid service, custom domain or external infrastructure was created.
-
-## Conclusion
-
-`PASS_1_VERCEL_READY_WITH_FUTURE_ARCHITECTURE_GAP`
-
-The current Pass 1 sample application is suitable for a first Vercel deployment. It remains one deployment with one Python calculation implementation: Vercel loads `backend.app.main:app` as a FastAPI Function, builds the React frontend during the same deployment, and serves the UI and relative `/api/*` requests from one domain. The fixture and full sample are generated inside Python from the requested sample identifier; the browser does not upload either normalized dataset. Live recalculation therefore remains a Python request, not a static or precomputed substitute.
-
-The final MVP upload workflow is not yet compatible with a direct browser-to-Function workbook or normalized-data POST at the measured full-sample size. That is a later architecture decision, not a defect in the current Pass 1 sample flow.
-
-## Committed Vercel shape
-
-- Root `app.py` exposes the existing `backend.app.main:app` instance through a FastAPI entrypoint recognized by Vercel. Keeping deployment metadata out of `pyproject.toml` makes Vercel install the existing pinned `requirements.txt` instead of asking uv to lock a second dependency manifest.
-- `.python-version` pins Python 3.14, which is supported by Vercel's current Python runtime.
-- `vercel.json` selects the native FastAPI preset, runs the locked Vite production build, gives the calculation Function a 60-second ceiling and excludes tests, local dependencies and generated development artifacts from its bundle.
-- `.vercelignore` keeps caches, local environments, browser artifacts, generated samples, documentation and `.env*` files out of the deployment upload.
-- `requirements.txt` remains the runtime dependency manifest. `frontend/package-lock.json` remains the frontend dependency lock.
-- No rewrite or API base URL is required. FastAPI owns `/api/*` and `/`; the frontend uses relative `/api/*` requests. The application has one browser URL, `/`; its four screens are in-page navigation states, so there are no additional client-side route refreshes to configure.
-- The existing Dockerfile remains a separate, valid single-container deployment option. Vercel uses its native Python Function build and does not consume that Dockerfile.
-
-Vercel documents root `app.py` detection, build commands and the single-Function execution model in its [FastAPI guide](https://vercel.com/docs/frameworks/backend/fastapi). Its [Python runtime guide](https://vercel.com/docs/functions/runtimes/python) lists Python 3.14, `requirements.txt` support and a 500 MB uncompressed Python bundle limit.
-
-## Current Pass 1 traffic and runtime fit
-
-Measured uncompressed JSON sizes from the real API are:
-
-| Dataset | Normalized dataset if sent to `/api/forecast` | `GET /api/sample` response | `POST /api/forecast/sample` response |
-|---|---:|---:|---:|
-| Fixture | 2,684,842 bytes | 3,363 bytes | 41,649 bytes |
-| Full sample | 17,475,067 bytes | 15,235 bytes | 41,647 bytes |
-
-The Pass 1 UI calls `/api/forecast/sample` with only `size`, `sku` and `location_id`. Both API responses are far below Vercel's 4.5 MB request/response limit. A production-style local restart measured the full sample at **0.824 s first request / 0.089 s warm**, with **91.8 ms / 87.8 ms** reported inside the forecast engine. The 60-second Function setting leaves headroom over the engine's existing cooperative 30-second budget without changing it.
-
-The installed local SciPy and NumPy trees are approximately 99 MB and 34 MB. The complete Linux Vercel Function bundle has not been produced, so the actual hosted bundle size and cold import remain first-deployment checks. SciPy is installed for compatibility but is not imported by the Pass 1 forecast request path. The existing Ubuntu GitHub Actions evidence for commit `f939b3e410e7b255f69a919a6ca5270f106ae3df` successfully completed backend tests, solver smoke, frontend build, browser tests, Docker build, Docker startup and HTTP smoke. This proves the separate Linux/container path, not Vercel packaging.
-
-Vercel's documented limits for the assessed Hobby shape are 2 GB / 1 vCPU, up to 300 seconds and a 500 MB uncompressed Python bundle. The same limits page fixes Function request and response bodies at **4.5 MB**. See [Vercel Functions limits](https://vercel.com/docs/functions/limitations).
-
-## Exact dashboard settings for the first deployment
-
-Import the repository as one Vercel project and use these values:
-
-| Dashboard field | Value |
+| Item | Observed value |
 |---|---|
-| Framework Preset | **FastAPI**. This is also enforced by `vercel.json`. |
-| Root Directory | **`.` (repository root)**. Leave at the default root; do not select `frontend`. |
-| Build Command | **Leave at default / no dashboard override.** `vercel.json` supplies `npm --prefix frontend ci && npm --prefix frontend run build`. |
-| Output Directory | **Leave at default / no override.** Do not set `frontend/dist`; the FastAPI deployment owns the application and its built frontend files. |
-| Install Command | **Leave at default / no override.** Vercel installs `requirements.txt`; the committed build command performs the locked frontend `npm ci`. |
-| Development Command | **Leave at default / no override.** Local repository development continues to use `scripts/start.sh` or Vite plus FastAPI as documented in the README. |
-| Environment Variables | **None required for Pass 1.** Do not add secrets or API base URLs. |
+| Canonical URL | [demand-supply-planning-intelligence.vercel.app](https://demand-supply-planning-intelligence.vercel.app) |
+| Deployment | `dpl_HQDadUAeNA8tyz9Ydh6eFFG85zmb` |
+| Immutable URL | [demand-supply-planning-intelligence-6gfzoc1na.vercel.app](https://demand-supply-planning-intelligence-6gfzoc1na.vercel.app) |
+| Source SHA | `27eb86c890584102d8fdbfa4f456ba6b926c143e` |
+| State / target / region | READY / production / `iad1` |
 
-Additional settings:
+Vercel resolved the attempted Prompt 3 production deployment as:
 
-- Use Node.js **24.x** for the frontend build to match the Dockerfile and GitHub Actions. If 24.x is already the project default, leave it unchanged.
-- Leave Fluid Compute enabled at its project default.
-- Leave Function memory, region, Git integration, deployment protection and domains at their defaults for the first preview. `vercel.json` already sets `maxDuration` to 60 seconds.
-- Do not add rewrites, a second Vercel project, a separate frontend deployment or a static forecast artifact.
+| Item | Observed value |
+|---|---|
+| Deployment | `dpl_99NuyddNXx6PnGL5r6fQcZkKsJCM` |
+| Source SHA | `2ec1c06a16f6f0f028c646e3804b802f48a68ee5` |
+| State / target / region | ERROR / production / `iad1` |
+| Error | `uv lock` rejected the tool-only `pyproject.toml`: no PEP 621 `[project]` table |
 
-## Future workbook and planning architecture gap
+The local correction removes that incomplete manifest. Public shell and asset cache headers remain declared in `vercel.json`, and FastAPI retains its own equivalent headers. This correction is not yet committed or deployed.
 
-The application middleware accepts up to 32 MiB, but Vercel rejects a Function request or response above 4.5 MB before that application limit can make a larger upload viable. The 17.5 MB normalized full sample proves that the final workbook flow cannot assume a direct POST through the Function. The platform limit and Vercel's recommended source-upload pattern are documented in [the 4.5 MB payload guidance](https://vercel.com/kb/guide/how-to-bypass-vercel-body-size-limit-serverless-functions).
+[Prior-base CI run 35999897102](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35999897102) also failed because its backend phase ran before `frontend/dist` existed. The local correction makes the static integration test phase-aware and repeats it explicitly after the production build. The downstream connection-refused smoke failures in that run were consequences of the stopped pipeline, not production probe results.
 
-Before Pass 4 uploads, choose and verify one of these designs:
+## Routing contract
 
-1. Upload the workbook directly from the browser to authorized object storage using a short-lived client upload token or pre-signed URL, then send a small object reference to the Python Function. Add per-session isolation, file-size/type validation, explicit deletion/retention behavior and server-processing disclosure.
-2. Use a container-capable host that accepts the required upload size and can manage temporary files within a verified retention policy.
+- `/` serves the compiled React shell and must revalidate.
+- `/assets/<content-hash>` serves immutable compiled assets.
+- `/api/*`, `/docs` and `/openapi.json` remain Python application routes.
+- Missing API and asset paths return 404; the SPA must not swallow them.
+- Hosted workbook upload, stored reviews and accepted-file downloads remain disabled. Public sample calculations require no account and execute no orders.
 
-Pass 2 must also measure the real full planning solve with SciPy on the selected host. If cold import, memory or total staged runtime is unsuitable for one synchronous Function invocation, the later workflow will need durable object storage plus a job/status mechanism or a container worker. In-process `lru_cache` data and the semaphore are per Function instance and cannot provide cross-replica durability or a global concurrency limit.
+Local focused tests prove the route priority and headers in the application. Hosted CDN promotion, HTML delivery without a Python invocation and the current Prompt 3 browser journey require a READY exact-candidate deployment; they are not inferred from configuration.
 
-No storage, queue, database, background worker or upload transport is added in this readiness pass.
+## Measurement method
 
-## Verification and first-deployment checks
+The established checks run bounded, serial requests against the canonical alias and record deployment identity, region, request order, response bytes, HTTP time, engine time, status/stages, action counts, replay, financial reconciliation and determinism. “First” means the first measured request in that session; it is not proof of a process-cold or worldwide latency result.
 
-The first deployment of commit `1d251fc` failed before dependency installation. Vercel found the tool-only `pyproject.toml`, selected uv and ran `uv lock`; uv rejected the file because it had no PEP 621 `[project]` table. The correction removes that incomplete project manifest, adds the recognized root `app.py` wrapper and points the existing Function settings at `app.py`. Runtime dependencies remain pinned once in `requirements.txt`.
+Historical `ff2e42d` probes [35967540536](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967540536) and [35968872124](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35968872124) remain baseline evidence only. They cannot close the current candidate.
 
-Vercel CLI **59.20.0** was downloaded and invoked. `vercel build` stopped with `project_settings_required` because the repository has not been linked to a Vercel project. It was not rerun with `--yes`, because that would pull or create external project state and the requested scope explicitly stops before deployment. The committed build command, local production service and HTTP/browser paths all passed; details are recorded in `BUILD_STATUS.md`.
+## Required authorized release sequence
 
-The first real preview deployment still needs these host-specific checks:
+No push, deployment or project-setting change was performed during Prompt 4. The exact user action is to publish the current closure patch through the existing release process. After that:
 
-1. Confirm the remote build installs the pinned Python wheels and keeps the Function bundle below 500 MB.
-2. Open `/`, `/api/health`, the fixture and full sample; change product and store; run live recalculation; verify the returned run ID and displayed values.
-3. Measure Vercel cold and warm latency and memory, including a new instance rather than only a warm cache.
-4. Confirm `/assets/*` delivery, API routing, logs without raw rows, deployment protection and actual platform retention behavior.
-5. Reconfirm that requests and responses stay below 4.5 MB. Do not test the future 17.5 MB normalized upload as if it were supported.
+1. confirm exact-SHA CI succeeds on Python 3.14 / Node 24, including Docker;
+2. resolve the canonical alias to a READY deployment with that same SHA in `iad1`;
+3. verify static root/assets, API 404 priority, disabled storage, links, dated fallback explanations, Plan-first loading, lazy evidence and the four scenario controls plus a combination;
+4. run the canonical production-latency workflow twice consecutively on the unchanged deployment and retain its artifacts.
 
-Until those checks run, this repository is deployment-ready but no public or Vercel-hosted application has been verified.
-
-
-## Pass 2 runtime assessment and CI evidence
-
-Pass 2 preserves `app.py`, the native FastAPI preset, relative same-domain API paths, the existing frontend build and the **60-second** Vercel Function setting. No services were provisioned or deployed. GitHub Actions run `35201527675` succeeded on Ubuntu for original Pass 2 commit `6c587cc`: 56 backend tests, solver smoke, frontend build, browser tests, Docker build/start, forecast smoke, fixture/full planning smoke and solver smoke inside the container all completed. This is CI evidence for that exact commit. Run `35215202230` for correction commit `bb06db8` subsequently passed setup, tests, browser checks and Docker build/start, then failed the stricter fixture planning assertion because the joint optimizer still timed out and returned `feasible_fallback`. Workflow action-runtime maintenance does not resolve or suppress that application gate, and no successful run for the maintained workflow is claimed yet.
-
-The current uncommitted explanation correction was checked locally on 17 September 2026: 67 backend tests, solver smoke, reproducible contracts, frontend production build, eight browser tests, production forecast smoke and full-dimension first/repeat planning requests completed. Full first/repeat remained valid fallbacks within 28.5 seconds and below 3.75 MB. Fixture first/repeat also remained valid fallbacks, so the unchanged strict planning smoke exited nonzero. Docker was unavailable locally, and no GitHub Actions or hosted/Vercel success is claimed for this worktree.
-
-The new `/api/plan/sample` path calculates all 60 products/four stores over 56 days, including 240 evaluated forecasts, a benchmark, the joint model and independent replay. SciPy/HiGHS is now imported during planning requests, whereas Demand Review still follows the existing forecast-only calculation path. The total planning target remains 30 seconds across all stages with replay time reserved; timed-out stages stop and return only independently validated incumbents/fallbacks. No optimality or serverless performance guarantee is implied.
-
-Final local production HTTP measurements on macOS arm64:
-
-| Planning sample | First / repeat seconds | Largest response |
-|---|---:|---:|
-| Fixture | 28.178 / 28.169 | 782,412 bytes |
-| Full (60 SKUs, 240 series) | 28.321 / 28.343 | 3,747,785 bytes |
-
-These requests followed forecast smoke in the same fresh service, so sample caches were already populated. Both planning runs used live Python calculations and returned feasible fallbacks with disclosed shortages; all purchase/payment totals reconciled. These values are below the configured 60-second ceiling and documented 4.5 MB response limit, but leave less payload margin than Pass 1. Raw normalized inputs are not returned. Any later result expansion must remeasure the payload rather than assume the current margin remains.
-
-A separate fresh Python process measured full-sample generation, planning and serialization at **28.720 s**, with macOS peak RSS **672,497,664 bytes (641.3 MiB)**. This includes the lazy solver import but is not a Vercel invocation or a Linux bundle measurement.
-
-The target-host first/repeat planning runtime, peak memory, packaging and HTTP behavior still require actual Vercel verification. A successful Vercel build does not establish hosted planning execution. Local and Ubuntu container tests cannot establish those target-host properties. Keep the existing per-instance concurrency limitation and future 17.5 MB workbook transport gap in the hosting decision. No storage, job queue, scenario API or upload workaround was added in Pass 2.
-
-Reproduce the local check after a production startup:
-
-```sh
-PORT=8011 ./scripts/start.sh
-# In another terminal:
-.venv/bin/python -m scripts.smoke --url http://127.0.0.1:8011
-.venv/bin/python -m scripts.planning_smoke --url http://127.0.0.1:8011
-```
+Only then change the status to READY. Full earlier deployment chronology is preserved in [history/DEPLOYMENT-through-2ec1c06.txt](history/DEPLOYMENT-through-2ec1c06.txt).

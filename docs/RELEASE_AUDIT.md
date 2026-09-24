@@ -1,3 +1,7 @@
+# Historical release audit through `ff2e42d`
+
+> This audit is preserved as historical baseline evidence. It does not describe the current production candidate. See [current build status](BUILD_STATUS.md), [current deployment status](DEPLOYMENT.md) and the [chronology archive](history/README.md).
+
 # Final public-sample release closure — 24 September 2026
 
 Pass 5 and Pass 6 are closed for exact release **`ff2e42d907f6b0a83811849c7efab10ff1007dcc`**. Normal verification [35967399001](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/35967399001) succeeded. The canonical READY production deployment is **`dpl_9zrziwJbe3abDQyxtA1hS6gfjnPa`** in **`iad1`**, available at [the canonical URL](https://demand-supply-planning-intelligence.vercel.app) and [immutable URL](https://demand-supply-planning-intelligence-3gdxptwpt.vercel.app), both serving the exact release commit.
