@@ -86,7 +86,7 @@ class ScenarioResult(Contract):
     forecast_versions: dict[str,str]
     action_changes: list[ActionChange]
     elapsed_ms: float
-    note: str = 'Deltas are later minus earlier: frozen − original (scenario shock), replanned − frozen (replanning), and replanned − original (net scenario plus replanning). The net change is not a replanning benefit. Invalid policies have unavailable dependent metrics; cash shows attempted obligations even when infeasible.'
+    note: str = 'Each delta is the later plan minus the earlier one. The net change is not a replanning benefit. An invalid plan has unavailable dependent metrics; its cash rows show attempted obligations.'
 
 class BaselineResult(Contract):
     baseline: BaselineSnapshot

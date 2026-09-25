@@ -52,6 +52,7 @@ select{padding:9px 30px 9px 10px;border:1px solid #d6ded3;border-radius:5px;back
 .as-of strong{font-size:16px;font-weight:550}
 .as-of small{font-size:10px;color:#607557}
 .result-content{display:flex;flex-direction:column;gap:22px}
+.result-content>.primary-button{align-self:flex-start}
 .metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .metric{background:#fff;border:1px solid var(--border);border-radius:8px;padding:20px;display:flex;flex-direction:column}
 .metric p{font-size:11px;color:#68766b;margin:0 0 14px}

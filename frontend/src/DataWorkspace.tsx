@@ -41,20 +41,34 @@ export default function DataWorkspace({onUse,onReset,onReopen,reconciliationRefe
   };
   const reset=async()=>{choose(null);const version=generation.current;setProgress('Resetting session…');try{const r=await fetch('/api/workflow/session',{method:'DELETE'});if(!r.ok&&r.status!==401)throw new Error(apiError(await responseValue(r),r.status));if(version===generation.current)onReset();}catch(e){if(version===generation.current)setError(requestError(e));}finally{if(version===generation.current)setProgress('');}};
   const groups=[...new Set(issues.map(i=>i.sheet))];
-  return <div className="result-content"><section className="panel"><h2>Workbook inputs and accepted plans</h2>
-    <p>Calculations run on the Python server. Your workbook contains operational data. Confirm server processing before uploading; this is not browser-only processing.</p>
-    <p className="notice">{cap?.message||'Checking upload availability…'}</p>{!cap&&error&&<button onClick={()=>setCapRetry(v=>v+1)}>Retry availability check</button>}<p>To use your own data, run the app locally or in Docker using the README instructions. On the public sample host, uploads, review files and exports remain unavailable.</p><p>If a session expires, import the workbook again or reopen a snapshot you downloaded. Unsaved review changes cannot be recovered after expiry or restart.</p>
-    <p><a href="/api/workflow/template/blank">Download blank XLSX template</a> · <a href="/api/workflow/template/fixture">Download populated fixture XLSX</a></p>
-    <p>Limits: XLSX only, 16 MiB file, 160 MiB expanded, 170,000 operational rows; 60 products, five locations, 12 suppliers, 420 history days and 56 planning days. Instructions and examples are separate from importable rows. Empty transactions require a Settings declaration.</p>
-    <p>For execution reconciliation, first reopen the accepted portable snapshot, then return here and import the updated workbook with explicit Reconciliation rows. {reconciliationReference?'A supplied snapshot is available for this import.':'No accepted snapshot supplied yet.'}</p>
-    <label><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>I confirm server processing of this file</label>
-    <div className="panel" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();choose(e.dataTransfer.files[0]||null);}}><label>Select XLSX or portable snapshot<input type="file" accept=".xlsx,.gz" onChange={e=>choose(e.target.files?.[0]||null)} disabled={!cap?.enabled}/></label><p>Or drop a file here.</p>{file&&<p>{file.name} · {file.size.toLocaleString()} bytes</p>}</div>
-    <button className="primary-button" disabled={!file||!consent||!cap?.enabled||!!progress} onClick={()=>upload(false)}>Upload workbook</button>{' '}
-    <button disabled={!file||!consent||!cap?.enabled||!!progress} onClick={()=>upload(true)}>Reopen portable snapshot</button>{' '}
+  const uploads=!!cap?.enabled;
+  return <div className="result-content"><section className="panel"><h2>Your own data</h2>
+    {!cap&&!error&&<p role="status">Checking upload availability…</p>}
+    {!cap&&error&&<><p role="alert" className="error">{error}</p><button onClick={()=>setCapRetry(v=>v+1)}>Retry</button></>}
+    {cap&&!uploads&&<><p className="notice">Uploads and exports are unavailable in this demo. The bundled samples remain available.</p>
+      <p>To use your own data, <a href="https://github.com/esmailshahid-hue/demand-supply-planning-intelligence#run-locally">run the app locally</a>. The templates below still work.</p></>}
+    {uploads&&<><p>Calculations run on the server, not in your browser. Your workbook contains operational data, so confirm server processing before uploading.</p>
+      <p>If the session expires, import the workbook again or reopen a snapshot you downloaded. Unsaved review changes cannot be recovered after expiry or restart.</p></>}
+    <p><a href="/api/workflow/template/blank">Download blank XLSX template</a> · <a href="/api/workflow/template/fixture">Download populated sample XLSX</a></p>
+    {uploads&&<>
+      <label><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>I confirm server processing of this file</label>
+      <div className="panel" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();choose(e.dataTransfer.files[0]||null);}}><label>Select XLSX or portable snapshot<input type="file" accept=".xlsx,.gz" onChange={e=>choose(e.target.files?.[0]||null)}/></label><p>Or drop a file here.</p>{file&&<p>{file.name} · {file.size.toLocaleString()} bytes</p>}</div>
+      <button className="primary-button" disabled={!file||!consent||!!progress} onClick={()=>upload(false)}>Upload workbook</button>{' '}
+      <button disabled={!file||!consent||!!progress} onClick={()=>upload(true)}>Reopen portable snapshot</button>{' '}
+    </>}
     <button disabled={!!progress} onClick={reset}>Reset to bundled sample</button>
-    {progress&&<p role="status">{progress}</p>}{error&&<p role="alert" className="error">{error}</p>}
+    {progress&&<p role="status">{progress}</p>}{cap&&error&&<p role="alert" className="error">{error}</p>}
     {groups.map(sheet=><section key={sheet}><h3>{sheet}</h3>{issues.filter(i=>i.sheet===sheet).map((i,n)=><p className={i.severity==='error'?'error':'warning-line'} key={n}>{i.severity} · {i.code} · {i.row?`row ${i.row}`:''} {i.field} · {i.guidance}</p>)}</section>)}
-    {result?.reference&&result.catalog&&<section><h3>Validation passed</h3><p>{result.catalog.products.length} products · {result.catalog.locations.length} stores · {result.catalog.history_rows.toLocaleString()} observations · as-of {result.catalog.as_of}</p><p>Quality warnings remain attached to this dataset and its calculations.</p><button className="primary-button" onClick={()=>onUse(result)}>Use validated data and calculate plan</button><details><summary>Import measurements</summary><pre>{JSON.stringify(result.measurements,null,2)}</pre></details></section>}
-    <h3>Units and funding</h3><p>Stock and quantities use base units. Usable stock is on-hand minus blocked minus reserved; reservations are outside this demand forecast and deducted once. Prices use SAR per base unit. Commitment caps authorize new purchases; unpaid obligations consume payment ceilings. Missing capacity or funding is never unlimited.</p>
+    {result?.reference&&result.catalog&&<section><h3>Validation passed</h3><p>{result.catalog.products.length} products · {result.catalog.locations.length} stores · {result.catalog.history_rows.toLocaleString()} observations · planning date {result.catalog.as_of}</p><p>Quality warnings stay attached to this dataset and its calculations.</p><button className="primary-button" onClick={()=>onUse(result)}>Use validated data and calculate plan</button><details><summary>Import measurements</summary><pre>{JSON.stringify(result.measurements,null,2)}</pre></details></section>}
+    <details><summary>Workbook limits and local workflow</summary>
+      <p>XLSX only. Limits: 16 MiB file, 160 MiB expanded, 170,000 operational rows; 60 products, five locations, 12 suppliers, 420 history days and 56 planning days.</p>
+      <p>Instructions and examples are kept separate from importable rows. Empty transactions need a Settings declaration.</p>
+      <p>Locally, the full workflow is: import a workbook, review and edit actions, regenerate, accept, then download the reviewed workbook and portable snapshot.</p>
+      <p>To reconcile execution, reopen the accepted portable snapshot first, then import the updated workbook with Reconciliation rows. {reconciliationReference?'A snapshot is available for this import.':'No accepted snapshot has been supplied yet.'}</p>
+    </details>
+    <details><summary>Units and funding</summary>
+      <p>Stock and quantities use base units. Usable stock is on-hand minus blocked minus reserved; reservations sit outside this demand forecast and are deducted once.</p>
+      <p>Prices use SAR per base unit. Commitment caps authorize new purchases; unpaid obligations consume payment ceilings. Missing capacity or funding is never treated as unlimited.</p>
+    </details>
   </section></div>;
 }

@@ -18,7 +18,7 @@ test('mobile keyboard evidence, stale review and blocked acceptance recover with
   const controls=page.getByRole('region',{name:'Reviewed actions'});
   await controls.getByRole('button',{name:'Accept action',exact:true}).focus();await page.keyboard.press('Enter');
   await expect(page.getByRole('heading',{name:'Previous calculation — review changes are not applied'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Test disruptions with this baseline'})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Test a scenario'})).toBeDisabled();
   await expect(controls.getByRole('button',{name:'Download reviewed workbook'})).toBeDisabled();
   const regen=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();const review=await(await regen).json();expect(review.provenance).toEqual(plan.provenance);
   await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeEnabled();
@@ -55,9 +55,9 @@ for(const width of [1440,768,390])test(`layout and live scenarios at ${width}px 
   for(const label of ['Dataset','Product','Store']){const bounds=await page.getByRole('combobox',{name:label,exact:true}).boundingBox();expect(bounds!.width).toBeGreaterThan(140);}
   await page.screenshot({path:`../artifacts/pass5-demand-${width}.png`});
   const baseline=wait(page,'/api/scenarios/capture');await page.getByRole('button',{name:'Scenarios',exact:true}).click();await baseline;
-  await page.getByRole('button',{name:'Promotion',exact:true}).click();await page.getByRole('button',{name:'Add delay',exact:true}).click();await page.getByRole('button',{name:'Add availability reduction',exact:true}).click();await page.getByRole('button',{name:'Add funding week',exact:true}).click();await fit(page);
+  await page.getByRole('button',{name:'Promotion',exact:true}).click();await page.getByRole('button',{name:'Add delay',exact:true}).click();await page.getByRole('button',{name:'Add availability change',exact:true}).click();await page.getByRole('button',{name:'Add funding week',exact:true}).click();await fit(page);
   await page.screenshot({path:`../artifacts/pass5-scenarios-${width}.png`,fullPage:true});
-  await page.getByRole('button',{name:'Reset to baseline'}).click();await page.getByRole('button',{name:'Promotion',exact:true}).click();const compare=wait(page,'/api/scenarios/compare');await page.getByRole('button',{name:'Run scenario live',exact:true}).click();const result=await(await compare).json();expect(result.frozen.assumptions_hash).toBe(result.replanned.assumptions_hash);await expect(page.getByTestId('scenario-results')).toHaveAttribute('data-scenario-hash',result.scenario_hash);await fit(page);
+  await page.getByRole('button',{name:'Reset to baseline'}).click();await page.getByRole('button',{name:'Promotion',exact:true}).click();const compare=wait(page,'/api/scenarios/compare');await page.getByRole('button',{name:'Run scenario',exact:true}).click();const result=await(await compare).json();expect(result.frozen.assumptions_hash).toBe(result.replanned.assumptions_hash);await expect(page.getByTestId('scenario-results')).toHaveAttribute('data-scenario-hash',result.scenario_hash);await fit(page);
   await page.getByRole('button',{name:'Data and Assumptions',exact:true}).click();await expect(page.getByLabel('Select XLSX or portable snapshot')).toBeEnabled();await fit(page);await page.screenshot({path:`../artifacts/pass5-data-${width}.png`,fullPage:true});expect(errors).toEqual([]);
 });
 
@@ -67,7 +67,7 @@ test('failed regenerated-result delivery stays stale until explicit reload succe
   await expect(controls.getByRole('button',{name:'Finally accept plan'})).toBeDisabled();
   let calls=0;await page.route('**/api/workflow/review/*/plan',r=>{calls++;return r.fulfill({status:503,json:{message:'Result delivery failed. Retry loading the saved calculation.'}});});
   let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);let arrived!:()=>void;const pendingMutation=new Promise<void>(resolve=>arrived=resolve);await page.route('**/api/workflow/review/*/regenerate',async route=>{const response=await route.fetch();arrived();await gate;await route.fulfill({response});});
-  const regeneration=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();await pendingMutation;for(const name of ['Demand Review','Scenarios','Data and Assumptions','Test disruptions with this baseline'])await expect(page.getByRole('button',{name,exact:true})).toBeDisabled();release();const savedReview=await(await regeneration).json();await page.unroute('**/api/workflow/review/*/regenerate');
+  const regeneration=wait(page,'/regenerate');await controls.getByRole('button',{name:'Regenerate reviewed plan'}).click();await pendingMutation;for(const name of ['Demand Review','Scenarios','Data and Assumptions','Test a scenario'])await expect(page.getByRole('button',{name,exact:true})).toBeDisabled();release();const savedReview=await(await regeneration).json();await page.unroute('**/api/workflow/review/*/regenerate');
   await expect(controls.getByRole('alert')).toContainText('Result delivery failed');expect(calls).toBe(1);
   await expect(page.getByRole('heading',{name:'Previous calculation — review changes are not applied'})).toBeVisible();
   for(const name of ['Accept action','Finally accept plan','Regenerate reviewed plan','Download reviewed workbook'])await expect(controls.getByRole('button',{name,exact:true})).toBeDisabled();
@@ -79,7 +79,12 @@ test('failed regenerated-result delivery stays stale until explicit reload succe
 test('unavailable private storage keeps the public sample usable and uploads disabled',async({page})=>{
   await page.route('**/api/workflow/session',r=>r.fulfill({json:{enabled:false,message:'Hosted uploads are disabled until private object storage is configured.',max_file_bytes:16777216}}));
   await page.goto('/');await expect(page.getByTestId('plan-result')).toBeVisible();await expect(page.getByRole('region',{name:'Reviewed actions'})).toHaveCount(0);await page.getByRole('button',{name:'Data and Assumptions',exact:true}).click();
-  await expect(page.getByText('Hosted uploads are disabled until private object storage is configured.')).toBeVisible();
-  await expect(page.getByLabel('Select XLSX or portable snapshot')).toBeDisabled();await expect(page.getByRole('button',{name:'Upload workbook',exact:true})).toBeDisabled();
+  // The limitation must stay stated in the UI even though the controls are gone.
+  await expect(page.getByText('Uploads and exports are unavailable in this demo.',{exact:false})).toBeVisible();
+  await expect(page.getByLabel('Select XLSX or portable snapshot')).toHaveCount(0);await expect(page.getByRole('button',{name:'Upload workbook',exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('I confirm server processing of this file')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Reopen portable snapshot',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Reset to bundled sample',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Download blank XLSX template'})).toBeVisible();
   await page.getByRole('button',{name:'Demand Review',exact:true}).click();await expect(page.getByTestId('forecast-result')).toBeVisible();
 });

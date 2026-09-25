@@ -18,7 +18,7 @@ export default function ForecastChart({ result }: { result: ForecastResult }) {
       <rect x={x(56)} y="20" width={x(84) - x(56)} height="180" fill="#edf4ee" />
       <rect x={x(84)} y="20" width={875 - x(84)} height="180" fill="#f5f2eb" />
       {[0, .25, .5, .75, 1].map(r => <g key={r}><line x1="45" x2="875" y1={y(max * r)} y2={y(max * r)} stroke="#e5e8e2"/><text x="35" y={y(max * r) + 4} textAnchor="end">{number(max * r, 0)}</text></g>)}
-      <text x="52" y="16">Observed sales · units / day</text><text x={x(56) + 8} y="16">28-day forecast</text><text x={x(84) + 8} y="16">Provisional tail</text>
+      <text x="52" y="16">Observed sales · units / day</text><text x={x(56) + 8} y="16">28-day forecast</text><text x={x(84) + 8} y="16">Days 29–56 · provisional</text>
       {segments(history.map((p, i) => p.status === 'observed' && p.observed_sales !== null ? `${x(i)},${y(p.observed_sales)}` : null)).map((s, i) => <polyline key={i} points={s.join(' ')} fill="none" stroke="#86958d" strokeWidth="2" />)}
       {history.map((p, i) => p.status === 'censored' && p.observed_sales !== null ? <circle key={p.day} cx={x(i)} cy={y(p.observed_sales)} r="3" fill="#a36722"><title>{p.day}: censored sales {number(p.observed_sales)}</title></circle> : null)}
       {segments(forecastPoints(0, 29)).map((s, i) => <polyline key={i} points={s.join(' ')} fill="none" stroke="#1b6853" strokeWidth="2.5"/>)}

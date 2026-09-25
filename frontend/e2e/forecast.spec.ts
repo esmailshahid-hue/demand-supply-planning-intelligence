@@ -57,7 +57,7 @@ test('production UI renders the actual API result, recalculates and navigates ho
   await expect(content).toHaveAttribute('data-run-id', storeResult.run_id);
   await expectHeadlineMatchesDisplayedMaes(page);
   const recalculation = page.waitForResponse(r => r.url().endsWith('/api/forecast/sample') && r.ok());
-  await page.getByRole('button', { name: 'Recalculate live' }).click();
+  await page.getByRole('button', { name: 'Recalculate forecast' }).click();
   const next = await (await recalculation).json();
   expect(next.run_id).not.toBe(storeResult.run_id);
   expect(next.sku).toBe('SKU002');
@@ -83,7 +83,7 @@ test('production UI renders the actual API result, recalculates and navigates ho
   await dataNav.hover();
   await expect(dataNav).toHaveCSS('background-color', 'rgb(217, 231, 189)');
   await expect(page.getByRole('button', { name: /Upload workbook/ })).toBeDisabled();
-  await expect(page.getByText('Calculations run on the Python server.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Calculations run on the server, not in your browser.', { exact: false })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -134,7 +134,7 @@ test('new-product fallback, full sample and zero-demand cases are visible', asyn
   }, { timeout: 15_000 });
   await productSelector.selectOption('SKU011');
   await zeroDemandResponse;
-  await expect(page.getByRole('button', { name: 'Recalculate live' })).toBeEnabled({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: 'Recalculate forecast' })).toBeEnabled({ timeout: 15_000 });
   await expect(page.getByText('All eligible observed demand is zero', { exact: false })).toBeVisible();
   await expect(page.locator('.metric').first().locator('strong')).toHaveText('0');
   await expect(page.locator('.metric').nth(2).locator('strong')).toHaveText('Unavailable');

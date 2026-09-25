@@ -233,51 +233,50 @@ export default function App() {
             const disabled = mutationPending || (name === 'Scenarios' && scenariosDisabled);
             const title = name === 'Scenarios' && scenariosDisabled
               ? scenarioDerived
-                ? 'Return to the original scenario baseline before starting another comparison.'
+                ? 'Return to the original baseline before starting another comparison.'
                 : reviewState.gate.reason || 'Finish the current review before testing scenarios.'
               : undefined;
             return <button key={name} className={screen === name ? 'nav-item active' : 'nav-item'} aria-current={screen === name ? 'page' : undefined} disabled={disabled} title={title} onClick={() => navigate(name)}><span className="nav-number" aria-hidden="true">0{index + 1}</span>{name}</button>;
           })}
         </nav>
         <div className="sidebar-note">
-          <span className="live-dot"/> {mutationPending ? 'Saving review mutation' : source?.provenance?.source === 'portable' ? 'Portable snapshot' : source ? 'Uploaded dataset' : 'Synthetic portfolio'}
-          <p>Transparent planning evidence.</p>
-          <small>{mutationPending ? 'Navigation resumes when the mutation response is safely recorded.' : source ? 'Private temporary server processing.' : 'Independent example. No company-supplied data.'}</small>
+          <p><span className="live-dot"/>{mutationPending ? 'Saving review' : source?.provenance?.source === 'portable' ? 'Portable snapshot' : source ? 'Uploaded dataset' : 'Synthetic data'}</p>
+          <small>{mutationPending ? 'Navigation resumes once the change is saved.' : source ? 'Private temporary server processing.' : 'Independent example. No company-supplied data.'}</small>
         </div>
       </aside>
       <div className="workspace">
         <header className="topbar"><span>Planning workspace <span className="crumb">/ {screen}</span></span><span className="sample-label">{source?.provenance?.source === 'portable' ? 'PORTABLE SNAPSHOT' : source ? 'UPLOADED DATA' : 'SYNTHETIC DATA'} <span>· SAR · Riyadh</span></span></header>
         <main id="main-content" tabIndex={-1}>
-          <div className="page-heading"><div><p className="eyebrow">Demand and supply planning</p><h1>{screen}</h1><p>{screen === 'Demand Review' ? 'A forecast you can trace back to the evidence.' : screen === 'Plan Review' ? 'What to buy, where stock goes, and which demand remains uncovered.' : screen === 'Data and Assumptions' ? 'Know what is included, and where the evidence stops.' : 'Compare the shock with keeping your actions and with replanning.'}</p></div><span className="phase-tag">Portfolio MVP</span></div>
+          <div className="page-heading"><div><p className="eyebrow">Demand and supply planning</p><h1>{screen}</h1><p>{screen === 'Demand Review' ? 'Selected forecast method, its error history and data quality.' : screen === 'Plan Review' ? 'What to buy, where stock goes, and which demand remains uncovered.' : screen === 'Data and Assumptions' ? 'Datasets, limits and your own data.' : 'Test changes to demand, supply and funding.'}</p></div></div>
           {reviewState.error && <div role="alert" className="error"><p>Review status could not be loaded: {reviewState.error}</p><button disabled={mutationPending} onClick={reviewState.retry}>Retry review</button></div>}
           {screen === 'Data and Assumptions' ? (
             <DataWorkspace onUse={useData} onReset={resetData} onReopen={reopen} reconciliationReference={reviewRecovery?.review.reference || openedPlan?.review_id}/>
           ) : screen === 'Demand Review' && linkedForecast ? (
-            <><section className="panel"><h2>Selected plan forecast · {linkedForecast.policy}</h2><details><summary>Selected policy and forecast version</summary><p>Scenario assumptions {linkedForecast.assumptions_hash}</p><p>Forecast version {linkedForecast.forecast_version}</p></details><p>Scenario policy buffer: {number(linkedForecast.policy_buffer.units)} units · {linkedForecast.policy_buffer.protection_days} days.</p><p>Historical evaluation stays unchanged. Scenario adjustments below apply only to future expected demand.</p>{linkedForecast.adjustments.map(adjustment => <p key={adjustment.day}>{adjustment.day}: {number(adjustment.original)} → {number(adjustment.adjusted)} units · {adjustment.reason}</p>)}<button onClick={() => setLinkedForecast(null)}>Return to sample forecast controls</button></section><Demand result={linkedForecast.forecast}/></>
+            <><section className="panel"><h2>Plan forecast · {linkedForecast.policy}</h2><p>Buffer {number(linkedForecast.policy_buffer.units)} units · {linkedForecast.policy_buffer.protection_days} days. Scenario changes apply to future demand only; the error history is unchanged.</p>{linkedForecast.adjustments.length > 0 && <details><summary>Dated scenario adjustments · {linkedForecast.adjustments.length}</summary>{linkedForecast.adjustments.map(adjustment => <p key={adjustment.day}>{adjustment.day}: {number(adjustment.original)} → {number(adjustment.adjusted)} units · {adjustment.reason}</p>)}</details>}<details><summary>Calculation details</summary><p>Scenario assumptions {linkedForecast.assumptions_hash}</p><p>Forecast version {linkedForecast.forecast_version}</p></details><button onClick={() => setLinkedForecast(null)}>Back to forecast controls</button></section><Demand result={linkedForecast.forecast}/></>
           ) : screen === 'Demand Review' ? (
             <>
-              <p className="dataset-context">{catalog ? `${catalog.dataset_id} · planning date ${catalog.as_of}` : catalogError ? 'Dataset unavailable — retry or reopen your data.' : 'Loading selected dataset…'}</p>
+              <p className="dataset-context">{catalog ? `Planning date ${catalog.as_of}` : catalogError ? 'Dataset unavailable. Retry or reopen your data.' : 'Loading dataset…'}</p>
               <section className="filters" aria-label="Sample controls">
-                <label>Dataset<select value={source ? 'uploaded' : size} onChange={event => changeSize(event.target.value as Size)} disabled={!!source || mutationPending}>{source ? <option value="uploaded">{source.provenance?.source === 'portable' ? 'Portable snapshot' : 'Uploaded dataset'}</option> : <><option value="fixture">Small fixture · 10 SKUs</option><option value="full">Full sample · 60 SKUs</option></>}</select></label>
+                <label>Dataset<select value={source ? 'uploaded' : size} onChange={event => changeSize(event.target.value as Size)} disabled={!!source || mutationPending}>{source ? <option value="uploaded">{source.provenance?.source === 'portable' ? 'Portable snapshot' : 'Uploaded dataset'}</option> : <><option value="fixture">Small sample · 10 SKUs</option><option value="full">Full sample · 60 SKUs</option></>}</select></label>
                 <label>Product<select value={sku} onChange={event => setSku(event.target.value)} disabled={!catalog || forecastBusy}>{catalog ? catalog.products.map(product => <option key={product.sku} value={product.sku}>{product.sku} · {product.name}</option>) : <option>Loading products…</option>}</select></label>
                 <label>Store<select value={location} onChange={event => setLocation(event.target.value)} disabled={!catalog || forecastBusy}>{catalog ? catalog.locations.map(item => <option key={item.location_id} value={item.location_id}>{item.name}</option>) : <option>Loading stores…</option>}</select></label>
-                <button className="primary-button" disabled={forecastBusy || mutationPending} onClick={() => { if (!mutationPending) setForecastRefresh(value => value + 1); }}>{forecastBusy ? 'Calculating…' : '↻ Recalculate live'}</button>
+                <button className="primary-button" disabled={forecastBusy || mutationPending} onClick={() => { if (!mutationPending) setForecastRefresh(value => value + 1); }}>{forecastBusy ? 'Calculating…' : '↻ Recalculate forecast'}</button>
               </section>
-              <div role="status" aria-live="polite">{forecastBusy && <div className="loading"><span className="spinner"/>Calculating the forecast and its historical evaluation…</div>}</div>
+              <div role="status" aria-live="polite">{forecastBusy && <div className="loading"><span className="spinner"/>Calculating the forecast and its error history…</div>}</div>
               {(forecastError || catalogError) && <div role="alert" className="error"><strong>Calculation unavailable</strong><p>{forecastError || catalogError}</p><button onClick={() => { setCatalog(null); setForecastRefresh(value => value + 1); }}>Try again</button></div>}
               {forecast && !forecastBusy && <Demand result={forecast}/>}
             </>
           ) : screen === 'Plan Review' ? (
-            !sessionReady ? <div className="loading" role="status">Preparing the planning workspace…</div> : <>
-              {sessionError && <p className="notice" role="alert">Review availability could not be checked. Sample planning remains available. <button onClick={() => setSessionRetry(value => value + 1)}>Retry availability</button></p>}
+            !sessionReady ? <div className="loading" role="status">Preparing the plan…</div> : <>
+              {sessionError && <p className="notice" role="alert">Review availability could not be checked. Planning still works. <button onClick={() => setSessionRetry(value => value + 1)}>Retry</button></p>}
               <PlanReview key={`${source?.reference?.object_id || 'sample'}:${datasetGeneration}`} initialPlan={cachedPlan} datasetLocked={!!openedPlan} recovery={reviewRecovery} reviewState={reviewState} scenarioDerived={scenarioDerivedActive} mutationPhase={mutationPhase} onReviewed={reviewPlan} uploaded={!!source} onReady={rememberPlan} onPlanInvalidated={invalidatePlan} onForecast={openForecast} onScenarios={(plan, nextSize) => openScenarios({ plan, size: nextSize })} onReturnToOriginalScenario={returnToOriginalScenario} onRecovery={recordRecovery} onRecoveryClear={clearRecovery} onMutation={setMutationPhase}/>
             </>
           ) : currentPlanBlocked ? (
-            <p role="status">{reviewState.gate.reason} Scenario handoff remains blocked.</p>
+            <p role="status">{reviewState.gate.reason} Scenarios stay blocked until it is resolved.</p>
           ) : (
             <Scenarios uploaded={!!source} firstSku={catalog?.products[0]?.sku || firstPlanForecast?.sku} firstStore={catalog?.locations[0]?.location_id || firstPlanForecast?.location_id} initial={scenarioInitial} onForecast={openForecast} onReview={plan => { if (mutationPending) return; setScenarioDerived({ reviewId: plan.review_id!, original: scenarioInitial }); setReviewRecovery(null); setOpenedPlan(plan); setScreen('Plan Review'); }}/>
           )}
-          <footer>Independent Saudi retail planning example <span>Expected demand is a model estimate, not a service guarantee.</span></footer>
+          <footer>Synthetic data. Suggested actions only; no orders are placed. <span>Expected demand is a model estimate, not a service guarantee.</span></footer>
         </main>
       </div>
     </div>

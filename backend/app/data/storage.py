@@ -141,8 +141,8 @@ class LocalStorage:
 def configuration():
     choice = os.getenv('PLANNING_UPLOAD_STORAGE', 'local' if not os.getenv('VERCEL') else 'disabled')
     if choice != 'local' or os.getenv('VERCEL'):
-        return {'enabled': False, 'driver': 'disabled', 'message': 'Hosted uploads and accepted files are blocked pending an authorized private object-storage driver and lifecycle verification. Bundled samples remain available.'}
-    return {'enabled': True, 'driver': 'local', 'message': 'Local temporary storage: workbook bytes are deleted after parsing. Normalized data, drafts and accepted files expire after one hour; cleanup runs every 30 seconds, on reset and on normal process exit. Download accepted files before leaving.'}
+        return {'enabled': False, 'driver': 'disabled', 'message': 'Uploads, review files and exports are unavailable here. The bundled samples remain available.'}
+    return {'enabled': True, 'driver': 'local', 'message': 'Local temporary storage. Workbook bytes are deleted after parsing; data, drafts and accepted files expire after one hour or on reset. Download accepted files before you leave.'}
 
 
 class DisabledStorage:

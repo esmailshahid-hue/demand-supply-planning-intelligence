@@ -9,7 +9,7 @@ async function verifyPlan(page: Page, plan: Plan) {
   const proposed = plan.proposed!;
   if (plan.status === 'feasible_fallback') {
     await expect(page.getByRole('heading', { name: 'Validated constrained plan', exact: true })).toBeVisible();
-    await expect(page.getByText(/deterministic constrained planner passed independent stock and funding replay/)).toBeVisible();
+    await expect(page.getByText(/Stock and funding checks passed\. Uses the constrained planner; optimality is not established\./)).toBeVisible();
     expect(plan.stages.at(-1)?.status).toBe('benchmark');
   }
   expect(proposed.replay.feasible).toBe(true);
@@ -66,7 +66,7 @@ test('Plan Review matches live purchases, allocations and cash; recalculation an
   expect(full.stock_detail).toBe('on_demand');
   expect(full.stock_row_count).toBe(16_800);
   expect(full.proposed!.replay.stock).toEqual([]);
-  await page.getByText('Daily inventory, forecasts and calculation evidence', {exact:true}).click();
+  await page.getByText('Calculation details', {exact:true}).click();
   const scoped = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/detail') && r.ok(), {timeout:30_000});
   await page.getByRole('button', {name:'Review selected series forecast',exact:true}).click();
   const detail = await (await scoped).json();
