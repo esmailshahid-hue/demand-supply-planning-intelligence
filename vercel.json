@@ -2,9 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "fastapi",
   "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build:vercel",
-  "rewrites": [
-    { "source": "/", "destination": "/index.html" }
-  ],
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -22,6 +19,12 @@
       "source": "/index.html",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/release.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
       ]
     }
   ],

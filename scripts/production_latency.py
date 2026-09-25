@@ -3,8 +3,8 @@
 Every curl process starts a fresh session. Its --next requests run serially and
 can reuse that connection. No retries, redirects, parallelism or warm-up plans.
 DNS/TCP/TLS are cumulative milestones; zero connection times on a reused socket
-do not mean a new connection was free. A passed probe still needs deployment
-identity and exact-deployment runtime-log correlation before release closure.
+do not mean a new connection was free. Public-route and build-identity gates run
+first; the manual workflow adds desktop/mobile browser evidence afterward.
 """
 import argparse
 from copy import deepcopy
@@ -13,10 +13,15 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import traceback
+from time import perf_counter
+from urllib.error import HTTPError
+from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from scripts.planning_smoke import stable_plan, validate_plan
+from scripts.static_contract import html_assets, sanitized_excerpt, validate_content
 
 CANONICAL = 'https://demand-supply-planning-intelligence.vercel.app'
 HTTP_LIMIT = 10
@@ -108,11 +113,14 @@ class Probe:
         self.output = Path(output)
         self.output.mkdir(parents=True, exist_ok=True)
         self.rows, self.checks, self.failures = [], [], []
+        self.routes = []
+        self.deployment = {}
 
     def save(self):
         (self.output / 'results.json').write_text(json.dumps({
             'canonical_url': CANONICAL, 'measurements': self.rows,
             'checks': self.checks, 'failures': self.failures,
+            'public_routes': self.routes, 'deployment': self.deployment,
         }, indent=2))
 
     def check(self, name, operation):
@@ -187,6 +195,88 @@ class Probe:
             values.append(value)
         return values
 
+    def public_get(self, path, *, cdn=True, expected_status=200, request_headers=None):
+        """Fail on the first broken route; keep only bounded public evidence."""
+        class NoRedirect(HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                return None
+        url = CANONICAL + path
+        row = {'url': url, 'status': 0, 'content_type': '', 'passed': False}
+        raw = b''
+        started = perf_counter()
+        try:
+            try:
+                response = build_opener(NoRedirect).open(Request(url, headers=request_headers or {}), timeout=60)
+            except HTTPError as error:
+                response = error
+            with response:
+                raw = response.read(BYTE_LIMIT + 1)
+                headers = {k.lower(): v for k, v in response.headers.items()}
+                row.update(status=response.status, content_type=headers.get('content-type', ''),
+                           cache_control=headers.get('cache-control'), vercel_id=headers.get('x-vercel-id'),
+                           etag=headers.get('etag'), bytes=len(raw),
+                           server_timings_ms=server_timings(headers.get('server-timing')))
+            require(row['status'] == expected_status, f'Expected HTTP {expected_status}')
+            require(len(raw) <= BYTE_LIMIT, 'Public response exceeds bounded size')
+            if expected_status == 200:
+                validate_content(path, headers, raw, cdn=cdn)
+            elif expected_status == 404:
+                require(b'id="root"' not in raw, 'Missing route swallowed by frontend')
+                if path.startswith('/api/'):
+                    require(json.loads(raw) == {'detail': 'Not Found'}, 'API 404 shadowed')
+            elif expected_status == 304:
+                require(not raw and not server_timings(headers.get('server-timing')),
+                        'Conditional static response reached Python or has a body')
+            row['passed'] = True
+            return raw
+        except Exception as error:
+            row['excerpt'] = sanitized_excerpt(raw)
+            row['error'] = str(error) if isinstance(error, AssertionError) else type(error).__name__
+            raise AssertionError(f"{url}: status={row['status']} content-type={row['content_type']!r}; "
+                                 f"{row['error']}; excerpt={row['excerpt']!r}") from None
+        finally:
+            row['http_s'] = perf_counter() - started
+            self.routes.append(row)
+            self.save()
+
+    def preflight(self):
+        shell = self.public_get('/')
+        for path in html_assets(shell):
+            self.public_get(path)
+        self.public_get('/index.html')
+        for path in ('/api/health', '/docs', '/openapi.json', '/api/sample?size=fixture'):
+            self.public_get(path)
+        identity = json.loads(self.public_get('/release.json'))
+        require(re.fullmatch(r'[a-f0-9]{40}', identity.get('commit') or '') is not None,
+                'Invalid build-time commit evidence')
+        require(re.fullmatch(r'[a-z0-9-]+\.vercel\.app', identity.get('deployment_host') or '') is not None,
+                'Missing build-time immutable deployment hostname')
+        self.deployment = {key: identity[key] for key in ('commit', 'deployment_host')}
+        require(self.deployment.get('commit') == os.environ.get('GITHUB_SHA') and
+                bool(self.deployment.get('commit')), 'Canonical deployed commit differs from workflow checkout')
+        self.save()
+
+    def summary(self):
+        def result(paths, count=None):
+            rows = [r for r in self.routes if paths(r['url'].removeprefix(CANONICAL))]
+            return 'PASS' if rows and (count is None or len(rows) == count) and all(r['passed'] for r in rows) else 'FAIL / not reached'
+        lines = ['## Canonical production verification', f'Host: {CANONICAL}',
+                 f'Probe commit: {os.getenv("GITHUB_SHA", "local")}',
+                 f'Deployed commit: {self.deployment.get("commit", "not verified")}',
+                 f'Deployment host: {self.deployment.get("deployment_host", "not verified")}',
+                 f'Frontend: {result(lambda p: p in ("/", "/index.html"), 2)}',
+                 f'Assets: {result(lambda p: p.startswith("/assets/"))}',
+                 f'API/docs/sample: {result(lambda p: p.startswith("/api/") or p in ("/docs", "/openapi.json"), 4)}', '',
+                 '| Probe | HTTP seconds | Bytes | Status | Replay |',
+                 '|---|---:|---:|---:|---|']
+        for row in self.rows:
+            lines.append(f'| {row["name"]} | {row["http_s"]:.3f} | {row["bytes"]} | {row["status"]} | {row["independent_replay"]} |')
+        lines.extend(['', 'Public route timings (availability/content gates; no CDN timing threshold):'])
+        lines.extend(f'- {r["url"]}: {r["status"]}, {r["http_s"]:.3f}s' for r in self.routes)
+        lines.extend(['', f'Latency/check failures: {len(self.failures)}'])
+        lines.extend('- ' + sanitized_excerpt(f.encode()).replace('`', '') for f in self.failures)
+        return '\n\n'.join(lines[:8]) + '\n' + '\n'.join(lines[8:]) + '\n'
+
 
 def validate_compact(plan, size):
     validate_plan(plan)
@@ -237,7 +327,7 @@ def validate_detail(plan, complete, capture, detail):
 
 
 def run_sequence(probe):
-    probe.batch([('health', '/api/health', None)])
+    probe.preflight()
     plans = {}
     for size in ('fixture', 'full'):
         first, repeat = probe.batch([
@@ -279,6 +369,8 @@ def run_sequence(probe):
             'scenario_hash', 'action_hash', 'forecast_version', 'provenance')
     probe.check('detail repeat determinism', lambda: require(
         {k: details[0][k] for k in keys} == {k: details[1][k] for k in keys}, 'Scoped evidence changed'))
+    require(json.loads(probe.public_get('/release.json')) == probe.deployment,
+            'Canonical deployment changed during serial verification')
 
 
 def main():
@@ -289,7 +381,7 @@ def main():
                 'python': platform.python_version(), 'platform': platform.platform(),
                 'runner': {k: os.getenv(k) for k in ('GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT',
                     'GITHUB_REPOSITORY', 'RUNNER_OS', 'RUNNER_ARCH', 'RUNNER_ENVIRONMENT')},
-                'note': 'Probe revision is not deployed revision. Correlate alias and runtime logs separately.'}
+                'note': 'Build-time release.json binds canonical frontend to commit and immutable deployment host.'}
     (probe.output / 'environment.json').write_text(json.dumps(metadata, indent=2))
     probe.save()
     try:
@@ -302,6 +394,7 @@ def main():
     metadata['ended_utc'] = utcnow()
     (probe.output / 'environment.json').write_text(json.dumps(metadata, indent=2))
     probe.save()
+    (probe.output / 'summary.md').write_text(probe.summary())
     print(json.dumps({'passed': not probe.failures, 'failures': probe.failures}, indent=2))
     raise SystemExit(bool(probe.failures))
 

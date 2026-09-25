@@ -34,6 +34,26 @@ jobs:
         run: npm --prefix frontend run build:vercel && .venv/bin/python -m pytest -q backend/tests/test_static_delivery.py
       - name: Verify generated contracts are committed
         run: git diff --exit-code -- frontend/src/contracts.generated.ts
+      - name: Build and inspect actual Vercel output (no account access)
+        env:
+          VERCEL_TELEMETRY_DISABLED: '1'
+          VERCEL_FASTAPI_STATIC_CDN: '1'
+        run: |
+          .venv/bin/pip install uv==0.12.19
+          .venv/bin/python -m scripts.vercel_output_check --prepare
+          PATH="$PWD/.venv/bin:$PATH" npm exec --yes --package=vercel@60.0.1 -- vercel build --global-config "$PWD/.vercel/empty-auth"
+          .venv/bin/python -m scripts.vercel_output_check --evidence artifacts/vercel-output.json
+      - name: Retain Vercel routing evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: vercel-static-output-${{ github.sha }}
+          include-hidden-files: true
+          path: |
+            artifacts/vercel-output.json
+            .vercel/output/config.json
+            .vercel/output/builds.json
+          if-no-files-found: error
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
         working-directory: frontend
@@ -55,6 +75,9 @@ jobs:
       - name: Run production forecast smoke
         if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: .venv/bin/python -m scripts.smoke
+      - name: Verify Docker homepage assets and API routing
+        if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
+        run: .venv/bin/python -m scripts.static_delivery_smoke --url http://127.0.0.1:8000 --local
       - name: Run solver smoke inside container
         if: ${{ !cancelled() && steps.docker_health.outcome == 'success' }}
         run: docker exec planning-pass1 python scripts/solver_smoke.py

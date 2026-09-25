@@ -1,16 +1,19 @@
 // Explicit URL only. Read-only sample calculations; never deployment or own-data upload.
 import { createRequire } from 'node:module';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 const require = createRequire(import.meta.url);
 const { chromium, expect } = require('../frontend/node_modules/@playwright/test');
 const url = process.argv[2];
 if (!url) throw new Error('Usage: node scripts/hosted_browser.mjs https://existing-host');
-const output = 'artifacts'; await mkdir(output, { recursive: true });
+const output = process.argv[3] || 'artifacts'; await mkdir(output, { recursive: true });
 const browser = await chromium.launch({headless:true,...(process.env.CHROME_PATH ? {executablePath:process.env.CHROME_PATH} : {})});
 const page = await browser.newPage({viewport:{width:1440,height:1000}});
 const errors = [], requests = [], steps = [];
-page.on('pageerror', e => errors.push(e.message));
-page.on('console', m => {if (m.type()==='error') errors.push(m.text());});
+let passed = false;
+let deployment = null;
+const bounded = value => value.replace(/(token|secret|password|authorization|cookie)[\s"':=]+[^\s,;}<]+/gi, '$1=[redacted]').replace(/[A-Za-z0-9_./+=-]{40,}/g, '[redacted]').replace(/\s+/g, ' ').slice(0,240);
+page.on('pageerror', e => errors.push(bounded(e.message)));
+page.on('console', m => {if (m.type()==='error') errors.push(bounded(m.text()));});
 page.on('response', r => {if(new URL(r.url()).pathname.startsWith('/api/')) requests.push({url:r.url(),status:r.status()});});
 const response = path => page.waitForResponse(r=>new URL(r.url()).pathname===path&&r.ok(),{timeout:60_000});
 const actResponse = async (path, action) => (await Promise.all([response(path),action()]))[0];
@@ -20,6 +23,15 @@ async function layout(name) {
   steps.push(name); console.log(name);
 }
 try {
+  const identityResponse = await page.request.get(`${url}/release.json`);
+  expect(identityResponse.ok()).toBe(true);
+  const identity = await identityResponse.json();
+  if (process.env.GITHUB_SHA) {
+    expect(identity.commit).toBe(process.env.GITHUB_SHA);
+    const probe = JSON.parse(await readFile(`${output}/results.json`, 'utf8'));
+    expect(identity).toEqual(probe.deployment);
+  }
+  deployment = {commit:identity.commit, deployment_host:identity.deployment_host};
   await actResponse('/api/plan/sample',()=>page.goto(url));
   await expect(page.getByTestId('plan-result')).toBeVisible({timeout:15_000});
   await expect(page.getByRole('region',{name:'Reviewed actions'})).toHaveCount(0);
@@ -35,7 +47,7 @@ try {
   await actResponse('/api/forecast/sample',()=>page.getByRole('combobox',{name:'Store',exact:true}).selectOption('S2'));
   steps.push('full forecast/product/store/recalculate');
   await actResponse('/api/plan/sample',()=>page.getByRole('button',{name:'Plan Review',exact:true}).click());
-  const fullPlan=await(await actResponse('/api/plan/sample',()=>page.getByLabel('Planning dataset',{exact:true}).selectOption('full'))).json();
+  const fullPlan=await(await actResponse('/api/plan/sample',()=>page.getByRole('combobox',{name:'Planning dataset',exact:true}).selectOption('full'))).json();
   expect(fullPlan.provenance.sample_size).toBe('full');
   await expect(page.getByTestId('plan-result')).toBeVisible({timeout:15_000});await layout('verified-plan-desktop');
   const row=page.getByTestId('movement-table').locator('tbody tr').first();
@@ -74,8 +86,14 @@ try {
   await page.setViewportSize({width:1440,height:1000});await layout('verified-data-desktop');
   expect(requests.every(r=>new URL(r.url).origin===new URL(url).origin&&r.status===200)).toBe(true);
   expect(errors).toEqual([]);
+  expect(await (await page.request.get(`${url}/release.json`)).json()).toEqual(identity);
+  passed = true;
+} catch (error) {
+  errors.push(bounded(String(error)));
+  await page.screenshot({path:`${output}/pass6-hosted-failure.png`});
+  throw error;
 } finally {
-  await writeFile(`${output}/pass6-hosted-browser.json`,JSON.stringify({url,steps,requests,errors},null,2)+'\n');
+  await writeFile(`${output}/pass6-hosted-browser.json`,JSON.stringify({url,deployment,passed,steps,requests,errors},null,2)+'\n');
   await browser.close();
 }
 console.log('Hosted sample browser verification passed; no hosted own-data workflow claimed.');

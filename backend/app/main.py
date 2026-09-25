@@ -1,4 +1,4 @@
-"""Calculation API; local/Docker also serve the UI. Vercel uses public/ CDN files."""
+"""Calculation API; local/Docker also serve the UI. Vercel promotes the public frontend build to its CDN."""
 from time import perf_counter
 from backend.app.bootstrap import STARTED as _import_started
 _main_import_started = perf_counter()
@@ -86,7 +86,7 @@ class PublicCachePolicy:
                 value = None
                 if path.startswith('/assets/') and message['status'] == 200:
                     value = b'public, max-age=31536000, immutable'
-                elif path == '/' and message['status'] == 200:
+                elif path in ('/', '/index.html') and message['status'] == 200:
                     value = b'public, max-age=0, must-revalidate'
                 if value is not None:
                     headers = [(key, item) for key, item in message.get('headers', []) if key.lower() != b'cache-control']

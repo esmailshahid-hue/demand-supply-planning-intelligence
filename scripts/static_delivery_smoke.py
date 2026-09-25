@@ -1,62 +1,42 @@
-"""Read-only hosted CDN verification. Requires an explicit, already deployed URL.
-
-First/repeat are measured requests, not a claim of forced process-cold starts.
-Correlate source SHA and function logs separately before closing a release.
-"""
+"""Behavioral frontend/API smoke; hosted mode also rejects Python static delivery."""
 import argparse
-import json
-import re
-from time import perf_counter
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from tempfile import TemporaryDirectory
 
-from scripts.production_latency import server_timings
+from scripts import production_latency as latency
+from scripts.static_contract import html_assets
 
 
-def probe(url):
-    rows = []
-
-    def get(path, headers=None):
-        start = perf_counter()
-        try:
-            response = urlopen(Request(url.rstrip('/')+path, headers=headers or {}), timeout=60)
-        except HTTPError as error:
-            response = error
-        with response:
-            body = response.read()
-            row = dict(path=path, status=response.status, seconds=perf_counter()-start,
-                       bytes=len(body), headers=dict(response.headers.items()))
-        rows.append(row)
-        print(json.dumps(row), flush=True)
-        return response.status, response.headers, body
-
-    status, headers, body = get('/')
-    assert status == 200 and b'id="root"' in body
-    assert not server_timings(headers.get('server-timing')), 'Root still invokes Python'
-    assert 'max-age=0' in headers.get('cache-control', '') and 'must-revalidate' in headers.get('cache-control', '')
-    asset = re.search(rb'src="(/assets/[^"?]+\.js)"', body)
-    assert asset, 'Missing hashed JS'
-    etag = headers.get('etag')
-    assert etag, 'Static shell must expose a revalidation validator'
-    status, headers, _ = get('/', {'If-None-Match': etag})
-    assert status == 304 and not server_timings(headers.get('server-timing'))
-    for _ in range(2):
-        status, headers, body = get(asset.group(1).decode())
-        assert status == 200 and body
-        assert 'immutable' in headers.get('cache-control', '')
-        assert not server_timings(headers.get('server-timing')), 'Asset still invokes Python'
-    status, headers, _ = get('/api/health')
-    assert status == 200 and server_timings(headers.get('server-timing')), 'API timing missing'
-    for path in ('/docs', '/openapi.json'):
-        assert get(path)[0] == 200
-    for path in ('/api/not-a-route', '/assets/not-a-real-build.js', '/not-a-client-route'):
-        status, _, body = get(path)
-        assert status == 404 and b'id="root"' not in body
-    print('Static/CDN routing probe passed; deployment identity, cold-load comparison and browser checks are separate gates.')
-    return rows
+def probe(url, local=False):
+    latency.CANONICAL = url.rstrip('/')
+    with TemporaryDirectory() as output:
+        check = latency.Probe(output)
+        shell = check.public_get('/', cdn=not local)
+        cache = check.routes[-1]['cache_control'] or ''
+        assert 'max-age=0' in cache and 'must-revalidate' in cache
+        if not local:
+            etag = check.routes[-1]['etag']
+            assert etag, 'Static shell must expose a revalidation validator'
+            check.public_get('/', expected_status=304, request_headers={'If-None-Match': etag})
+        check.public_get('/index.html', cdn=not local)
+        for asset in html_assets(shell):
+            check.public_get(asset, cdn=not local)
+            if not local:
+                check.public_get(asset)
+        for path in ('/api/health', '/docs', '/openapi.json', '/api/sample?size=fixture'):
+            check.public_get(path, cdn=not local)
+            if not local and path == '/api/health':
+                assert check.routes[-1]['server_timings_ms'], 'API timing missing'
+        for path in ('/api/not-a-route', '/assets/not-a-real-build.js', '/not-a-client-route'):
+            check.public_get(path, expected_status=404)
+        for row in check.routes:
+            print(f'{row["url"]}: {row["status"]} {row["content_type"]}, {row["bytes"]} bytes, {row["http_s"]:.3f}s')
+        print('Frontend, every referenced asset, API, docs and sample passed.')
+        return check.routes
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', required=True)
-    probe(parser.parse_args().url)
+    parser.add_argument('--local', action='store_true', help='Local/Docker serve static files through FastAPI')
+    args = parser.parse_args()
+    probe(args.url, args.local)

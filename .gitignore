@@ -11,3 +11,5 @@ frontend/playwright-report/
 .env*
 artifacts/
 .DS_Store
+.vercel/
+uv.lock

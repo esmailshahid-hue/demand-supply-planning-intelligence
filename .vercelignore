@@ -14,3 +14,5 @@ docs
 *.pyc
 *.tsbuildinfo
 .DS_Store
+frontend/dist
+public

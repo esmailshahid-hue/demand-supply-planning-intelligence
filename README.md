@@ -4,7 +4,9 @@ An independent Saudi retail planning portfolio that turns synthetic demand, inve
 
 [Public sample](https://demand-supply-planning-intelligence.vercel.app) · [Current build status](docs/BUILD_STATUS.md) · [Deployment status](docs/DEPLOYMENT.md)
 
-**Current release status: correction awaiting publication and exact-SHA verification.** The canonical Vercel deployment is READY from `9054582`, not `27eb86c`. Its CI run `36002190655` exposed a review-readiness navigation race. This bounded correction fixes persistent review ownership, Docker smoke dependencies, static/CDN build output and full-sample calibration. It has not been committed or deployed; corrected-commit CI and hosted proof remain required. The `2ec1c06` manifest failure is historical.
+**Current release status: Ready to deploy; hosted verification pending.** Commit `d8335ee` passed [CI run 36020922316](https://github.com/esmailshahid-hue/demand-supply-planning-intelligence/actions/runs/36020922316) and deployed the `sample-v3` backend, but its canonical homepage and `/index.html` return 404. The final delivery correction builds the existing FastAPI frontend and explicitly promotes it to Vercel's CDN. Real build-output inspection and homepage/all-asset gates now prevent a successful build from being mistaken for a usable application. This correction has not been deployed.
+
+After committing/pushing and deploying the corrected commit with green normal CI, run **Verify canonical production latency** against **main**. Its artifact and job summary retain exact commit/deployment, frontend/API, desktop/mobile browser and serial latency evidence; no documentation-only follow-up is needed. If it passes, no additional planning or feature work is required. See [deployment handoff](docs/DEPLOYMENT.md).
 
 ## What the demo shows
 

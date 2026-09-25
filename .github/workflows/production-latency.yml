@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   probe:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -24,14 +25,48 @@ jobs:
         with:
           python-version: '3.14'
       - name: Verify probe failure and evidence handling
-        run: python -m unittest backend.tests.test_production_latency -v
+        run: python -m unittest backend.tests.test_production_latency backend.tests.test_public_routes -v
       - name: Measure canonical production serially
         run: python -m scripts.production_latency --output artifacts/production-latency
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install browser dependencies
+        working-directory: frontend
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Verify canonical desktop and mobile flow
+        id: browser
+        run: node scripts/hosted_browser.mjs https://demand-supply-planning-intelligence.vercel.app artifacts/production-latency
+      - name: Summarize hosted release evidence
+        if: ${{ always() }}
+        env:
+          BROWSER_RESULT: ${{ steps.browser.outcome }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          summary = Path('artifacts/production-latency/summary.md')
+          text = summary.read_text() if summary.exists() else 'Canonical probe did not complete. See failed step.\n'
+          text += '\nDesktop/mobile browser: ' + os.environ['BROWSER_RESULT'] + '\n'
+          text += '\nRun: ' + os.environ['GITHUB_SERVER_URL'] + '/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'] + '\n'
+          summary.parent.mkdir(parents=True, exist_ok=True)
+          summary.write_text(text)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write(text)
+          PY
       - name: Upload all measurements, including failures
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
           name: production-latency-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/production-latency/
+          path: |
+            artifacts/production-latency/results.json
+            artifacts/production-latency/environment.json
+            artifacts/production-latency/summary.md
+            artifacts/production-latency/*browser.json
+            artifacts/production-latency/*.png
           if-no-files-found: error
           retention-days: 30
